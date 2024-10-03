@@ -42,6 +42,12 @@ void SwervePathBuilder::set_control_interval_counts(
   path_builder.ControlIntervalCounts(std::move(cppCounts));
 }
 
+void SwervePathBuilder::set_target_dt(
+  double target
+) {
+  path_builder.TargetDt(target);
+}
+
 void SwervePathBuilder::set_bumpers(double front, double left, double right,
                                     double back) {
   path_builder.SetBumpers(front, left, right, back);
@@ -362,6 +368,12 @@ void DifferentialPathBuilder::set_control_interval_counts(
   }
 
   path_builder.ControlIntervalCounts(std::move(cppCounts));
+}
+
+void DifferentialPathBuilder::set_target_dt(
+  double target
+) {
+  path_builder.TargetDt(target);
 }
 
 void DifferentialPathBuilder::set_bumpers(double front, double left,

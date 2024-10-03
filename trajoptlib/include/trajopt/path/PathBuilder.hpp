@@ -170,6 +170,9 @@ class TRAJOPT_DLLEXPORT PathBuilder {
     }
   }
 
+  void TargetDt(double target) {
+    dt = target;
+  }
   /**
    * If using a discrete algorithm, specify the number of discrete
    * samples for every segment of the trajectory
@@ -198,7 +201,7 @@ class TRAJOPT_DLLEXPORT PathBuilder {
    */
   Solution CalculateInitialGuess() const {
     return GenerateLinearInitialGuess<Solution>(initialGuessPoints,
-                                                controlIntervalCounts);
+                                                controlIntervalCounts, dt);
   }
 
   /**
@@ -228,6 +231,8 @@ class TRAJOPT_DLLEXPORT PathBuilder {
 
   /// The control interval counts.
   std::vector<size_t> controlIntervalCounts;
+
+  double dt = 0.1;
 
   /**
    * Add new waypoints up to and including the given index.

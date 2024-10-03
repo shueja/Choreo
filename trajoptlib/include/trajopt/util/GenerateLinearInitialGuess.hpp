@@ -23,7 +23,9 @@ inline void append_vector(std::vector<T>& base,
 template <typename Solution>
 inline Solution GenerateLinearInitialGuess(
     const std::vector<std::vector<Pose2d>>& initialGuessPoints,
-    const std::vector<size_t> controlIntervalCounts) {
+    const std::vector<size_t> controlIntervalCounts,
+    const double dt
+  ) {
   size_t wptCnt = controlIntervalCounts.size() + 1;
   size_t sampTot = GetIndex(controlIntervalCounts, wptCnt - 1, 0) + 1;
 
@@ -53,7 +55,7 @@ inline Solution GenerateLinearInitialGuess(
   }
 
   for (size_t i = 0; i < sampTot; ++i) {
-    initialGuess.dt.push_back((wptCnt * 5.0) / sampTot);
+    initialGuess.dt.push_back(dt);
   }
 
   for (size_t wptIndex = 1; wptIndex < wptCnt; ++wptIndex) {

@@ -7,7 +7,8 @@ use super::{DifferentialGenerationTransformer, FeatureLockedTransformer, Generat
 
 pub struct IntervalCountSetter {
     counts: Vec<usize>,
-    waypoints: Vec<Waypoint<f64>>
+    waypoints: Vec<Waypoint<f64>>,
+    initial_dt: f64
 }
 
 impl IntervalCountSetter {
@@ -15,10 +16,12 @@ impl IntervalCountSetter {
     fn initialize(ctx: &GenerationContext) -> FeatureLockedTransformer<Self> {
         FeatureLockedTransformer::always(Self {
             counts: guess_control_interval_counts(&ctx.project.config.snapshot(), &ctx.params).unwrap_or_default(),
-            waypoints: ctx.params.waypoints.clone()
+            waypoints: ctx.params.waypoints.clone(),
+            initial_dt: ctx.params.target_dt
         })
     }
     fn transform<T: PathBuilder>(&self, builder: &mut T) {
+        builder.set_target_dt(self.initial_dt);
         let waypoints = &self.waypoints;
         let mut guess_points_after_waypoint = Vec::new();
         let mut control_interval_counts = Vec::new();

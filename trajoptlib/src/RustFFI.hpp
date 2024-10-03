@@ -43,7 +43,7 @@ class SwervePathBuilder {
   void set_drivetrain(const SwerveDrivetrain& drivetrain);
   void set_bumpers(double front, double left, double right, double back);
   void set_control_interval_counts(const rust::Vec<size_t> counts);
-
+  void set_target_dt(double target);
   void pose_wpt(size_t index, double x, double y, double heading);
   void translation_wpt(size_t index, double x, double y, double heading_guess);
   void empty_wpt(size_t index, double x_guess, double y_guess,
@@ -107,7 +107,7 @@ class DifferentialPathBuilder {
   void set_drivetrain(const DifferentialDrivetrain& drivetrain);
   void set_bumpers(double front, double left, double right, double back);
   void set_control_interval_counts(const rust::Vec<size_t> counts);
-
+  void set_target_dt(double target);
   void pose_wpt(size_t index, double x, double y, double heading);
   void translation_wpt(size_t index, double x, double y, double heading_guess);
   void empty_wpt(size_t index, double x_guess, double y_guess,
