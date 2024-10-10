@@ -12,6 +12,7 @@ import styles from "../WaypointConfigPanel.module.css";
 import CommandDraggable from "./CommandDraggable";
 import { CommandStore } from "../../../document/CommandStore";
 import { IHolonomicWaypointStore } from "../../../document/HolonomicWaypointStore";
+import { waypointIDToText } from "../../../document/path/HolonomicPathStore";
 
 type Props = { marker: IEventMarkerStore; points: IHolonomicWaypointStore[] };
 
@@ -68,14 +69,15 @@ class EventMarkerConfigPanel extends Component<Props, State> {
   }
   render() {
     const marker = this.props.marker;
-    const data = marker.data;
-    let startIndex = (data.getTargetIndex() ?? -0.5) + 1;
     const points = this.props.points;
     const pointcount = points.length;
-    if (data.target === "first") {
+
+    const start = marker.from;
+    let startIndex = (start.getTargetIndex() ?? -0.5) + 1;
+    if (start.target === "first") {
       startIndex = 0;
     }
-    if (data.target === "last") {
+    if (start.target === "last") {
       startIndex = pointcount + 1;
     }
 
@@ -94,19 +96,19 @@ class EventMarkerConfigPanel extends Component<Props, State> {
           endIndex={startIndex}
           setRange={(selection) => {
             const lastIdx = pointcount + 1;
-            const idx = selection[0];
-            if (idx == 0) {
-              data.setTarget("first");
-            } else if (idx == lastIdx) {
-              data.setTarget("last");
-            } else {
-              data.setTarget({
-                uuid: points[idx - 1]?.uuid ?? ""
-              });
-            }
+            const scope = selection.map((idx) => {
+              if (idx == 0) {
+                return "first";
+              } else if (idx == lastIdx) {
+                return "last";
+              } else {
+                return { uuid: points[idx - 1]?.uuid ?? "" };
+              }
+            });
+            start.setTarget(scope[0]);
           }}
           sliderProps={{
-            color: data.getTargetIndex() === undefined ? "error" : "primary"
+            color: start.getTargetIndex() === undefined ? "error" : "primary"
           }}
           points={points}
         ></ScopeSlider>
@@ -116,7 +118,7 @@ class EventMarkerConfigPanel extends Component<Props, State> {
         <ExpressionInputList>
           <Tooltip
             disableInteractive
-            title="Name of the marker (not the command)"
+            title="Name of the marker. Used for triggers, but not for Named Commands"
           >
             <span className={InputStyles.Title + " " + InputStyles.Tooltip}>
               Name
@@ -125,11 +127,11 @@ class EventMarkerConfigPanel extends Component<Props, State> {
 
           <TextField
             inputRef={this.nameInputRef}
-            value={data.name}
-            onChange={(e) => data.setName(e.target.value)}
+            value={marker.name}
+            onChange={(e) => marker.setName(e.target.value)}
             variant="standard"
             size="small"
-            placeholder="Marker Name"
+            placeholder="Event Name"
             sx={{
               ".MuiInput-input": {
                 paddingBottom: "0px"
@@ -144,15 +146,27 @@ class EventMarkerConfigPanel extends Component<Props, State> {
           <span></span>
           <span></span>
           <ExpressionInput
-            key={"offset"}
-            title={"Offset"}
+            key={"fromOffset"}
+            title={waypointIDToText(start.target, points) + " +"}
             enabled={true}
-            number={data.offset}
+            number={start.offset}
             titleTooltip={
-              "The marker's time offset before or after this waypoint"
+              "The marker's time offset before or after the start waypoint"
+            }
+          />
+          <span></span>
+          <span></span>
+          <ExpressionInput
+            key={"toOffset"}
+            title={"To Offset"}
+            enabled={true}
+            number={end.offset}
+            titleTooltip={
+              "The marker's time offset before or after the end waypoint"
             }
           />
         </ExpressionInputList>
+
         <DragDropContext onDragEnd={(result) => this.onDragEnd(result)}>
           <CommandDraggable
             command={marker.event}

@@ -8,18 +8,17 @@ import {
 } from "mobx-state-tree";
 import { moveItem } from "mobx-utils";
 import {
-  ChoreolibEvent,
-  Command,
   Expr,
   GroupCommand,
   NamedCommand,
+  PplibCommand,
   WaitCommand
 } from "./2025/DocumentTypes";
 import { Env } from "./DocumentManager";
 import { ExpressionStore } from "./ExpressionStore";
 
 export type CommandGroupType = "sequential" | "parallel" | "deadline" | "race";
-export type CommandType = CommandGroupType | "wait" | "named" | "choreolib";
+export type CommandType = CommandGroupType | "wait" | "named" | "none";
 export const CommandTypeNames = {
   sequential: { id: "sequential", name: "Sequence" },
   parallel: { id: "parallel", name: "Parallel" },
@@ -27,11 +26,11 @@ export const CommandTypeNames = {
   race: { id: "race", name: "Race" },
   wait: { id: "wait", name: "Wait" },
   named: { id: "named", name: "Named" },
-  choreolib: { id: "choreolib", name: "Choreolib" }
+  none: { id: "none", name: "None" }
 };
 export const CommandUIData = Object.values(CommandTypeNames);
-export function commandIsNamed(command: Command): command is NamedCommand {
-  return command.type === "named";
+export function commandIsNamed(command: PplibCommand | undefined): command is NamedCommand {
+  return command?.type === "named";
 }
 export function commandTypeIsGroup(type: CommandType) {
   return (
@@ -41,16 +40,11 @@ export function commandTypeIsGroup(type: CommandType) {
     type === "sequential"
   );
 }
-export function commandIsGroup(command: Command): command is GroupCommand {
-  return commandTypeIsGroup(command.type);
+export function commandIsGroup(command: PplibCommand | undefined): command is GroupCommand {
+  return command !== undefined && commandTypeIsGroup(command.type);
 }
-export function commandIsWait(command: Command): command is WaitCommand {
-  return command.type === "wait";
-}
-export function commandIsChoreolib(
-  command: Command
-): command is ChoreolibEvent {
-  return command.type === "choreolib";
+export function commandIsWait(command: PplibCommand | undefined): command is WaitCommand {
+  return command?.type === "wait";
 }
 export const CommandStore = types
   .model("CommandStore", {
@@ -61,20 +55,19 @@ export const CommandStore = types
       types.literal("race"),
       types.literal("wait"),
       types.literal("named"),
-      types.literal("choreolib")
+      types.literal("none")
     ),
     commands: types.array(types.late((): IAnyType => CommandStore)),
     time: ExpressionStore,
     name: types.maybeNull(types.string),
-    event: types.maybeNull(types.string),
     uuid: types.identifier
   })
   .views((self) => ({
     get isGroup(): boolean {
       return commandTypeIsGroup(self.type);
     },
-    get isChoreolib(): boolean {
-      return self.type === "choreolib";
+    get isNone(): boolean {
+      return self.type === "none";
     },
     get isNamed(): boolean {
       return self.type === "named";
@@ -84,7 +77,10 @@ export const CommandStore = types
     }
   }))
   .views((self) => ({
-    get serialize(): Command {
+    get serialize(): PplibCommand | undefined {
+      if (self.isNone) {
+        return undefined;
+      }
       if (self.isNamed) {
         return {
           type: "named",
@@ -99,13 +95,6 @@ export const CommandStore = types
             waitTime: self.time.serialize
           }
         };
-      } else if (self.isChoreolib) {
-        return {
-          type: "choreolib",
-          data: {
-            event: self.event
-          }
-        };
       } else {
         return {
           type: self.type as CommandGroupType,
@@ -117,24 +106,26 @@ export const CommandStore = types
     }
   }))
   .actions((self) => ({
-    deserialize(ser: Command) {
+    deserialize(ser: PplibCommand | undefined) {
+      
       self.commands.clear();
       self.name = "";
-      self.event = "";
-      self.type = ser.type;
-      if (commandIsNamed(ser)) {
-        self.name = ser.data.name;
-      } else if (commandIsWait(ser)) {
-        self.time.deserialize(ser.data.waitTime);
-      } else if (commandIsChoreolib(ser)) {
-        self.event = ser.data.event;
+      if (ser === undefined) {
+        self.type = "none";
       } else {
-        ser.data.commands.forEach((c) => {
-          const command: ICommandStore =
-            getEnv<Env>(self).create.CommandStore(c);
-          command.deserialize(c);
-          self.commands.push(command);
-        });
+        self.type = ser.type;
+        if (commandIsNamed(ser)) {
+          self.name = ser.data.name;
+        } else if (commandIsWait(ser)) {
+          self.time.deserialize(ser.data.waitTime);
+        } else {
+          ser.data.commands.forEach((c) => {
+            const command: ICommandStore =
+              getEnv<Env>(self).create.CommandStore(c);
+            command.deserialize(c);
+            self.commands.push(command);
+          });
+        }
       }
     },
     reorderCommands(startIndex: number, endIndex: number) {
@@ -145,9 +136,6 @@ export const CommandStore = types
     },
     setName(name: string) {
       self.name = name;
-    },
-    setEvent(event: string) {
-      self.event = event;
     },
     addSubCommand() {
       // TODO add subcommand

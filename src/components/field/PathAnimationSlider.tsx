@@ -68,17 +68,29 @@ class PathAnimationSlider extends Component<Props, State> {
                     ];
                   })
                   .concat(
-                    activePath.markers.flatMap((marker: IEventMarkerStore) => {
-                      if (marker.data.timestamp === undefined) {
+                    activePath.markers.flatMap((marker: IEventMarkerStore)=>{
+                      return [
+                        {
+                          selected: marker.selected,
+                          timestamp: marker.from.timestamp
+                        },
+                        {
+                          selected: marker.selected,
+                          timestamp: marker.to.timestamp
+                        }
+                      ]
+                    }).flatMap((time: {selected: boolean, timestamp: number|undefined}) => {
+                      if (time.timestamp === undefined) {
                         return [];
                       }
-                      return {
-                        value: marker.data.timestamp,
+                      return [
+                        {
+                        value: time.timestamp,
                         label: (
                           <span>
                             <Room
                               htmlColor={
-                                marker.selected
+                                time.selected
                                   ? "var(--select-yellow)"
                                   : "white"
                               }
@@ -91,7 +103,9 @@ class PathAnimationSlider extends Component<Props, State> {
                             ></Room>
                           </span>
                         )
-                      };
+                      }
+                    
+                    ];
                     })
                   )
               : false

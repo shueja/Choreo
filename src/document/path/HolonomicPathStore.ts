@@ -8,8 +8,6 @@ import {
   types
 } from "mobx-state-tree";
 import {
-  ChoreolibEvent,
-  Command,
   EventMarker,
   Expr,
   PplibCommand,
@@ -19,7 +17,6 @@ import {
   type ChoreoPath,
   type Trajectory
 } from "../2025/DocumentTypes";
-import { commandIsChoreolib } from "../CommandStore";
 import { Env } from "../DocumentManager";
 import { EventMarkerStore, IEventMarkerStore } from "../EventMarkerStore";
 import {
@@ -39,9 +36,10 @@ export function waypointIDToText(
   if (id == "last") return "End";
   return findUUIDIndex(id.uuid, points) + 1;
 }
-export const DEFAULT_EVENT_MARKER: EventMarker<PplibCommand> = {
-  data: {
-    name: "Marker",
+export const DEFAULT_EVENT_MARKER: EventMarker = {
+  name: "Marker",
+  zoned: false,
+  from: {
     target: undefined,
     offset: {
       exp: "0 s",
@@ -49,12 +47,15 @@ export const DEFAULT_EVENT_MARKER: EventMarker<PplibCommand> = {
     },
     targetTimestamp: undefined
   },
-  event: {
-    type: "named",
-    data: {
-      name: ""
-    }
-  }
+  to: {
+      target: undefined,
+      offset: {
+        exp: "0 s",
+        val: 0
+      },
+      targetTimestamp: undefined
+    },
+  event: undefined
 };
 export const HolonomicPathStore = types
   .model("HolonomicPathStore", {
@@ -83,12 +84,7 @@ export const HolonomicPathStore = types
           params: self.params.serialize,
           trajectory: self.trajectory.serialize,
           snapshot: self.snapshot,
-          pplibCommands: markers.filter(
-            (m) => !commandIsChoreolib(m.event)
-          ) as EventMarker<PplibCommand>[],
-          events: markers.filter((m) =>
-            commandIsChoreolib(m.event)
-          ) as EventMarker<ChoreolibEvent>[]
+          events: markers
         };
       },
       lowestSelectedPoint(): IHolonomicWaypointStore | null {
@@ -121,7 +117,7 @@ export const HolonomicPathStore = types
           }
         }
       },
-      addEventMarker(marker?: EventMarker<Command>): IEventMarkerStore {
+      addEventMarker(marker?: EventMarker): IEventMarkerStore {
         const m = marker ?? DEFAULT_EVENT_MARKER;
         const toAdd = getEnv<Env>(self).create.EventMarkerStore(m);
 
@@ -168,9 +164,6 @@ export const HolonomicPathStore = types
         self.params.deserialize(ser.params);
         self.trajectory.deserialize(ser.trajectory);
         ser.events.forEach((m) => {
-          self.addEventMarker(m);
-        });
-        ser.pplibCommands.forEach((m) => {
           self.addEventMarker(m);
         });
       }

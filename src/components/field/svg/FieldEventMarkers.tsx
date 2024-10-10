@@ -3,6 +3,7 @@ import { Component } from "react";
 import { doc } from "../../../document/DocumentManager";
 
 import { sample } from "../../../util/MathUtil";
+import { IEventMarkerStore } from "../../../document/EventMarkerStore";
 
 type MarkerProps = {
   x: number;
@@ -49,11 +50,12 @@ class FieldEventMarkers extends Component<Props, State> {
   render() {
     const path = doc.pathlist.activePath;
     const markers = path.markers;
-    return markers.flatMap((marker) => {
-      if (marker.data.timestamp === undefined) {
+    return markers.flatMap((marker: IEventMarkerStore) => {
+      return [marker.from, marker.to].flatMap(d=>{
+      if (d.timestamp === undefined) {
         return [];
       }
-      const marked = sample(marker.data.timestamp, path.trajectory.samples);
+      const marked = sample(d.timestamp, path.trajectory.samples);
       return (
         <FieldEventMarker
           key={marker.uuid}
@@ -63,7 +65,7 @@ class FieldEventMarkers extends Component<Props, State> {
           onSelect={() => doc.setSelectedSidebarItem(marker)}
         ></FieldEventMarker>
       );
-    });
+    })});
   }
 }
 export default observer(FieldEventMarkers);

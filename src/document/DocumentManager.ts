@@ -15,8 +15,6 @@ import "react-toastify/dist/ReactToastify.min.css";
 import LocalStorageKeys from "../util/LocalStorageKeys";
 import { safeGetIdentifier } from "../util/mobxutils";
 import {
-  ChoreolibEvent,
-  Command,
   EventMarker,
   GroupCommand,
   NamedCommand,
@@ -25,12 +23,12 @@ import {
   WaitCommand,
   type Expr,
   type RobotConfig,
-  type Waypoint
+  type Waypoint,
+  PplibCommand
 } from "./2025/DocumentTypes";
 import {
   CommandStore,
   ICommandStore,
-  commandIsChoreolib,
   commandIsGroup,
   commandIsNamed,
   commandIsWait
@@ -88,18 +86,17 @@ export type EnvConstructors = {
   RobotConfigStore: (config: RobotConfig<Expr>) => IRobotConfigStore;
   WaypointStore: (config: Waypoint<Expr>) => IHolonomicWaypointStore;
   CommandStore: (
-    command: Command &
+    command: PplibCommand &
       (
         | {
             data: WaitCommand["data"] &
               GroupCommand["data"] &
-              NamedCommand["data"] &
-              ChoreolibEvent["data"];
+              NamedCommand["data"];
           }
         | object
       )
   ) => ICommandStore;
-  EventMarkerStore: (marker: EventMarker<Command>) => IEventMarkerStore;
+  EventMarkerStore: (marker: EventMarker) => IEventMarkerStore;
   ConstraintData: ConstraintDataConstructors;
   ConstraintStore: <K extends ConstraintKey>(
     type: K,
@@ -110,9 +107,9 @@ export type EnvConstructors = {
   ) => IConstraintStore;
 };
 function getConstructors(vars: () => IVariables): EnvConstructors {
-  function createCommandStore(command: Command): ICommandStore {
+  function createCommandStore(command: PplibCommand | undefined): ICommandStore {
     return CommandStore.create({
-      type: command.type,
+      type: command?.type ?? "none",
       name: commandIsNamed(command) ? command.data.name : "",
       commands: commandIsGroup(command)
         ? command.data.commands.map((c) => createCommandStore(c))
@@ -121,7 +118,6 @@ function getConstructors(vars: () => IVariables): EnvConstructors {
         commandIsWait(command) ? command.data.waitTime : 0,
         "Time"
       ),
-      event: commandIsChoreolib(command) ? command.data.event : "",
       uuid: crypto.randomUUID()
     });
   }
@@ -182,14 +178,21 @@ function getConstructors(vars: () => IVariables): EnvConstructors {
       return w;
     },
     CommandStore: createCommandStore,
-    EventMarkerStore: (marker: EventMarker<Command>): IEventMarkerStore => {
+    EventMarkerStore: (marker: EventMarker): IEventMarkerStore => {
       const m = EventMarkerStore.create({
-        data: {
+        name: marker.name,
+        zoned: false,
+        from: {
           uuid: crypto.randomUUID(),
-          name: marker.data.name,
           target: undefined,
-          targetTimestamp: marker.data.targetTimestamp ?? undefined,
-          offset: vars().createExpression(marker.data.offset, "Time")
+          targetTimestamp: marker.from.targetTimestamp ?? undefined,
+          offset: vars().createExpression(marker.from.offset, "Time")
+        },
+        to: {
+          uuid: crypto.randomUUID(),
+          target: undefined,
+          targetTimestamp: marker.to?.targetTimestamp ?? undefined,
+          offset: vars().createExpression(marker.to?.offset ?? "0 s", "Time")
         },
         event: createCommandStore(marker.event),
         uuid: crypto.randomUUID()

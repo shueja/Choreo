@@ -31,6 +31,7 @@ import OverlayWaypoint from "./OverlayWaypoint";
 import FieldConstraintAddLayer from "./constraintDisplay/FieldConstraintAddLayer";
 import FieldConstraintDisplayLayer from "./constraintDisplay/FieldConstraintDisplayLayer";
 import FieldImage2024 from "./fields/FieldImage2024";
+import FieldMarkerAddLayer from "./FieldMarkerAddLayer";
 
 type Props = object;
 
@@ -362,7 +363,7 @@ class FieldOverlayRoot extends Component<Props, State> {
               <FieldConstraintAddLayer lineColor="var(--select-yellow)"></FieldConstraintAddLayer>
             )}
             {eventMarkerSelected && (
-              <FieldEventMarkerAddLayer></FieldEventMarkerAddLayer>
+              <FieldMarkerAddLayer></FieldMarkerAddLayer>
             )}
             {doc.isSidebarConstraintSelected && (
               <FieldConstraintDisplayLayer
