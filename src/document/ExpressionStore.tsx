@@ -21,7 +21,9 @@ import {
   create,
   isNode,
   isNull,
-  isUnit
+  isObjectNode,
+  isUnit,
+  string
 } from "mathjs";
 import { IReactionDisposer, reaction, untracked } from "mobx";
 import { Instance, detach, getEnv, types } from "mobx-state-tree";
@@ -225,6 +227,33 @@ export const ExpressionStore = types
           const clone = (node as SymbolNode).clone();
           clone.name = replace;
           return clone;
+        } else {
+          return node;
+        }
+      });
+    },
+    deleteVariable(find: string, replace: MathNode) {
+      self.expr = self.expr.transform(function (node, path, parent) {
+        if (isFunctionNode(node) && node.fn.name === find) {
+          return replace;
+        } else if (isSymbolNode(node) && !(isFunctionNode(parent) && path =="fn") && node.name === find) {
+          return replace;
+        } else {
+          return node;
+        }
+      });
+    },
+    deleteObjectVariable(obj: string, prop: string, replace: MathNode) {
+      self.expr = self.expr.transform(function (node, path, parent) {
+        if (isAccessorNode(node) &&
+            isSymbolNode(node.object) &&
+            node.object.name === obj) {
+              const dimensions = node.index.dimensions[0];
+              if (dimensions === undefined) {return node;}
+              if (isSymbolNode(dimensions) && dimensions.name === prop) {
+                return replace;
+              }
+              return node;
         } else {
           return node;
         }
@@ -625,6 +654,9 @@ export const Variables = types
       self.poses.delete(key);
     },
     deleteExpression(key: string) {
+      const current = self.expressions.get(key);
+      if (current === undefined) return;
+      getEnv<Env>(self).deleteVariable(key, current.expr);
       self.expressions.delete(key);
     },
     renameExpression(cur: string, next: string) {

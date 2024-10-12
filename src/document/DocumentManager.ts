@@ -64,6 +64,7 @@ import { UIStateStore } from "./UIStateStore";
 import { findUUIDIndex } from "./path/utils";
 import { Commands } from "./tauriCommands";
 import { tracing } from "./tauriTracing";
+import { MathNode } from "mathjs";
 
 export type OpenFilePayload = {
   name: string;
@@ -235,6 +236,7 @@ const env = {
   history: () => doc.history,
   vars: () => doc.variables,
   renameVariable: renameVariable,
+  deleteVariable: deleteVariable,
   create: getConstructors(() => doc.variables)
 };
 export type Env = typeof env;
@@ -268,6 +270,13 @@ function renameVariable(find: string, replace: string) {
   walk(doc, (node) => {
     if (node["expr"] !== undefined) {
       (node as IExpressionStore).findReplaceVariable(find, replace);
+    }
+  });
+}
+function deleteVariable(find: string, replace: MathNode) {
+  walk(doc, (node) => {
+    if (node["expr"] !== undefined) {
+      (node as IExpressionStore).deleteVariable(find, replace);
     }
   });
 }
