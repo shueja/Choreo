@@ -1,7 +1,7 @@
 import { Tooltip } from "@mui/material";
 import { observer } from "mobx-react";
 import { isAlive } from "mobx-state-tree";
-import React, { Component } from "react";
+import React, { CSSProperties, Component } from "react";
 import { IExpressionStore, math } from "../../document/ExpressionStore";
 import styles from "./InputList.module.css";
 import { tracing } from "../../document/tauriTracing";
@@ -21,6 +21,8 @@ type Props = {
   titleTooltip?: string;
   /** Maximum width of the number input, in monospace characters */
   maxWidthCharacters?: number;
+
+  inputStyles?: CSSProperties;
 };
 
 type State = {
@@ -29,6 +31,32 @@ type State = {
   editedValue: string;
 };
 
+class InputWithTitle extends Component<Props, State> {
+
+  render() {
+    return (
+      <>
+        {!(this.props.title instanceof Function) && (
+          <Tooltip disableInteractive title={this.props.titleTooltip ?? ""}>
+            <span
+              className={
+                styles.Title +
+                " " +
+                (this.props.enabled ? "" : styles.Disabled) +
+                " " +
+                (this.props.titleTooltip === undefined ? "" : styles.Tooltip)
+              }
+            >
+              {this.props.title as string}
+            </span>
+          </Tooltip>
+        )}
+        {this.props.title instanceof Function && this.props.title()}
+        <Input {...this.props}></Input>
+      </>
+    );
+  }
+}
 class Input extends Component<Props, State> {
   inputElemRef: React.RefObject<HTMLInputElement>;
   constructor(props: Props) {
@@ -127,24 +155,13 @@ class Input extends Component<Props, State> {
     if (this.props.maxWidthCharacters !== undefined) {
       characters = Math.min(characters, this.props.maxWidthCharacters);
     }
+    const inputStyle = {
+      ...this.props.inputStyles,
+        minWidth: `${characters}ch`,
+        gridColumn: "span 1",
+      }
     return (
-      <>
-        {!(this.props.title instanceof Function) && (
-          <Tooltip disableInteractive title={this.props.titleTooltip ?? ""}>
-            <span
-              className={
-                styles.Title +
-                " " +
-                (this.props.enabled ? "" : styles.Disabled) +
-                " " +
-                (this.props.titleTooltip === undefined ? "" : styles.Tooltip)
-              }
-            >
-              {this.props.title as string}
-            </span>
-          </Tooltip>
-        )}
-        {this.props.title instanceof Function && this.props.title()}
+      
         <input
           ref={this.inputElemRef}
           type="text"
@@ -153,10 +170,7 @@ class Input extends Component<Props, State> {
             (showNumberWhenDisabled ? " " + styles.ShowWhenDisabled : "") +
             (this.getValid() ? " " : " " + styles.Invalid)
           }
-          style={{
-            minWidth: `${characters}ch`,
-            gridColumn: "span 1"
-          }}
+          style={inputStyle}
           disabled={!this.props.enabled}
           // The below is needed to make inputs on CommandDraggables work
           onClick={(e) => e.stopPropagation()}
@@ -202,8 +216,9 @@ class Input extends Component<Props, State> {
           autoCorrect="off"
           autoCapitalize="off"
         ></input>
-      </>
     );
   }
 }
-export default observer(Input);
+export default observer(InputWithTitle);
+export const InputOnly = observer(Input);
+

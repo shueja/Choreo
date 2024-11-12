@@ -24,6 +24,9 @@
 .Title {
   text-align: right;
   min-width: max-content;
+  color: white;
+  --text-color: white;
+  --disabled-color: gray;
 }
 .Title.Disabled {
   color: var(--disabled-color);
@@ -45,8 +48,12 @@
   color: inherit;
   flex-shrink: 1;
   min-width: 5.5ch;
+  max-width:100%;
   border-bottom: solid 1px;
   text-align: right;
+  color: white;
+  --text-color: white;
+  --disabled-color: gray;
 }
 
 .Number:disabled {

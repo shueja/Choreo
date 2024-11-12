@@ -8,6 +8,7 @@ import ModuleConfigPanel from "./ModuleConfigPanel";
 import MotorCalculatorPanel from "./MotorCalculatorPanel";
 import TheoreticalPanel from "./TheoreticalPanel";
 import { doc } from "../../../document/DocumentManager";
+import DimensionedRobotSketch from "./DimensionedRobotSketch";
 
 type Props = object;
 
@@ -22,7 +23,7 @@ class RobotConfigPanel extends Component<Props, State> {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(300px, 1fr))",
+          gridTemplateColumns: "minmax(300px, 1fr) minmax(500px, 1fr)",
           gridGap: `${2 * this.rowGap}px`,
           rowGap: `${0 * this.rowGap}px`,
           fontSize: "2rem",
@@ -35,7 +36,13 @@ class RobotConfigPanel extends Component<Props, State> {
           </Divider>
           <DimensionsConfigPanel rowGap={this.rowGap}></DimensionsConfigPanel>
         </div>
-        <div style={{ gridRow: 1, gridColumn: 2 }}>
+        <div style={{
+          gridColumn: 2,
+          gridRow: 1,
+          width: "400px", height: "400px", border: "1px solid yellow"}}>
+          <DimensionedRobotSketch config={doc.robotConfig} widthPx={400}></DimensionedRobotSketch>
+          </div>
+        <div style={{ gridRow: 2, gridColumn: 1 }}>
           <Divider sx={{ color: "gray", marginBlock: `${this.rowGap}px` }}>
             DRIVE MOTOR
           </Divider>
@@ -44,6 +51,7 @@ class RobotConfigPanel extends Component<Props, State> {
           <Divider sx={{ color: "gray", marginBottom: `${this.rowGap}px` }}>
             DISPLAY
           </Divider>
+
           <div
             style={{
               height: 24,
@@ -64,6 +72,7 @@ class RobotConfigPanel extends Component<Props, State> {
                 doc.setType(checked ? "Differential" : "Swerve")
               }
             ></Switch>
+            
           </div>
         </div>
         {/* Left label divider when calculator is open */}
