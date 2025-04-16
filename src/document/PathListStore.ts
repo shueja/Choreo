@@ -28,9 +28,11 @@ export const PathListStore = types
           (pathStore) => pathStore.name
         );
       },
-
       get pathUUIDs() {
         return Array.from(self.paths.keys());
+      },
+      pathsWhere(filter: (path: IHolonomicPathStore)=>boolean) : IHolonomicPathStore[] {
+        return Array.from(self.paths.values()).filter(filter);
       }
     };
   })

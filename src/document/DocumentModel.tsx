@@ -164,13 +164,22 @@ export const DocumentStore = types
       }
     },
     async generateAllOutdated() {
-      const uuidsToGenerate: string[] = [];
-      self.pathlist.paths.forEach((pathStore) => {
-        if (!pathStore.ui.upToDate) {
-          uuidsToGenerate.push(pathStore.uuid);
-        }
-      });
-      await Promise.allSettled(uuidsToGenerate.map(this.generatePath));
+      await this.generateMultiple(self.pathlist.pathsWhere(p=>!p.ui.upToDate).map(p=>p.uuid));
+    },
+    async generateAll() {
+      await this.generateMultiple(self.pathlist.pathUUIDs);
+    },
+    async generateMultiple(uuids: string[]) {
+      let uuidsToGenerate = [...uuids];
+      let createWorker = async ()=>{
+        
+        let nextUUID = uuidsToGenerate.pop();
+        if (nextUUID === undefined) {return Promise.resolve();}
+        await Promise.allSettled([this.generatePath(nextUUID)]);
+        await createWorker();
+      }
+      let workers = new Array(6).fill(undefined).map(()=>createWorker());
+      await Promise.allSettled(workers);
     },
 
     async generatePath(uuid: string) {
