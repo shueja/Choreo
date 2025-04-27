@@ -4,6 +4,7 @@ members = [
     "src-cli",
     "src-core",
     "src-tauri",
+    "src-server",
     "trajoptlib",
 ]
 resolver = "2"

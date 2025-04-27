@@ -174,8 +174,8 @@ pub fn remote_generate_child(args: RemoteArgs) {
 
 pub async fn remote_generate_parent(
     remote_resources: &RemoteGenerationResources,
-    project: ProjectFile,
-    trajectory_file: TrajectoryFile,
+    project: &ProjectFile,
+    trajectory_file: &TrajectoryFile,
     handle: i64,
 ) -> ChoreoResult<TrajectoryFile> {
     tracing::info!("Generating remote trajectory {}", trajectory_file.name);
@@ -322,7 +322,7 @@ pub async fn remote_generate_parent(
                                     TrajectoryFile {
                                         trajectory,
                                         snapshot: Some(trajectory_file.params.snapshot()),
-                                        .. trajectory_file
+                                        .. trajectory_file.clone()
                                     }
                                 );
                             },

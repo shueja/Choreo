@@ -194,7 +194,7 @@ pub async fn generate_remote(
 ) -> TauriResult<TrajectoryFile> {
     let remote_resources = app_handle.state::<RemoteGenerationResources>();
     use choreo_core::generation::remote::remote_generate_parent;
-    debug_result!(remote_generate_parent(&remote_resources, project, trajectory, handle).await);
+    debug_result!(remote_generate_parent(&remote_resources, &project, &trajectory, handle).await);
 }
 
 #[tauri::command]
