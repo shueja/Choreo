@@ -19,6 +19,22 @@ use serde::Deserialize;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+
+    let args = std::env::args().collect::<Vec<_>>();
+    if args.len() > 2 {
+        panic!("Unsupported arguments: {:?}", args);
+    }
+
+    if let Some(arg) = args.get(1) {
+        if let Ok(remote_args) = RemoteArgs::from_content(arg) {
+            tracing_subscriber::fmt()
+                .with_max_level(tracing::Level::ERROR)
+                .event_format(logging::CompactFormatter { ansicolor: false })
+                .init();
+            remote_generate_child(remote_args);
+            return Ok(());
+        } 
+    }
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     HttpServer::new(|| {
         let cors = Cors::permissive(); // TODO set something sensible

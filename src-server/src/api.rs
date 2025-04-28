@@ -229,8 +229,8 @@ pub async fn generate_remote(
     body: web::Json<GenerateBody>
 ) -> ChoreoResponse<TrajectoryFile> {
     let remote_resources = resources;
-    use choreo_core::generation::generate;
-    result_to_response(debug_result(generate(body.project.clone(), body.trajectory.clone(), body.handle)))
+    use choreo_core::generation::remote::remote_generate_parent;
+    result_to_response(debug_result(remote_generate_parent(&remote_resources, &body.project, &body.trajectory, body.handle).await))
 }
 
 // #[tauri::command]
