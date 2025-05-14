@@ -37,7 +37,7 @@ async fn main() -> std::io::Result<()> {
     }
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     HttpServer::new(|| {
-        let cors = Cors::permissive(); // TODO set something sensible
+        let cors = Cors::permissive().supports_credentials(); // TODO set something sensible
         App::new()
             .wrap(cors)
             .wrap(Logger::default())
@@ -46,6 +46,8 @@ async fn main() -> std::io::Result<()> {
             .service(api::default_project)
             .service(api::guess_control_interval_counts)
             .service(api::generate_remote)
+            .service(api::get_deploy_root)
+            .service(api::set_deploy_root)
     })
     .bind(("127.0.0.1", 8080))?
     .run()

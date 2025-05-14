@@ -173,6 +173,7 @@ async fn default_project() -> impl Responder {
 // }
 
 // #[tauri::command]
+// #[delete("/trajectory")]
 // pub async fn delete_trajectory(
 //     app_handle: tauri::AppHandle,
 //     trajectory: TrajectoryFile,
@@ -186,30 +187,47 @@ async fn default_project() -> impl Responder {
 //     trajectory.up_to_date()
 // }
 
-// #[tauri::command]
-// pub async fn set_deploy_root(app_handle: tauri::AppHandle, dir: String) {
-//     let resources = app_handle.state::<WritingResources>();
-//     file_management::set_deploy_path(&resources, PathBuf::from(dir)).await;
-// }
 
 // #[tauri::command]
-// pub async fn get_deploy_root(app_handle: tauri::AppHandle) -> TauriResult<String> {
-//     let resources = app_handle.state::<WritingResources>();
-//     match resources.get_deploy_path().await {
-//         Ok(path) => Ok(path.to_string_lossy().to_string()),
-//         // an absent deploy path is represented as an empty string in the frontend
-//         Err(ChoreoError::NoDeployPath) => Ok(String::new()),
-//         Err(e) => {
-//             tracing::error!("{e}");
-//             Err(e.into())
-//         }
-//     }
-// }
+#[derive(Deserialize)]
+struct SetDeployRootBody{
+    dir: String
+}
+#[post("/deploy_root")]
+pub async fn set_deploy_root(body: web::Json<SetDeployRootBody>) -> HttpResponse {
+    HttpResponse::Ok().cookie(
+        Cookie::build("choreo_working_directory", body.dir.clone())
+        //.domain("localhost:1420")
+        .path("/")
+        .secure(true)
+        .same_site(SameSite::None)
+        .permanent()
+        .http_only(false)
+        .finish()
+    
+    ).finish()
+    // let resources = app_handle.state::<WritingResources>();
+    // file_management::set_deploy_path(&resources, PathBuf::from(dir)).await;
+}
+
+#[get("/deploy_root")]
+pub async fn get_deploy_root(resources: web::Data<WritingResources>) -> ChoreoResponse<String> {
+    let result = match resources.get_deploy_path().await {
+        Ok(path) => Ok(path.to_string_lossy().to_string()),
+        // an absent deploy path is represented as an empty string in the frontend
+        Err(ChoreoError::NoDeployPath) => Ok(String::new()),
+        Err(e) => {
+            tracing::error!("{e}");
+            Err(e)
+        }
+    };
+    result_to_response(result)
+}
 
 use std::fmt::Display;
 
-use actix_web::{get, post, web, Either, HttpResponse, Responder};
-use choreo_core::{generation::{generate::generate, remote::RemoteGenerationResources}, spec::{project::{ProjectFile, RobotConfig}, trajectory::TrajectoryFile, Expr}, ChoreoResult};
+use actix_web::{cookie::{Cookie, SameSite}, delete, get, post, web, Either, HttpRequest, HttpResponse, Responder};
+use choreo_core::{file_management::WritingResources, generation::{generate::generate, remote::RemoteGenerationResources}, spec::{project::{ProjectFile, RobotConfig}, trajectory::TrajectoryFile, Expr}, ChoreoError, ChoreoResult};
 use serde::Deserialize;
 type ChoreoResponse<T> = Either<web::Json<T>, HttpResponse>;
 fn result_to_response<T>(result: ChoreoResult<T>) -> ChoreoResponse<T> {
@@ -225,43 +243,32 @@ struct GenerateBody {
     handle: i64,}
 #[post("/generate_remote")]
 pub async fn generate_remote(
+    req: HttpRequest,
     resources: web::Data<RemoteGenerationResources>,
     body: web::Json<GenerateBody>
 ) -> ChoreoResponse<TrajectoryFile> {
+    println!("{:?}", req.cookie("choreo_working_directory"));
     let remote_resources = resources;
     use choreo_core::generation::remote::remote_generate_parent;
     result_to_response(debug_result(remote_generate_parent(&remote_resources, &body.project, &body.trajectory, body.handle).await))
 }
 
-// #[tauri::command]
-// pub fn cancel_remote_generator(app_handle: tauri::AppHandle, handle: i64) -> TauriResult<()> {
-//     let remote_resources = app_handle.state::<RemoteGenerationResources>();
-//     debug_result!(remote_resources.kill(handle));
-// }
+static WORKING_DIRECTORY_TOKEN: &str = "choreo_working_directory";
+fn working_directory(req: HttpRequest) -> Option<String> {
+    req.cookie(WORKING_DIRECTORY_TOKEN).map(|c|c.name_value().1.to_owned())
+}
 
-// #[tauri::command]
-// pub fn cancel_all_remote_generators(app_handle: tauri::AppHandle) {
-//     let remote_resources = app_handle.state::<RemoteGenerationResources>();
-//     remote_resources.kill_all();
-// }
+#[derive(Deserialize)]
+struct CancelRemoteGeneratorBody {
+    handle: i64,}
+#[post("/cancel_remote_generator")]
+pub async fn cancel_remote_generator(resources: web::Data<RemoteGenerationResources>,
+    body: web::Json<CancelRemoteGeneratorBody>) -> ChoreoResponse<()> {
+    result_to_response(debug_result(resources.kill(body.handle)))
+}
 
-// #[tauri::command]
-// pub fn open_diagnostic_file(
-//     project: ProjectFile,
-//     trajectories: Vec<TrajectoryFile>,
-// ) -> TauriResult<()> {
-//     tracing::debug!("Opening diagnostic file");
-//     let log_lines = get_log_lines(dirs::data_local_dir().map(|d| d.join("choreo/log")));
-
-//     tracing::debug!("Found {:} log lines", log_lines.len());
-
-//     let tmp_path = create_diagnostic_file(project, trajectories, log_lines)?;
-
-//     tracing::debug!("Created diagnostic file");
-
-//     if let Some(pth) = tmp_path.parent() {
-//         debug_result!(open::that(pth).map_err(ChoreoError::from));
-//     } else {
-//         Err(ChoreoError::FileNotFound(None).into())
-//     }
-// }
+#[post("/cancel_all_remote_generators")]
+pub async fn cancel_all_remote_generators(resources: web::Data<RemoteGenerationResources>) -> ChoreoResponse<()> {
+    resources.kill_all();
+    result_to_response(Ok(()))
+}

@@ -21,8 +21,11 @@ async function command<T> (cmd: string, method: Method, payload: object) : Promi
     body: JSON.stringify(payload),
     headers:
     {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        
     },
+    credentials: "include"
+    
   }
   let options = Method.GET == method ? getOptions : postOptions
   console.log(cmd, options)
@@ -86,7 +89,10 @@ export const Commands = {
    * @param dir The directory path to set as the root.
    * @returns `void`
    */
-  setDeployRoot: (dir: string) => invoke<void>("set_deploy_root", { dir }),
+  setDeployRoot: (dir: string) => {
+    command("deploy_root", Method.POST, {dir});
+    return invoke<void>("set_deploy_root", { dir })
+  },
   /**
    * Gets the application-wide directory path that is used as the root for all file operations.
    *
