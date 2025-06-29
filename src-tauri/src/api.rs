@@ -192,9 +192,20 @@ pub async fn generate_remote(
     trajectory: TrajectoryFile,
     handle: i64,
 ) -> TauriResult<TrajectoryFile> {
-    let remote_resources = app_handle.state::<RemoteGenerationResources>();
-    use choreo_core::generation::remote::remote_generate_parent;
-    debug_result!(remote_generate_parent(&remote_resources, &project, &trajectory, handle).await);
+    // let remote_resources = app_handle.state::<RemoteGenerationResources>();
+    // use choreo_core::generation::remote::remote_generate_parent;
+    // let (tx, mut rx) = tauri::async_runtime::::channel::<LocalProgressUpdate>(50);
+    
+    // let result = tokio::select! {
+    //     res = remote_generate_parent(&remote_resources, &body.project, &body.trajectory, body.handle, tx) => res,
+    //     _ = async {
+    //         while let Some(update) = rx.recv().await {
+    //             println!("{:?}", update);
+    //         }
+    //     } =>
+    Err(ChoreoError::NoDeployPath.into())
+    // };
+    // debug_result!(result);
 }
 
 #[tauri::command]

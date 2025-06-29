@@ -11,7 +11,7 @@ mod logging;
 
 use std::{fs, result};
 
-use choreo_core::{file_management::WritingResources, generation::remote::{remote_generate_child, RemoteArgs, RemoteGenerationResources}, spec::{project::{ProjectFile, RobotConfig}, trajectory::TrajectoryFile, Expr}};
+use choreo_core::{file_management::WritingResources, generation::{generate::setup_progress_sender, remote::{remote_generate_child, RemoteArgs, RemoteGenerationResources}}, spec::{project::{ProjectFile, RobotConfig}, trajectory::TrajectoryFile, Expr}};
 
 use actix_web::{get, middleware::Logger, post, web, App, Either, HttpResponse, HttpServer, Responder};
 use actix_cors::Cors;
@@ -36,6 +36,8 @@ async fn main() -> std::io::Result<()> {
         } 
     }
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    let rx = setup_progress_sender();
+
     HttpServer::new(|| {
         let cors = Cors::permissive().supports_credentials(); // TODO set something sensible
         App::new()

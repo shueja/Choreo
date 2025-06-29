@@ -1,8 +1,8 @@
 use std::{
     mem::forget,
     path::PathBuf,
-    sync::{mpsc, Arc},
     thread,
+    sync::Arc
 };
 
 use dashmap::DashMap;
@@ -13,7 +13,7 @@ use tokio::{
     io::AsyncReadExt,
     process::Command,
     select,
-    sync::{oneshot, Notify},
+    sync::{oneshot, Notify, mpsc},
 };
 
 use crate::{
@@ -22,30 +22,35 @@ use crate::{
         project::ProjectFile,
         trajectory::{Sample, Trajectory, TrajectoryFile},
     },
-    ChoreoError, ChoreoResult, ResultExt,
+    ChoreoError, ChoreoResult
 };
 
-use super::generate::{setup_progress_sender, HandledLocalProgressUpdate, PROGRESS_SENDER_LOCK};
+use super::generate::{setup_progress_sender, HandledLocalProgressUpdate};
 
 #[derive(Clone)]
 #[allow(missing_debug_implementations)]
 pub struct RemoteGenerationResources {
-    frontend_emitter: Option<mpsc::Sender<HandledLocalProgressUpdate>>,
+    progress_map: Arc<DashMap<i64, mpsc::Sender<LocalProgressUpdate>>>,
     kill_map: Arc<DashMap<i64, oneshot::Sender<()>>>,
 }
 
 impl RemoteGenerationResources {
-    /**
-     * Should be called after [`setup_progress_sender`] to ensure that the sender is initialized.
-     */
+
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
-            frontend_emitter: PROGRESS_SENDER_LOCK.get().cloned(),
+            progress_map: Arc::new(DashMap::new()),
             kill_map: Arc::new(DashMap::new()),
         }
     }
 
+    pub fn add_progress(&self, handle: i64, sender: mpsc::Sender<LocalProgressUpdate>) {
+        self.progress_map.insert(handle, sender);
+    }
+    pub fn cleanup(&self, handle: i64) {
+        let _ = self.kill(handle);
+        self.progress_map.remove(&handle);
+    }
     pub fn add_killer(&self, handle: i64, sender: oneshot::Sender<()>) {
         self.kill_map.insert(handle, sender);
     }
@@ -63,12 +68,6 @@ impl RemoteGenerationResources {
         let handles = self.kill_map.iter().map(|r| *r.key()).collect::<Vec<i64>>();
         for handle in handles {
             let _ = self.kill(handle);
-        }
-    }
-
-    pub fn emit_progress(&self, update: HandledLocalProgressUpdate) {
-        if let Some(emitter) = &self.frontend_emitter {
-            let _ = emitter.send(update).trace_warn();
         }
     }
 }
@@ -177,6 +176,7 @@ pub async fn remote_generate_parent(
     project: &ProjectFile,
     trajectory_file: &TrajectoryFile,
     handle: i64,
+    progress_sender: mpsc::Sender<LocalProgressUpdate>
 ) -> ChoreoResult<TrajectoryFile> {
     tracing::info!("Generating remote trajectory {}", trajectory_file.name);
 
@@ -221,13 +221,12 @@ pub async fn remote_generate_parent(
 
     let stdout = child.stdout.take().expect("Didn't capture stdout");
 
-    let cln_remote_resources = remote_resources.clone();
     let cln_tee_killswitch = tee_killswitch.clone();
+    let cln_progress_sender = progress_sender.clone();
     let tee_handle = tokio::spawn(async move {
         let mut buffer = Vec::with_capacity(128);
         let mut stdout = stdout;
         let tee_killswitch = cln_tee_killswitch;
-        let remote_resources = cln_remote_resources;
 
         loop {
             select! {
@@ -236,11 +235,11 @@ pub async fn remote_generate_parent(
                         if byte as char == '\n' {
                             let string = unsafe { String::from_utf8_unchecked(std::mem::take(&mut buffer))};
                             println!{"{string}"}
-                            remote_resources.emit_progress(
+                            let _ = cln_progress_sender.send(
                                 LocalProgressUpdate::DiagnosticText {
                                     update: string,
-                                }.handled(handle)
-                            );
+                                }
+                            ).await;
                         } else {
                             buffer.push(byte);
                         }
@@ -259,9 +258,9 @@ pub async fn remote_generate_parent(
             let lines: Vec<String> = string.split('\n').map(ToString::to_string).collect();
             for line in lines {
                 println! {"{line}"}
-                remote_resources.emit_progress(
-                    LocalProgressUpdate::DiagnosticText { update: line }.handled(handle),
-                );
+                let _ = cln_progress_sender.send(
+                    LocalProgressUpdate::DiagnosticText { update: line },
+                ).await;
             }
         }
     });
@@ -304,18 +303,18 @@ pub async fn remote_generate_parent(
                     Ok(Some(update_string)) => {
                         match serde_json::from_str(&update_string) {
                             Ok(RemoteProgressUpdate::IncompleteSwerveTrajectory(trajectory)) => {
-                                remote_resources.emit_progress(
+                                let _ = progress_sender.send(
                                     LocalProgressUpdate::SwerveTrajectory {
                                         update: trajectory
-                                    }.handled(handle)
-                                );
+                                    }
+                                ).await;
                             },
                             Ok(RemoteProgressUpdate::IncompleteTankTrajectory(trajectory)) => {
-                                remote_resources.emit_progress(
+                                let _ = progress_sender.send(
                                     LocalProgressUpdate::DifferentialTrajectory {
                                         update: trajectory
-                                    }.handled(handle)
-                                );
+                                    }
+                                ).await;
                             },
                             Ok(RemoteProgressUpdate::CompleteTrajectory(trajectory)) => {
                                 break Ok(

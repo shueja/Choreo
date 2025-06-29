@@ -227,7 +227,7 @@ pub async fn get_deploy_root(resources: web::Data<WritingResources>) -> ChoreoRe
 use std::fmt::Display;
 
 use actix_web::{cookie::{Cookie, SameSite}, delete, get, post, web, Either, HttpRequest, HttpResponse, Responder};
-use choreo_core::{file_management::WritingResources, generation::{generate::generate, remote::RemoteGenerationResources}, spec::{project::{ProjectFile, RobotConfig}, trajectory::TrajectoryFile, Expr}, ChoreoError, ChoreoResult};
+use choreo_core::{file_management::WritingResources, generation::{generate::{generate, LocalProgressUpdate}, remote::RemoteGenerationResources}, spec::{project::{ProjectFile, RobotConfig}, trajectory::TrajectoryFile, Expr}, tokio::{self, sync::mpsc}, ChoreoError, ChoreoResult};
 use serde::Deserialize;
 type ChoreoResponse<T> = Either<web::Json<T>, HttpResponse>;
 fn result_to_response<T>(result: ChoreoResult<T>) -> ChoreoResponse<T> {
@@ -236,6 +236,7 @@ match result {
     Err(message) => Either::Right(HttpResponse::InternalServerError().body(message.to_string()))
 }
 }
+
 #[derive(Deserialize)]
 struct GenerateBody {
     project: ProjectFile,
@@ -250,7 +251,20 @@ pub async fn generate_remote(
     println!("{:?}", req.cookie("choreo_working_directory"));
     let remote_resources = resources;
     use choreo_core::generation::remote::remote_generate_parent;
-    result_to_response(debug_result(remote_generate_parent(&remote_resources, &body.project, &body.trajectory, body.handle).await))
+    let (tx, mut rx) = mpsc::channel::<LocalProgressUpdate>(50);
+    
+    let result = tokio::select! {
+        res = remote_generate_parent(&remote_resources, &body.project, &body.trajectory, body.handle, tx) => res,
+        _ = async {
+            loop {
+            while let Some(update) = rx.recv().await {
+                println!("a");
+            }
+        }
+            
+        } => Err(ChoreoError::NoDeployPath)
+    };
+    result_to_response(debug_result(result))
 }
 
 static WORKING_DIRECTORY_TOKEN: &str = "choreo_working_directory";

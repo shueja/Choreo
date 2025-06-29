@@ -1,6 +1,5 @@
 #![allow(clippy::missing_errors_doc)]
 
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::OnceLock;
 
 use trajoptlib::{DifferentialTrajectory, SwerveTrajectory};
@@ -19,7 +18,7 @@ use crate::ChoreoResult;
  * once. Used here to create a read-only static reference to the sender,
  * even though the sender can't be constructed in a static context.
  */
-pub(super) static PROGRESS_SENDER_LOCK: OnceLock<Sender<HandledLocalProgressUpdate>> =
+pub(super) static PROGRESS_SENDER_LOCK: OnceLock<std::sync::mpsc::Sender<HandledLocalProgressUpdate>> =
     OnceLock::new();
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -68,8 +67,8 @@ pub struct HandledLocalProgressUpdate {
     pub update: LocalProgressUpdate,
 }
 
-pub fn setup_progress_sender() -> Receiver<HandledLocalProgressUpdate> {
-    let (tx, rx) = channel::<HandledLocalProgressUpdate>();
+pub fn setup_progress_sender() -> std::sync::mpsc::Receiver<HandledLocalProgressUpdate> {
+    let (tx, rx) = std::sync::mpsc::channel::<HandledLocalProgressUpdate>();
     let _ = PROGRESS_SENDER_LOCK.get_or_init(move || tx);
     rx
 }
