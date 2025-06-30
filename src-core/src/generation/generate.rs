@@ -2,6 +2,7 @@
 
 use std::sync::OnceLock;
 
+use serde::Serialize;
 use trajoptlib::{DifferentialTrajectory, SwerveTrajectory};
 
 use super::heading::adjust_headings;
@@ -44,6 +45,14 @@ impl LocalProgressUpdate {
             update: self,
         }
     }
+
+    pub fn sse_event_string(&self) -> &str {
+        match  self {
+            LocalProgressUpdate::SwerveTrajectory { update: _ } => "swerveTrajectory",
+            LocalProgressUpdate::DifferentialTrajectory { update: _ } => "differentialTrajectory",
+            LocalProgressUpdate::DiagnosticText { update: _ } => "diagnosticText",
+        }
+    }
 }
 
 impl From<SwerveTrajectory> for LocalProgressUpdate {
@@ -62,6 +71,7 @@ impl From<DifferentialTrajectory> for LocalProgressUpdate {
     }
 }
 
+#[derive(Serialize)]
 pub struct HandledLocalProgressUpdate {
     pub handle: i64,
     pub update: LocalProgressUpdate,

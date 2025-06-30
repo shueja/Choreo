@@ -8,10 +8,12 @@
 mod api;
 mod built;
 mod logging;
+mod broadcast;
 
-use std::{fs, result};
+use std::{fs, result, sync::Arc};
 
-use choreo_core::{file_management::WritingResources, generation::{generate::setup_progress_sender, remote::{remote_generate_child, RemoteArgs, RemoteGenerationResources}}, spec::{project::{ProjectFile, RobotConfig}, trajectory::TrajectoryFile, Expr}};
+use broadcast::SseBroadcaster;
+use choreo_core::{file_management::WritingResources, generation::{generate::{setup_progress_sender, HandledLocalProgressUpdate}, remote::{remote_generate_child, RemoteArgs, RemoteGenerationResources}}, spec::{project::{ProjectFile, RobotConfig}, trajectory::TrajectoryFile, Expr}, tokio::{self, sync::mpsc}};
 
 use actix_web::{get, middleware::Logger, post, web, App, Either, HttpResponse, HttpServer, Responder};
 use actix_cors::Cors;
@@ -35,21 +37,38 @@ async fn main() -> std::io::Result<()> {
             return Ok(());
         } 
     }
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-    let rx = setup_progress_sender();
-
-    HttpServer::new(|| {
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("debug"));
+    
+    let event_broadcaster = SseBroadcaster::create();
+    let broadcaster = event_broadcaster.clone();
+    let (tx, mut rx) = mpsc::channel::<HandledLocalProgressUpdate>(50);
+    let arc_tx = Arc::new(tx);
+    tokio::spawn(async move {
+        // TODO shueja: use recv_many? impact unknown 6/29/25
+        // ends when all senders are dropped, including the one within SseBroadcaster
+        while let Some(update) = rx.recv().await {
+            if let Ok(string) = serde_json::to_string(&update) {
+                broadcaster.broadcast(&string, update.update.sse_event_string(), format!("{}", update.handle).as_str()).await;
+            }
+        }
+    });
+    HttpServer::new(move || {
         let cors = Cors::permissive().supports_credentials(); // TODO set something sensible
+        
+        
         App::new()
             .wrap(cors)
             .wrap(Logger::default())
             .app_data(web::Data::new(RemoteGenerationResources::new()))
             .app_data(web::Data::new(WritingResources::new()))
+            .app_data(web::Data::from(Arc::clone(&arc_tx)))
+            .app_data(web::Data::from(Arc::clone(&event_broadcaster)))
             .service(api::default_project)
             .service(api::guess_control_interval_counts)
             .service(api::generate_remote)
             .service(api::get_deploy_root)
             .service(api::set_deploy_root)
+            .service(api::event_stream)
     })
     .bind(("127.0.0.1", 8080))?
     .run()

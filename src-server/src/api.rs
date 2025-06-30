@@ -224,11 +224,13 @@ pub async fn get_deploy_root(resources: web::Data<WritingResources>) -> ChoreoRe
     result_to_response(result)
 }
 
-use std::fmt::Display;
+use std::{fmt::Display, sync::Arc};
 
 use actix_web::{cookie::{Cookie, SameSite}, delete, get, post, web, Either, HttpRequest, HttpResponse, Responder};
-use choreo_core::{file_management::WritingResources, generation::{generate::{generate, LocalProgressUpdate}, remote::RemoteGenerationResources}, spec::{project::{ProjectFile, RobotConfig}, trajectory::TrajectoryFile, Expr}, tokio::{self, sync::mpsc}, ChoreoError, ChoreoResult};
+use choreo_core::{file_management::WritingResources, generation::{generate::{generate, HandledLocalProgressUpdate, LocalProgressUpdate}, remote::RemoteGenerationResources}, spec::{project::{ProjectFile, RobotConfig}, trajectory::TrajectoryFile, Expr}, tokio::{self, sync::mpsc::{self, Sender}}, ChoreoError, ChoreoResult};
 use serde::Deserialize;
+
+use crate::broadcast::SseBroadcaster;
 type ChoreoResponse<T> = Either<web::Json<T>, HttpResponse>;
 fn result_to_response<T>(result: ChoreoResult<T>) -> ChoreoResponse<T> {
 match result {
@@ -237,6 +239,10 @@ match result {
 }
 }
 
+#[get("/events")]
+pub async fn event_stream(broadcaster: web::Data<SseBroadcaster>) -> impl Responder {
+    broadcaster.new_client().await
+}
 #[derive(Deserialize)]
 struct GenerateBody {
     project: ProjectFile,
@@ -246,24 +252,15 @@ struct GenerateBody {
 pub async fn generate_remote(
     req: HttpRequest,
     resources: web::Data<RemoteGenerationResources>,
+    frontend_sender: web::Data<Sender<HandledLocalProgressUpdate>>,
     body: web::Json<GenerateBody>
 ) -> ChoreoResponse<TrajectoryFile> {
     println!("{:?}", req.cookie("choreo_working_directory"));
     let remote_resources = resources;
+    let tx = frontend_sender.get_ref().clone();
     use choreo_core::generation::remote::remote_generate_parent;
-    let (tx, mut rx) = mpsc::channel::<LocalProgressUpdate>(50);
     
-    let result = tokio::select! {
-        res = remote_generate_parent(&remote_resources, &body.project, &body.trajectory, body.handle, tx) => res,
-        _ = async {
-            loop {
-            while let Some(update) = rx.recv().await {
-                println!("a");
-            }
-        }
-            
-        } => Err(ChoreoError::NoDeployPath)
-    };
+    let result = remote_generate_parent(&remote_resources, &body.project, &body.trajectory, body.handle,tx).await;
     result_to_response(debug_result(result))
 }
 

@@ -176,7 +176,7 @@ pub async fn remote_generate_parent(
     project: &ProjectFile,
     trajectory_file: &TrajectoryFile,
     handle: i64,
-    progress_sender: mpsc::Sender<LocalProgressUpdate>
+    progress_sender: mpsc::Sender<HandledLocalProgressUpdate>
 ) -> ChoreoResult<TrajectoryFile> {
     tracing::info!("Generating remote trajectory {}", trajectory_file.name);
 
@@ -238,7 +238,7 @@ pub async fn remote_generate_parent(
                             let _ = cln_progress_sender.send(
                                 LocalProgressUpdate::DiagnosticText {
                                     update: string,
-                                }
+                                }.handled(handle)
                             ).await;
                         } else {
                             buffer.push(byte);
@@ -259,7 +259,7 @@ pub async fn remote_generate_parent(
             for line in lines {
                 println! {"{line}"}
                 let _ = cln_progress_sender.send(
-                    LocalProgressUpdate::DiagnosticText { update: line },
+                    LocalProgressUpdate::DiagnosticText { update: line }.handled(handle),
                 ).await;
             }
         }
@@ -306,14 +306,14 @@ pub async fn remote_generate_parent(
                                 let _ = progress_sender.send(
                                     LocalProgressUpdate::SwerveTrajectory {
                                         update: trajectory
-                                    }
+                                    }.handled(handle)
                                 ).await;
                             },
                             Ok(RemoteProgressUpdate::IncompleteTankTrajectory(trajectory)) => {
                                 let _ = progress_sender.send(
                                     LocalProgressUpdate::DifferentialTrajectory {
                                         update: trajectory
-                                    }
+                                    }.handled(handle)
                                 ).await;
                             },
                             Ok(RemoteProgressUpdate::CompleteTrajectory(trajectory)) => {
