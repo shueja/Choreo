@@ -25,7 +25,8 @@
     "dev": "tauri dev",
     "build": "tauri build -- --workspace",
     "build-cli": "cargo build --release -p choreo-cli",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "server": "cargo run --bin choreo-server"
   },
   "dependencies": {
     "@emotion/styled": "^11.14.0",
