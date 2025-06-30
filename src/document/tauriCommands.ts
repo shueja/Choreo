@@ -4,6 +4,20 @@ import { OpenFilePayload } from "./DocumentManager";
 export type ChoreoError = { type: string; content: string };
 export type ChoreoResult<T> = T | ChoreoError;
 const BACKEND = (route: string) => `http://127.0.0.1:8080/${route}`;
+
+export const SolverStatusSource = new EventSource(BACKEND("events"));
+SolverStatusSource.onmessage = function(event) {
+  console.log(event);
+}
+// SolverStatusSource.addEventListener("swerveTrajectory", (e)=>{
+//   console.log(JSON.parse(e.data))
+// })
+// SolverStatusSource.addEventListener("differentialTrajectory", (e)=>{
+//   console.log(JSON.parse(e.data))
+// })
+// SolverStatusSource.addEventListener("diagnosticText", (e)=>{
+//   console.log(e.data)
+// })
 enum Method {
   GET = "GET",
   POST = "POST"

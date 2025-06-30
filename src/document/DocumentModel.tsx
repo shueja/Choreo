@@ -20,7 +20,7 @@ import {
 } from "./HolonomicWaypointStore";
 import { PathListStore } from "./PathListStore";
 import { RobotConfigStore } from "./RobotConfigStore";
-import { Commands } from "./tauriCommands";
+import { Commands, SolverStatusSource } from "./tauriCommands";
 import { tracing } from "./tauriTracing";
 
 export type SelectableItemTypes =
@@ -197,7 +197,7 @@ export const DocumentStore = types
       const handle = pathStore.uuid
         .split("")
         .reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0);
-      let unlisten: UnlistenFn = () => {};
+      let unlisten: AbortController = new AbortController();
       pathStore.ui.setIterationNumber(0);
       await Commands.guessIntervals(config, pathStore.serialize)
         .catch((e) => {
@@ -226,25 +226,24 @@ export const DocumentStore = types
         })
         .then(() => {
           tracing.debug("generatePathPre");
-          return listen(`solver-status-${handle}`, async (rawEvent) => {
-            const event: Event<ProgressUpdate> =
-              rawEvent as Event<ProgressUpdate>;
-            if (
-              event.payload!.type === "swerveTrajectory" ||
-              event.payload!.type === "differentialTrajectory"
-            ) {
-              const samples = event.payload.update as
-                | SwerveSample[]
-                | DifferentialSample[];
+          let handler = (rawEvent: MessageEvent) => {
+            if (Number.parseInt(rawEvent.lastEventId) === handle) {
+              const samples = JSON.parse(rawEvent.data) as SwerveSample[] | DifferentialSample[];
+  
               pathStore.ui.setInProgressTrajectory(samples);
               pathStore.ui.setIterationNumber(
                 pathStore.ui.generationIterationNumber + 1
               );
             }
-          });
+          };
+          SolverStatusSource.addEventListener("swerveTrajectory", handler,
+            {signal: unlisten.signal}
+          );
+          SolverStatusSource.addEventListener("differentialTrajectory", handler,
+            {signal: unlisten.signal}
+          );
         })
-        .then((unlistener) => {
-          unlisten = unlistener;
+        .then(() => {
           return Commands.generate(
             self.serializeChor(),
             pathStore.serialize,
@@ -252,7 +251,7 @@ export const DocumentStore = types
           );
         })
         .finally(() => {
-          unlisten();
+          unlisten.abort();
         })
         .then(
           (rust_trajectory) => {

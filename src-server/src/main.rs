@@ -47,8 +47,8 @@ async fn main() -> std::io::Result<()> {
         // TODO shueja: use recv_many? impact unknown 6/29/25
         // ends when all senders are dropped, including the one within SseBroadcaster
         while let Some(update) = rx.recv().await {
-            if let Ok(string) = serde_json::to_string(&update) {
-                broadcaster.broadcast(&string, update.update.sse_event_string(), format!("{}", update.handle).as_str()).await;
+            if let Ok(string) = update.update.contents_json() {
+                broadcaster.broadcast(string.as_str(), update.update.sse_event_string(), format!("{}", update.handle).as_str()).await;
             }
         }
     });

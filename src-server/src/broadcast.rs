@@ -63,7 +63,7 @@ impl SseBroadcaster {
             }
         }
         println!("Removing stale clients, remaining: {}", ok_clients.len());
-        self.inner.lock().clients = ok_clients;
+        self.inner.lock().await.clients = ok_clients;
         
     }
 

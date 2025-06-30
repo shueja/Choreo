@@ -318,6 +318,7 @@ export async function openProjectFile() {
 }
 
 export async function setupEventListeners() {
+
   window.addEventListener("contextmenu", (e) => e.preventDefault());
   window.addEventListener("copy", (e) => {
     const selection = document.getSelection();

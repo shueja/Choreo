@@ -53,6 +53,14 @@ impl LocalProgressUpdate {
             LocalProgressUpdate::DiagnosticText { update: _ } => "diagnosticText",
         }
     }
+
+    pub fn contents_json(&self) -> serde_json::Result<String> {
+        match self {
+            LocalProgressUpdate::SwerveTrajectory { update } => serde_json::to_string(update),
+            LocalProgressUpdate::DifferentialTrajectory { update } => serde_json::to_string(update),
+            LocalProgressUpdate::DiagnosticText { update } => Ok(update.clone()),
+        }
+    }
 }
 
 impl From<SwerveTrajectory> for LocalProgressUpdate {
