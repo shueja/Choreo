@@ -6,22 +6,35 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod api;
+mod broadcast;
 mod built;
 mod logging;
-mod broadcast;
 
 use std::{fs, result, sync::Arc};
 
 use broadcast::SseBroadcaster;
-use choreo_core::{file_management::WritingResources, generation::{generate::{setup_progress_sender, HandledLocalProgressUpdate}, remote::{remote_generate_child, RemoteArgs, RemoteGenerationResources}}, spec::{project::{ProjectFile, RobotConfig}, trajectory::TrajectoryFile, Expr}, tokio::{self, sync::mpsc}};
+use choreo_core::{
+    file_management::WritingResources,
+    generation::{
+        generate::{setup_progress_sender, HandledLocalProgressUpdate},
+        remote::{remote_generate_child, RemoteArgs, RemoteGenerationResources},
+    },
+    spec::{
+        project::{ProjectFile, RobotConfig},
+        trajectory::TrajectoryFile,
+        Expr,
+    },
+    tokio::{self, sync::mpsc},
+};
 
-use actix_web::{get, middleware::Logger, post, web, App, Either, HttpResponse, HttpServer, Responder};
 use actix_cors::Cors;
+use actix_web::{
+    get, middleware::Logger, post, web, App, Either, HttpResponse, HttpServer, Responder,
+};
 use serde::Deserialize;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-
     let args = std::env::args().collect::<Vec<_>>();
     if args.len() > 2 {
         panic!("Unsupported arguments: {:?}", args);
@@ -35,10 +48,10 @@ async fn main() -> std::io::Result<()> {
                 .init();
             remote_generate_child(remote_args);
             return Ok(());
-        } 
+        }
     }
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("debug"));
-    
+
     let event_broadcaster = SseBroadcaster::create();
     let broadcaster = event_broadcaster.clone();
     let (tx, mut rx) = mpsc::channel::<HandledLocalProgressUpdate>(50);
@@ -48,14 +61,19 @@ async fn main() -> std::io::Result<()> {
         // ends when all senders are dropped, including the one within SseBroadcaster
         while let Some(update) = rx.recv().await {
             if let Ok(string) = update.update.contents_json() {
-                broadcaster.broadcast(string.as_str(), update.update.sse_event_string(), format!("{}", update.handle).as_str()).await;
+                broadcaster
+                    .broadcast(
+                        string.as_str(),
+                        update.update.sse_event_string(),
+                        format!("{}", update.handle).as_str(),
+                    )
+                    .await;
             }
         }
     });
     HttpServer::new(move || {
         let cors = Cors::permissive().supports_credentials(); // TODO set something sensible
-        
-        
+
         App::new()
             .wrap(cors)
             .wrap(Logger::default())

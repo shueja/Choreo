@@ -1,9 +1,4 @@
-use std::{
-    mem::forget,
-    path::PathBuf,
-    thread,
-    sync::Arc
-};
+use std::{mem::forget, path::PathBuf, sync::Arc, thread};
 
 use dashmap::DashMap;
 use futures_util::{FutureExt, TryStreamExt};
@@ -13,7 +8,7 @@ use tokio::{
     io::AsyncReadExt,
     process::Command,
     select,
-    sync::{oneshot, Notify, mpsc},
+    sync::{mpsc, oneshot, Notify},
 };
 
 use crate::{
@@ -22,7 +17,7 @@ use crate::{
         project::ProjectFile,
         trajectory::{Sample, Trajectory, TrajectoryFile},
     },
-    ChoreoError, ChoreoResult
+    ChoreoError, ChoreoResult,
 };
 
 use super::generate::{setup_progress_sender, HandledLocalProgressUpdate};
@@ -35,7 +30,6 @@ pub struct RemoteGenerationResources {
 }
 
 impl RemoteGenerationResources {
-
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
@@ -176,7 +170,7 @@ pub async fn remote_generate_parent(
     project: &ProjectFile,
     trajectory_file: &TrajectoryFile,
     handle: i64,
-    progress_sender: mpsc::Sender<HandledLocalProgressUpdate>
+    progress_sender: mpsc::Sender<HandledLocalProgressUpdate>,
 ) -> ChoreoResult<TrajectoryFile> {
     tracing::info!("Generating remote trajectory {}", trajectory_file.name);
 
@@ -258,9 +252,9 @@ pub async fn remote_generate_parent(
             let lines: Vec<String> = string.split('\n').map(ToString::to_string).collect();
             for line in lines {
                 println! {"{line}"}
-                let _ = cln_progress_sender.send(
-                    LocalProgressUpdate::DiagnosticText { update: line }.handled(handle),
-                ).await;
+                let _ = cln_progress_sender
+                    .send(LocalProgressUpdate::DiagnosticText { update: line }.handled(handle))
+                    .await;
             }
         }
     });

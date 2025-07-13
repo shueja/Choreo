@@ -1,10 +1,8 @@
-import { Event, UnlistenFn, listen } from "@tauri-apps/api/event";
 import { Instance, getParent, types } from "mobx-state-tree";
 import { UndoManager } from "mst-middlewares";
 import { toast } from "react-toastify";
 import {
   DifferentialSample,
-  ProgressUpdate,
   Project,
   PROJECT_SCHEMA_VERSION,
   SampleType,
@@ -197,7 +195,7 @@ export const DocumentStore = types
       const handle = pathStore.uuid
         .split("")
         .reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0);
-      let unlisten: AbortController = new AbortController();
+      const unlisten: AbortController = new AbortController();
       pathStore.ui.setIterationNumber(0);
       await Commands.guessIntervals(config, pathStore.serialize)
         .catch((e) => {
@@ -226,21 +224,25 @@ export const DocumentStore = types
         })
         .then(() => {
           tracing.debug("generatePathPre");
-          let handler = (rawEvent: MessageEvent) => {
+          const handler = (rawEvent: MessageEvent) => {
             if (Number.parseInt(rawEvent.lastEventId) === handle) {
-              const samples = JSON.parse(rawEvent.data) as SwerveSample[] | DifferentialSample[];
-  
+              const samples = JSON.parse(rawEvent.data) as
+                | SwerveSample[]
+                | DifferentialSample[];
+
               pathStore.ui.setInProgressTrajectory(samples);
               pathStore.ui.setIterationNumber(
                 pathStore.ui.generationIterationNumber + 1
               );
             }
           };
-          SolverStatusSource.addEventListener("swerveTrajectory", handler,
-            {signal: unlisten.signal}
-          );
-          SolverStatusSource.addEventListener("differentialTrajectory", handler,
-            {signal: unlisten.signal}
+          SolverStatusSource.addEventListener("swerveTrajectory", handler, {
+            signal: unlisten.signal
+          });
+          SolverStatusSource.addEventListener(
+            "differentialTrajectory",
+            handler,
+            { signal: unlisten.signal }
           );
         })
         .then(() => {
