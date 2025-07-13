@@ -5,10 +5,13 @@ use actix_web_lab::{
     sse::{self, Sse},
     util::InfallibleStream,
 };
+use choreo_core::{
+    generation::generate::HandledLocalProgressUpdate,
+    tokio::{self, sync::mpsc},
+};
 use futures_util::future;
-use tokio::sync::Mutex;
-use choreo_core::{generation::generate::HandledLocalProgressUpdate, tokio::{self, sync::mpsc}};
 use serde::Serialize;
+use tokio::sync::Mutex;
 use tokio_stream::wrappers::ReceiverStream;
 
 pub struct SseBroadcaster {
@@ -48,9 +51,8 @@ impl SseBroadcaster {
 
     /// Removes all non-responsive clients from broadcast list.
     async fn remove_stale_clients(&self) {
-        
         let clients = self.inner.lock().await.clients.clone();
-        
+
         let mut ok_clients = Vec::new();
 
         for client in clients {
@@ -64,7 +66,6 @@ impl SseBroadcaster {
         }
         println!("Removing stale clients, remaining: {}", ok_clients.len());
         self.inner.lock().await.clients = ok_clients;
-        
     }
 
     /// Registers client with broadcaster, returning an SSE response body.
@@ -82,7 +83,7 @@ impl SseBroadcaster {
     /// Broadcasts `msg` to all clients.
     pub async fn broadcast(&self, msg: &str, event: &str, id: &str) {
         let clients = self.inner.lock().await.clients.clone();
-        
+
         let send_futures = clients
             .iter()
             .map(|client| client.send(sse::Data::new(msg).event(event).id(id).into()));

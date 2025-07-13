@@ -6,9 +6,9 @@ export type ChoreoResult<T> = T | ChoreoError;
 const BACKEND = (route: string) => `http://127.0.0.1:8080/${route}`;
 
 export const SolverStatusSource = new EventSource(BACKEND("events"));
-SolverStatusSource.onmessage = function(event) {
+SolverStatusSource.onmessage = function (event) {
   console.log(event);
-}
+};
 // SolverStatusSource.addEventListener("swerveTrajectory", (e)=>{
 //   console.log(JSON.parse(e.data))
 // })
@@ -22,38 +22,38 @@ enum Method {
   GET = "GET",
   POST = "POST"
 }
-async function command<T> (cmd: string, method: Method, payload: object) : Promise<T> {
-  let getOptions = 
-  
-  {
-    method: Method.GET,
-
-  }
-  let postOptions = 
-  {
+async function command<T>(
+  cmd: string,
+  method: Method,
+  payload: object
+): Promise<T> {
+  const getOptions = {
+    method: Method.GET
+  };
+  const postOptions = {
     method: Method.POST,
     body: JSON.stringify(payload),
-    headers:
-    {
-        'Content-Type': 'application/json',
-        
+    headers: {
+      "Content-Type": "application/json"
     },
     credentials: "include"
-    
-  }
-  let options = Method.GET == method ? getOptions : postOptions
-  console.log(cmd, options)
-  let result = await fetch(BACKEND(cmd), options)
+  };
+  const options = Method.GET == method ? getOptions : postOptions;
+  console.log(cmd, options);
+  const result = await fetch(BACKEND(cmd), options);
   if (!result.ok) {
     throw result.statusText;
   }
-  let json = await result.json() as T;
+  const json = (await result.json()) as T;
   console.log(cmd, "reply: ", json);
   return json;
 }
 export const Commands = {
   guessIntervals: (config: RobotConfig<Expr>, trajectory: Trajectory) =>
-    command<number[]>("guess_control_interval_counts", Method.POST, { config, trajectory }),
+    command<number[]>("guess_control_interval_counts", Method.POST, {
+      config,
+      trajectory
+    }),
 
   /**
    * Generates a `Trajectory` using the specified `Project` and `Trajectory`.
@@ -65,7 +65,11 @@ export const Commands = {
    * @returns The generated `Trajectory`.
    */
   generate: (project: Project, trajectory: Trajectory, handle: number) =>
-    command<Trajectory>("generate_remote", Method.POST, { project, trajectory, handle }),
+    command<Trajectory>("generate_remote", Method.POST, {
+      project,
+      trajectory,
+      handle
+    }),
 
   /**
    * Cancels all of the generators that are currently running.
@@ -104,8 +108,8 @@ export const Commands = {
    * @returns `void`
    */
   setDeployRoot: (dir: string) => {
-    command("deploy_root", Method.POST, {dir});
-    return invoke<void>("set_deploy_root", { dir })
+    command("deploy_root", Method.POST, { dir });
+    return invoke<void>("set_deploy_root", { dir });
   },
   /**
    * Gets the application-wide directory path that is used as the root for all file operations.
@@ -118,7 +122,10 @@ export const Commands = {
    * @returns The default `Project` that is loaded when a new `Project` is created.
    */
   defaultProject: () => {
-    return command("default_project", Method.GET, {}).then((r)=>{console.log(r); return r});
+    return command("default_project", Method.GET, {}).then((r) => {
+      console.log(r);
+      return r;
+    });
   },
   /**
    * Reads the `Project` with the specified name from the deploy root directory.

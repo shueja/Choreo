@@ -19,8 +19,9 @@ use crate::ChoreoResult;
  * once. Used here to create a read-only static reference to the sender,
  * even though the sender can't be constructed in a static context.
  */
-pub(super) static PROGRESS_SENDER_LOCK: OnceLock<std::sync::mpsc::Sender<HandledLocalProgressUpdate>> =
-    OnceLock::new();
+pub(super) static PROGRESS_SENDER_LOCK: OnceLock<
+    std::sync::mpsc::Sender<HandledLocalProgressUpdate>,
+> = OnceLock::new();
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
@@ -47,7 +48,7 @@ impl LocalProgressUpdate {
     }
 
     pub fn sse_event_string(&self) -> &str {
-        match  self {
+        match self {
             LocalProgressUpdate::SwerveTrajectory { update: _ } => "swerveTrajectory",
             LocalProgressUpdate::DifferentialTrajectory { update: _ } => "differentialTrajectory",
             LocalProgressUpdate::DiagnosticText { update: _ } => "diagnosticText",
