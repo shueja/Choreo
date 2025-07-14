@@ -1,11 +1,13 @@
 import * as vscode from "vscode";
 import { getNonce } from "./Utils";
+    //import { readFileSync } from "fs";
+import path from "path";
 
 export default class EditorProvider implements vscode.CustomTextEditorProvider {
   _view?: vscode.WebviewPanel;
   _doc?: vscode.TextDocument;
 
-  constructor(private readonly _extensionUri: vscode.Uri) {}
+  constructor(private readonly _extensionUri: vscode.Uri, private readonly _context: vscode.ExtensionContext) {}
 
 
   public resolveCustomTextEditor(document: vscode.TextDocument, webviewPanel: vscode.WebviewPanel) {
@@ -25,8 +27,9 @@ export default class EditorProvider implements vscode.CustomTextEditorProvider {
 				text: document.getText(),
 			});
 		}
+    let reactingToFrontendUpdate = false;
     const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument((e:any) => {
-			if (e.document.uri.toString() === document.uri.toString()) {
+			if (e.document.uri.toString() === document.uri.toString() && !reactingToFrontendUpdate) {
 				updateWebview();
 			}
 		});
@@ -56,7 +59,9 @@ export default class EditorProvider implements vscode.CustomTextEditorProvider {
             });
             return;
         case 'update': //added in this route
+            reactingToFrontendUpdate = true;
             this.updateTextDocument(document, data.data);
+            reactingToFrontendUpdate = false;
             return;
       }
     });
@@ -68,10 +73,9 @@ export default class EditorProvider implements vscode.CustomTextEditorProvider {
 
   private _getHtmlForWebview(webview: vscode.Webview) {
     console.log("getting HTML")
-    //const manifest = JSON.parse(require("fs").readFileSync("./out/vscode-chor/.vite/manifest.json", "utf-8"));
 
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, "out", "vscode-chor", "assets", "main-D6pdcp6R.js")
+      vscode.Uri.joinPath(this._extensionUri, "out", "vscode-chor", "assets", "index.js")
     );
     // const styleMainUri = webview.asWebviewUri(
     //   vscode.Uri.joinPath(this._extensionUri, "out", "compiled/editor.css")
@@ -95,7 +99,6 @@ export default class EditorProvider implements vscode.CustomTextEditorProvider {
 			</head>
       <body>
         
-				  <script nonce="${nonce}">const vscode = acquireVsCodeApi()</script>
        <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
         <div id="root"></div>
 

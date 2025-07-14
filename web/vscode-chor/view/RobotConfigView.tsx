@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { StateStoreContext } from "../state/State";
 import { observer } from "mobx-react";
 import { IExpressionStore, math } from "$src/document/ExpressionStore"
@@ -10,11 +10,13 @@ import "@vscode-elements/elements/dist/vscode-table-header";
 import "@vscode-elements/elements/dist/vscode-table-header-cell";
 import "@vscode-elements/elements/dist/vscode-table-cell";
 import "@vscode-elements/elements/dist/vscode-textfield";
+import { autorun } from "mobx";
 
 type VSCodeExpressionInputProps = {
     expr: IExpressionStore
 }
 const VSCodeExpressionInput = observer((props: VSCodeExpressionInputProps) => {
+    
     const [editedValue, setEditedValue] = useState(props.expr.expr.toString());
     const [errors, setErrors] = useState(false);
     const handleChange = (event:any) => {
@@ -27,6 +29,7 @@ const VSCodeExpressionInput = observer((props: VSCodeExpressionInputProps) => {
         setEditedValue(event.target.value);
     };
     const handleSubmit = (event:any) => {
+        console.log(event);
         const newNode = props.expr.validate(
             math.parse(event.target.value)
         );
@@ -39,8 +42,9 @@ const VSCodeExpressionInput = observer((props: VSCodeExpressionInputProps) => {
             setErrors(!props.expr.valid);
         }
     }
+    useEffect(()=>autorun(()=>setEditedValue(props.expr.expr.toString())), []);
 
-    return (<vscode-textfield onChange={handleSubmit} onInput={handleChange}
+    return (<vscode-textfield onchange={handleSubmit} onInput={handleChange}
         value={editedValue}
         invalid={errors}
     >

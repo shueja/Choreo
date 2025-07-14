@@ -8,6 +8,9 @@ if (import.meta.env.DEV) {
 
 }
 
+//@ts-expect-error
+export const vscode = acquireVsCodeApi();
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <>
     <App></App>

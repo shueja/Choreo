@@ -671,7 +671,7 @@ export async function newProject() {
     projectSavingState: SavingState.NO_LOCATION
   });
   await Commands.setDeployRoot("");
-  const newChor = await Commands.defaultProject();
+  const newChor = await Commands.defaultProject() as Project;
   doc.deserializeChor(newChor);
   uiState.loadPathGradientFromLocalStorage();
   doc.pathlist.deleteAll();

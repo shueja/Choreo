@@ -1,7 +1,7 @@
 var a = Object.defineProperty;
 var u = (o, t, e) => t in o ? a(o, t, { enumerable: !0, configurable: !0, writable: !0, value: e }) : o[t] = e;
 var n = (o, t, e) => u(o, typeof t != "symbol" ? t + "" : t, e);
-import * as s from "vscode";
+import * as r from "vscode";
 function p() {
   let o = "";
   const t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -10,10 +10,10 @@ function p() {
   return o;
 }
 class d {
-  constructor(t) {
+  constructor(t, e) {
     n(this, "_view");
     n(this, "_doc");
-    this._extensionUri = t;
+    this._extensionUri = t, this._context = e;
   }
   resolveCustomTextEditor(t, e) {
     this._view = e, e.webview.options = {
@@ -21,29 +21,29 @@ class d {
       enableScripts: !0,
       localResourceRoots: [this._extensionUri]
     }, e.webview.html = this._getHtmlForWebview(e.webview);
-    function i() {
+    function s() {
       e.webview.postMessage({
         type: "update",
         text: t.getText()
       });
     }
-    const c = s.workspace.onDidChangeTextDocument((r) => {
-      r.document.uri.toString() === t.uri.toString() && i();
+    const c = r.workspace.onDidChangeTextDocument((i) => {
+      i.document.uri.toString() === t.uri.toString() && s();
     });
     e.onDidDispose(() => {
       c.dispose();
-    }), e.webview.onDidReceiveMessage(async (r) => {
-      switch (r.type) {
+    }), e.webview.onDidReceiveMessage(async (i) => {
+      switch (i.type) {
         case "onInfo": {
-          if (!r.value)
+          if (!i.value)
             return;
-          s.window.showInformationMessage(r.value);
+          r.window.showInformationMessage(i.value);
           break;
         }
         case "onError": {
-          if (!r.value)
+          if (!i.value)
             return;
-          s.window.showErrorMessage(r.value);
+          r.window.showErrorMessage(i.value);
           break;
         }
         case "init-view":
@@ -53,7 +53,7 @@ class d {
           });
           return;
         case "update":
-          this.updateTextDocument(t, r.data);
+          this.updateTextDocument(t, i.data);
           return;
       }
     });
@@ -64,8 +64,8 @@ class d {
   _getHtmlForWebview(t) {
     console.log("getting HTML");
     const e = t.asWebviewUri(
-      s.Uri.joinPath(this._extensionUri, "out", "vscode-chor", "assets", "main-D6pdcp6R.js")
-    ), i = p();
+      r.Uri.joinPath(this._extensionUri, "out", "vscode-chor", "assets", "index.js")
+    ), s = p();
     return `<!DOCTYPE html>
 			<html lang="en">
 			<head>
@@ -74,15 +74,14 @@ class d {
 					Use a content security policy to only allow loading images from https or from our extension directory,
 					and only allow scripts that have a specific nonce.
         -->
-        <meta http-equiv="Content-Security-Policy" content="img-src https: data:; style-src 'unsafe-inline' ${t.cspSource}; script-src 'nonce-${i}'">
+        <meta http-equiv="Content-Security-Policy" content="img-src https: data:; style-src 'unsafe-inline' ${t.cspSource}; script-src 'nonce-${s}'">
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
         
 			</head>
       <body>
         
-				  <script nonce="${i}">const vscode = acquireVsCodeApi()<\/script>
-       <script nonce="${i}" type="module" src="${e}"><\/script>
+       <script nonce="${s}" type="module" src="${e}"><\/script>
         <div id="root"></div>
 
         Hi
@@ -107,18 +106,18 @@ class d {
    * Write out the json to a given document.
    */
   updateTextDocument(t, e) {
-    const i = new s.WorkspaceEdit();
-    return i.replace(
+    const s = new r.WorkspaceEdit();
+    return s.replace(
       t.uri,
-      new s.Range(0, 0, t.lineCount, 0),
+      new r.Range(0, 0, t.lineCount, 0),
       JSON.stringify(JSON.parse(e), null, 2)
-    ), s.workspace.applyEdit(i);
+    ), r.workspace.applyEdit(s);
   }
 }
 function h(o) {
-  const t = new d(o.extensionUri);
+  const t = new d(o.extensionUri, o);
   o.subscriptions.push(
-    s.window.registerCustomEditorProvider("ext-editor", t)
+    r.window.registerCustomEditorProvider("ext-editor", t)
   );
 }
 function g() {

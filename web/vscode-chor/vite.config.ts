@@ -17,7 +17,10 @@ export default defineConfig(async () => ({
       },
       output: {
         manualChunks: undefined,
-        assetFileNames: "chorEditor.[ext]"
+        entryFileNames: `assets/index.js`,
+        chunkFileNames: `assets/index-chunk.js`,
+        assetFileNames: `assets/[name].[ext]`
+        
       }
     },
     // assetsDir: "./web/extension/out/vscode-chor",

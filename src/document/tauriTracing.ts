@@ -97,5 +97,6 @@ export const tracing = window.__TAURI_OS_PLUGIN_INTERNALS__ ? {
 {
   debug: console.log,
   error: console.error,
-  warn: console.warn
+  warn: console.warn,
+  info: console.log
 };

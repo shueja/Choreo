@@ -5,7 +5,7 @@ import EditorProvider from "./EditorProvider";
 
 export function activate(context: vscode.ExtensionContext) {
   //const sidebarProvider = new SidebarProvider(context.extensionUri);
-  const editorProvider = new EditorProvider(context.extensionUri);
+  const editorProvider = new EditorProvider(context.extensionUri, context);
 
   // context.subscriptions.push(
   //   vscode.window.registerWebviewViewProvider("ext-sidebar", sidebarProvider)
