@@ -4,8 +4,8 @@ import {
   MotorCurves
 } from "../components/config/robotconfig/MotorCurves";
 import { InToM, LbsToKg, MToIn } from "../util/UnitConversions";
-import { Bumper, Expr, Module, RobotConfig } from "./2025/DocumentTypes";
-import { ExpressionStore } from "./ExpressionStore";
+import { Bumper, Expr, Module, RobotConfig, Variables } from "./2025/DocumentTypes";
+import { ExpressionStore, IVariables, IVariables } from "./ExpressionStore";
 
 const DEFAULT_FRAME_SIZE = InToM(28);
 const DEFAULT_BUMPER = DEFAULT_FRAME_SIZE + 2 * InToM(2.5 + 0.75); // 28x28 bot with 2.5" noodle and 0.75" backing
@@ -246,3 +246,32 @@ export const RobotConfigStore = types
     };
   });
 export type IRobotConfigStore = Instance<typeof RobotConfigStore>;
+
+export const createRobotConfigStore = (config: RobotConfig<Expr>, vars: IVariables): IRobotConfigStore => {
+      return RobotConfigStore.create({
+        mass: vars.createExpression(config.mass, "Mass"),
+        inertia: vars.createExpression(config.inertia, "MoI"),
+        tmax: vars.createExpression(config.tmax, "Torque"),
+        cof: vars.createExpression(config.cof, "Number"),
+        vmax: vars.createExpression(config.vmax, "AngVel"),
+        gearing: vars.createExpression(config.gearing, "Number"),
+        radius: vars.createExpression(config.radius, "Length"),
+        bumper: {
+          front: vars.createExpression(config.bumper.front, "Length"),
+          side: vars.createExpression(config.bumper.side, "Length"),
+          back: vars.createExpression(config.bumper.back, "Length")
+        },
+        frontLeft: {
+          x: vars.createExpression(config.frontLeft.x, "Length"),
+          y: vars.createExpression(config.frontLeft.y, "Length")
+        },
+        backLeft: {
+          x: vars.createExpression(config.backLeft.x, "Length"),
+          y: vars.createExpression(config.backLeft.y, "Length")
+        },
+        differentialTrackWidth: vars.createExpression(
+          config.differentialTrackWidth,
+          "Length"
+        ),
+        identifier: crypto.randomUUID()
+      });}

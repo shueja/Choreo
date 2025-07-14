@@ -51,7 +51,8 @@ function trace(level: string, stack: Error, ...data: any[]): void {
   });
 }
 
-export const tracing = {
+
+export const tracing = window.__TAURI_OS_PLUGIN_INTERNALS__ ? {
   /**
    * A console.log substitute that logs the value to the native tracing pipeline.
    *
@@ -92,4 +93,9 @@ export const tracing = {
     console.error(message, optionalParams);
     trace("error", new Error(), message, ...optionalParams);
   }
+} : 
+{
+  debug: console.log,
+  error: console.error,
+  warn: console.warn
 };

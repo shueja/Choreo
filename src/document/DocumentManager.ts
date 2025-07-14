@@ -55,6 +55,7 @@ import {
   HolonomicWaypointStore as WaypointStore
 } from "./HolonomicWaypointStore";
 import {
+  createRobotConfigStore,
   EXPR_DEFAULTS,
   IRobotConfigStore,
   RobotConfigStore
@@ -140,35 +141,8 @@ function getConstructors(vars: () => IVariables): EnvConstructors {
   ) as ConstraintDataConstructors;
 
   return {
-    RobotConfigStore: (config: RobotConfig<Expr>) => {
-      return RobotConfigStore.create({
-        mass: vars().createExpression(config.mass, "Mass"),
-        inertia: vars().createExpression(config.inertia, "MoI"),
-        tmax: vars().createExpression(config.tmax, "Torque"),
-        cof: vars().createExpression(config.cof, "Number"),
-        vmax: vars().createExpression(config.vmax, "AngVel"),
-        gearing: vars().createExpression(config.gearing, "Number"),
-        radius: vars().createExpression(config.radius, "Length"),
-        bumper: {
-          front: vars().createExpression(config.bumper.front, "Length"),
-          side: vars().createExpression(config.bumper.side, "Length"),
-          back: vars().createExpression(config.bumper.back, "Length")
-        },
-        frontLeft: {
-          x: vars().createExpression(config.frontLeft.x, "Length"),
-          y: vars().createExpression(config.frontLeft.y, "Length")
-        },
-        backLeft: {
-          x: vars().createExpression(config.backLeft.x, "Length"),
-          y: vars().createExpression(config.backLeft.y, "Length")
-        },
-        differentialTrackWidth: vars().createExpression(
-          config.differentialTrackWidth,
-          "Length"
-        ),
-        identifier: crypto.randomUUID()
-      });
-    },
+    RobotConfigStore: (config: RobotConfig<Expr>) => createRobotConfigStore(config, vars())
+    ,
     WaypointStore: (waypoint: Waypoint<Expr>) => {
       const w = WaypointStore.create({
         ...waypoint,

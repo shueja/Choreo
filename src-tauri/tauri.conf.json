@@ -1,9 +1,9 @@
 {
   "build": {
-    "beforeDevCommand": "vite",
-    "beforeBuildCommand": "vite build",
+    "beforeDevCommand": "vite --config ./web/app/vite.config.ts",
+    "beforeBuildCommand": "vite --config ./web/app/vite.config.ts build",
     "beforeBundleCommand": "node copy-sidecar.cjs choreo-cli ./target",
-    "frontendDist": "../dist",
+    "frontendDist": "../dist/web/app",
     "devUrl": "http://localhost:1420"
   },
   "bundle": {

@@ -26,7 +26,10 @@
     "build": "tauri build -- --workspace",
     "build-cli": "cargo build --release -p choreo-cli",
     "tauri": "tauri",
-    "server": "cargo run --bin choreo-server"
+    "server": "cargo run --bin choreo-server",
+    "devExtension": "vite --config ./web/vscode-chor/vite.config.ts",
+    "compileExt": "vite build --config ./web/extension/vite.config.ts && vite build --config ./web/vscode-chor/vite.config.ts",
+    "watchExt": "vite build --config ./web/vscode-chor/vite.config.ts && vite build --config ./web/extension/vite.config.ts"
   },
   "dependencies": {
     "@emotion/styled": "^11.14.0",
@@ -38,6 +41,9 @@
     "@tauri-apps/api": "2.5.0",
     "@tauri-apps/plugin-dialog": "2.2.1",
     "@tauri-apps/plugin-os": "2.2.1",
+    "@types/vscode": "^1.102.0",
+    "@vscode-elements/elements": "^1.17.0",
+    "@vscode-elements/webview-playground": "^1.9.0",
     "d3": "^7.9.0",
     "hotkeys-js": "^3.13.9",
     "mathjs": "^14.4.0",
