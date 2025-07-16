@@ -28,8 +28,8 @@ export default class EditorProvider implements vscode.CustomTextEditorProvider {
 			});
 		}
     let reactingToFrontendUpdate = false;
-    const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument((e:any) => {
-			if (e.document.uri.toString() === document.uri.toString() && !reactingToFrontendUpdate) {
+    const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument((e:vscode.TextDocumentChangeEvent) => {
+			if (e.document.uri.toString() === document.uri.toString() && ! reactingToFrontendUpdate) {
 				updateWebview();
 			}
 		});
@@ -100,9 +100,7 @@ export default class EditorProvider implements vscode.CustomTextEditorProvider {
       <body>
         
        <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
-        <div id="root"></div>
-
-        Hi
+        <div id="root" style="position:fixed;height:100%;width:100%;top:0;left:0;overflow:hidden"></div>
 			</body>
 			</html>`;
   }

@@ -193,7 +193,9 @@ export const ExpressionStore = types
   .model("ExpressionStore", {
     expr: types.frozen<MathNode>(),
     dimension: types.frozen<DimensionName>(),
-    uuid: types.identifier
+    // not types.identifier because then Mobx wants the UUID to be the key
+    // when ExpressionStores are in Maps
+    uuid: types.string
   })
   .volatile((self) => ({
     tempDisableRecalc: false,

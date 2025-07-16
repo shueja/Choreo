@@ -4,6 +4,10 @@ import { createStateStore, StateStoreProvider } from "./state/State";
 import RobotConfigView from "./view/RobotConfigView";
 import { reaction } from "mobx";
 import { vscode } from "./main";
+
+import "@vscode-elements/elements/dist/vscode-tabs"
+import "@vscode-elements/elements/dist/vscode-tab-header"
+import "@vscode-elements/elements/dist/vscode-tab-panel"
 if (import.meta.env.DEV) {
 
   await import("@vscode-elements/webview-playground");
@@ -39,8 +43,13 @@ function App() {
   return (<>
   {import.meta.env.DEV ? <vscode-dev-toolbar></vscode-dev-toolbar> : null}
     <StateStoreProvider value={State}>
-      <h3>Countries List</h3>
-      <RobotConfigView></RobotConfigView>
+      <vscode-tabs selected-index="0" style={{overflow:"hidden", height:"100%"}}>
+        <vscode-tab-header>Robot Config</vscode-tab-header>
+        <vscode-tab-panel style={{overflow:"hidden"}}><RobotConfigView></RobotConfigView></vscode-tab-panel>
+        <vscode-tab-header>Variables</vscode-tab-header>
+        <vscode-tab-panel></vscode-tab-panel>
+      </vscode-tabs>
+      
     </StateStoreProvider>
   </>
 

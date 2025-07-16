@@ -14,11 +14,21 @@
   "contributes": {
     "customEditors": [
       {
-        "viewType": "ext-editor",
+        "viewType": "choreo-traj-editor",
         "displayName": "Trajectory",
         "selector": [
           {
             "filenamePattern": "*.traj"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "choreo-chor-editor",
+        "displayName": "Choreo Project",
+        "selector": [
+          {
+            "filenamePattern": "*.chor"
           }
         ],
         "priority": "default"

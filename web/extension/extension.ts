@@ -1,17 +1,17 @@
 import * as vscode from "vscode";
 import AppPanel from "./AppPanel";
 import SidebarProvider from "./SidebarProvider";
-import EditorProvider from "./EditorProvider";
+import ProjectEditorProvider from "./ProjectEditorProvider";
 
 export function activate(context: vscode.ExtensionContext) {
   //const sidebarProvider = new SidebarProvider(context.extensionUri);
-  const editorProvider = new EditorProvider(context.extensionUri, context);
+  const editorProvider = new ProjectEditorProvider(context.extensionUri, context);
 
   // context.subscriptions.push(
   //   vscode.window.registerWebviewViewProvider("ext-sidebar", sidebarProvider)
   // );
   context.subscriptions.push(
-    vscode.window.registerCustomEditorProvider("ext-editor", editorProvider)
+    vscode.window.registerCustomEditorProvider("choreo-chor-editor", editorProvider)
   );
 
   // context.subscriptions.push(

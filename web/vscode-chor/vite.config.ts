@@ -21,7 +21,9 @@ export default defineConfig(async () => ({
         chunkFileNames: `assets/index-chunk.js`,
         assetFileNames: `assets/[name].[ext]`
         
-      }
+      },
+      external: ["index.css"]
+    
     },
     // assetsDir: "./web/extension/out/vscode-chor",
     
