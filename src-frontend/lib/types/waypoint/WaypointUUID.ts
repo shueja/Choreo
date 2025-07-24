@@ -1,0 +1,1 @@
+export type WaypointUUID = "first" | "last" | {uuid: string};

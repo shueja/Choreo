@@ -1,0 +1,1 @@
+export type WaypointIndex = number | "first" | "last";
