@@ -1,7 +1,7 @@
 import { Instance, getEnv, getParent, isAlive, types } from "mobx-state-tree";
 import { Expr, Waypoint } from "./2025/DocumentTypes";
-import { Env } from "./DocumentManager";
-import { ExpressionStore } from "./ExpressionStore";
+import { Env } from "./Env";
+import { ExpressionStore, IVariables } from "./ExpressionStore";
 import { NavbarItemData } from "./UIData";
 import { tracing } from "./tauriTracing";
 
@@ -131,3 +131,16 @@ export const HolonomicWaypointStore = types
     }
   }));
 export type IHolonomicWaypointStore = Instance<typeof HolonomicWaypointStore>;
+export function createWaypointStore(
+  waypoint: Waypoint<Expr>,
+  vars: IVariables
+) {
+  const w = HolonomicWaypointStore.create({
+    ...waypoint,
+    x: vars.createExpression(waypoint.x, "Length"),
+    y: vars.createExpression(waypoint.y, "Length"),
+    heading: vars.createExpression(waypoint.heading, "Angle"),
+    uuid: crypto.randomUUID()
+  });
+  return w;
+}

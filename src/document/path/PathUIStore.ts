@@ -1,7 +1,7 @@
 import { types, getEnv, Instance } from "mobx-state-tree";
 import { DifferentialSample, type SwerveSample } from "../2025/DocumentTypes";
-import { Env } from "../DocumentManager";
-import { SavingState } from "../UIStateStore";
+import { Env } from "../Env";
+import { SavingState } from "../SavingState";
 
 export const PathUIStore = types
   .model("PathUIStore", {

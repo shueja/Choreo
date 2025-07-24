@@ -32,8 +32,8 @@ import {
 } from "./document/DocumentManager";
 
 import SettingsModal from "./components/config/SettingsModal";
-import { Commands } from "./document/tauriCommands";
 import { version } from "./util/version";
+import { TauriCommands } from "$src/document/tauriCommands";
 
 type Props = object;
 
@@ -66,7 +66,7 @@ class AppMenu extends Component<Props, State> {
 
   OpenInFilesApp({ dir }: { dir: string }) {
     const handleAction = async function () {
-      await Commands.openInExplorer(dir);
+      await TauriCommands.openInExplorer(dir);
     };
 
     return (

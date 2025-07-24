@@ -1,1 +1,1 @@
-declare module '@vscode-elements/webview-playground';
+declare module "@vscode-elements/webview-playground";

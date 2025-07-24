@@ -1,12 +1,14 @@
 import { Instance, getEnv, getParent, isAlive, types } from "mobx-state-tree";
 import {
+  ConstraintDataConstructors,
   ConstraintDataObjects,
   IConstraintDataStore
 } from "./ConstraintDataStore";
-import { ConstraintKey } from "./ConstraintDefinitions";
-import { Env } from "./DocumentManager";
+import { ConstraintKey, DataMap } from "./ConstraintDefinitions";
+import { Env } from "./Env";
 import { IHolonomicWaypointStore } from "./HolonomicWaypointStore";
 import { findUUIDIndex, getByWaypointID } from "./path/utils";
+import { IVariables } from "$src/document/ExpressionStore";
 
 export const WaypointScope = types.union(
   types.literal("first"),
@@ -112,3 +114,27 @@ export const ConstraintStore = types
       self.enabled = enabled;
     }
   }));
+
+export function constraintStoreConstructor(
+  dataConstructors: ConstraintDataConstructors
+) {
+  return <K extends ConstraintKey>(
+    type: K,
+    data: Partial<DataMap[K]["props"]>,
+    enabled: boolean,
+    vars: IVariables,
+    from: IWaypointScope,
+    to?: IWaypointScope
+  ): IConstraintStore => {
+    const store = ConstraintStore.create({
+      from,
+      to,
+      uuid: crypto.randomUUID(),
+      //@ts-expect-error more constraint stuff not quite working
+      data: dataConstructors[type](data, vars),
+      enabled
+    });
+    store.data.deserPartial(data);
+    return store;
+  };
+}

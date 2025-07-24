@@ -174,6 +174,18 @@ export type EventMarkerData = {
 };
 export type PplibCommand = WaitCommand | GroupCommand | NamedCommand;
 export type Command = PplibCommand | undefined | null;
+export type UnionCommand =
+  | (PplibCommand &
+      (
+        | {
+            data: WaitCommand["data"] &
+              GroupCommand["data"] &
+              NamedCommand["data"];
+          }
+        | object
+      ))
+  | undefined
+  | null;
 export interface EventMarker {
   name: string;
   from: EventMarkerData;

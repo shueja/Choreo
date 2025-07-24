@@ -35,7 +35,7 @@ import {
   Expr,
   isExpr
 } from "./2025/DocumentTypes";
-import { Env } from "./DocumentManager";
+import { Env } from "./Env";
 import { tracing } from "./tauriTracing";
 
 export const math = create(all, { predictable: true });

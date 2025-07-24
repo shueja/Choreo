@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Expr, Project, RobotConfig, Trajectory } from "./2025/DocumentTypes";
-import { OpenFilePayload } from "./DocumentManager";
 export type ChoreoError = { type: string; content: string };
 export type ChoreoResult<T> = T | ChoreoError;
 const BACKEND = (route: string) => `http://127.0.0.1:8080/${route}`;
@@ -48,45 +47,13 @@ async function command<T>(
   console.log(cmd, "reply: ", json);
   return json;
 }
-export const Commands = {
-  guessIntervals: (config: RobotConfig<Expr>, trajectory: Trajectory) =>
-    command<number[]>("guess_control_interval_counts", Method.POST, {
-      config,
-      trajectory
-    }),
 
-  /**
-   * Generates a `Trajectory` using the specified `Project` and `Trajectory`.
-   *
-   * @param project The `Project` to use for generation.
-   * @param trajectory The `Trajectory` to use for generation.
-   * @param handle The handle of the generator to use.
-   *
-   * @returns The generated `Trajectory`.
-   */
-  generate: (project: Project, trajectory: Trajectory, handle: number) =>
-    command<Trajectory>("generate_remote", Method.POST, {
-      project,
-      trajectory,
-      handle
-    }),
+export type OpenFilePayload = {
+  name: string;
+  dir: string;
+};
 
-  /**
-   * Cancels all of the generators that are currently running.
-   *
-   * @returns `void`
-   */
-  cancelAll: () => invoke<void>("cancel_all_remote_generators"),
-
-  /**
-   * Cancels the generator with the specified handle.
-   *
-   * @param handle The handle of the generator to cancel.
-   * @returns `void`
-   */
-  cancel: (handle: number) =>
-    invoke<void>("cancel_remote_generator", { handle }),
-
+export const TauriCommands = {
   /**
    * Opens the specified directory in the system's file explorer.
    *
@@ -94,6 +61,7 @@ export const Commands = {
    * @returns `void`
    */
   openInExplorer: (path: string) => invoke<void>("open_in_explorer", { path }),
+
   /**
    * Opens a file dialog for the user to select a file to open, only permits `.chor` files.
    *
@@ -108,25 +76,15 @@ export const Commands = {
    * @returns `void`
    */
   setDeployRoot: (dir: string) => {
-    command("deploy_root", Method.POST, { dir });
     return invoke<void>("set_deploy_root", { dir });
   },
+
   /**
    * Gets the application-wide directory path that is used as the root for all file operations.
    *
    * @returns The directory path that is set as the root.
    */
   getDeployRoot: () => invoke<string>("get_deploy_root"),
-
-  /**
-   * @returns The default `Project` that is loaded when a new `Project` is created.
-   */
-  defaultProject: () => {
-    return command("default_project", Method.GET, {}).then((r) => {
-      console.log(r);
-      return r;
-    });
-  },
   /**
    * Reads the `Project` with the specified name from the deploy root directory.
    *
@@ -142,7 +100,6 @@ export const Commands = {
    */
   writeProject: (project: Project) =>
     invoke<ChoreoResult<void>>("write_project", { project }),
-
   /**
    * Reads the `Trajectory` with the specified name from the deploy root directory.
    *
@@ -182,14 +139,6 @@ export const Commands = {
    */
   deleteTrajectory: (trajectory: Trajectory) =>
     invoke<void>("delete_trajectory", { trajectory }),
-
-  /**
-   * Returns if the `Trajectory` parameters and snapshot are equivalent.
-   * @param trajectory The `Trajectory` to check
-   * @returns true if the parameters and snapshots are equivalent, false if not.
-   */
-  trajectoryUpToDate: (trajectory: Trajectory) =>
-    invoke<boolean>("trajectory_up_to_date", { trajectory }),
   /**
    * If the application was opened via CLI and a file was specified, this will return the path of that file.
    *
@@ -202,4 +151,64 @@ export const Commands = {
    */
   openDiagnosticZip: (project: Project, trajectories: Trajectory[]) =>
     invoke<void>("open_diagnostic_file", { project, trajectories })
+};
+
+export const VsCodeCommands = {
+  openInExplorer: () => console.error("openInExplorer TODO"),
+  openProjectDialog: () => console.error("openProjectDialog TODO"),
+  setDeployRoot: () => console.error("setDeployRoot TODO"),
+  getDeployRoot: () => console.error("getDeployRoot TODO")
+};
+
+export const ServerCommands = {
+  guessIntervals: (config: RobotConfig<Expr>, trajectory: Trajectory) =>
+    command<number[]>("guess_control_interval_counts", Method.POST, {
+      config,
+      trajectory
+    }),
+  /**
+   * Generates a `Trajectory` using the specified `Project` and `Trajectory`.
+   *
+   * @param project The `Project` to use for generation.
+   * @param trajectory The `Trajectory` to use for generation.
+   * @param handle The handle of the generator to use.
+   *
+   * @returns The generated `Trajectory`.
+   */
+  generate: (project: Project, trajectory: Trajectory, handle: number) =>
+    command<Trajectory>("generate_remote", Method.POST, {
+      project,
+      trajectory,
+      handle
+    }),
+
+  /**
+   * @returns The default `Project` that is loaded when a new `Project` is created.
+   */
+  defaultProject: () => {
+    return command("default_project", Method.GET, {}).then((r) => {
+      console.log(r);
+      return r;
+    });
+  },
+  /**
+   * Cancels all of the generators that are currently running.
+   *
+   * @returns `void`
+   */
+  cancelAll: () => console.log("cancelAll not implemented"),
+  /**
+   * Cancels the generator with the specified handle.
+   *
+   * @param handle The handle of the generator to cancel.
+   * @returns `void`
+   */
+  cancel: (handle: number) => console.log("cancel not implemented"),
+
+  /**
+   * Returns if the `Trajectory` parameters and snapshot are equivalent.
+   * @param trajectory The `Trajectory` to check
+   * @returns true if the parameters and snapshots are equivalent, false if not.
+   */
+  trajectoryUpToDate: (trajectory: Trajectory) => Promise.resolve(false)
 };

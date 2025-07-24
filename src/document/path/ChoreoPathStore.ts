@@ -7,7 +7,7 @@ import {
   IConstraintStore,
   IWaypointScope
 } from "../ConstraintStore";
-import { Env } from "../DocumentManager";
+import { Env } from "../Env";
 import { ExpressionStore } from "../ExpressionStore";
 import {
   DEFAULT_WAYPOINT,

@@ -23,13 +23,15 @@ export default defineConfig(() => ({
     // Tauri supports es2021
     target: process.env.TAURI_PLATFORM == "windows" ? "chrome105" : "safari14",
     // don't minify for debug builds
-    minify: !process.env.TAURI_DEBUG ? "esbuild" : undefined as ("esbuild" | undefined),
+    minify: !process.env.TAURI_DEBUG
+      ? "esbuild"
+      : (undefined as "esbuild" | undefined),
     // produce sourcemaps for debug builds
     sourcemap: !!process.env.TAURI_DEBUG,
     rollupOptions: {
       input: {
-        main: '/web/app/index.html'
-      },
+        main: "/web/app/index.html"
+      }
     }
   }
 }));

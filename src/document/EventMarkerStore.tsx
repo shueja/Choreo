@@ -4,10 +4,10 @@ import {
   EventMarkerData,
   WaypointUUID
 } from "./2025/DocumentTypes";
-import { CommandStore } from "./CommandStore";
+import { CommandStore, createCommandStore } from "./CommandStore";
 import { WaypointScope } from "./ConstraintStore";
-import { Env, EnvConstructors } from "./DocumentManager";
-import { ExpressionStore } from "./ExpressionStore";
+import { Env, EnvConstructors } from "./Env";
+import { ExpressionStore, IVariables } from "./ExpressionStore";
 import { IChoreoTrajectoryStore } from "./path/ChoreoTrajectoryStore";
 import { IHolonomicPathStore } from "./path/HolonomicPathStore";
 import {
@@ -164,3 +164,21 @@ export const EventMarkerStore = types
     }
   }));
 export type IEventMarkerStore = Instance<typeof EventMarkerStore>;
+export function createEventMarkerStore(
+  marker: EventMarker,
+  vars: IVariables
+): IEventMarkerStore {
+  const m = EventMarkerStore.create({
+    name: marker.name,
+    from: {
+      uuid: crypto.randomUUID(),
+
+      target: undefined,
+      targetTimestamp: marker.from.targetTimestamp ?? undefined,
+      offset: vars.createExpression(marker.from.offset, "Time")
+    },
+    event: createCommandStore(marker.event, vars),
+    uuid: crypto.randomUUID()
+  });
+  return m;
+}

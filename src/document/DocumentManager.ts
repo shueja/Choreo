@@ -1,7 +1,7 @@
 import { path, window as tauriWindow } from "@tauri-apps/api";
 import { ask, confirm, save } from "@tauri-apps/plugin-dialog";
 import { TauriEvent } from "@tauri-apps/api/event";
-import { DocumentStore, SelectableItemTypes } from "./DocumentModel";
+import { DocumentStore } from "./DocumentModel";
 
 import hotkeys from "hotkeys-js";
 import { reaction } from "mobx";
@@ -15,61 +15,20 @@ import { toast, ToastContentProps } from "react-toastify";
 import LocalStorageKeys from "../util/LocalStorageKeys";
 import { safeGetIdentifier } from "../util/mobxutils";
 import {
-  Command,
-  EventMarker,
-  GroupCommand,
-  NamedCommand,
   Project,
-  Trajectory,
-  WaitCommand,
-  type Expr,
-  type RobotConfig,
-  type Waypoint
-} from "./2025/DocumentTypes";
+  Trajectory} from "./2025/DocumentTypes";
+import { IExpressionStore, variables } from "./ExpressionStore";
 import {
-  CommandStore,
-  ICommandStore,
-  commandIsGroup,
-  commandIsNamed,
-  commandIsWait
-} from "./CommandStore";
+  IHolonomicWaypointStore} from "./HolonomicWaypointStore";
 import {
-  ConstraintDataObjects,
-  IConstraintDataStore,
-  defineCreateConstraintData
-} from "./ConstraintDataStore";
-import {
-  ConstraintDefinitions,
-  ConstraintKey,
-  DataMap
-} from "./ConstraintDefinitions";
-import {
-  ConstraintStore,
-  IConstraintStore,
-  IWaypointScope
-} from "./ConstraintStore";
-import { EventMarkerStore, IEventMarkerStore } from "./EventMarkerStore";
-import { IExpressionStore, IVariables, variables } from "./ExpressionStore";
-import {
-  IHolonomicWaypointStore,
-  HolonomicWaypointStore as WaypointStore
-} from "./HolonomicWaypointStore";
-import {
-  createRobotConfigStore,
-  EXPR_DEFAULTS,
-  IRobotConfigStore,
-  RobotConfigStore
-} from "./RobotConfigStore";
+  EXPR_DEFAULTS} from "./RobotConfigStore";
 import { ViewLayerDefaults } from "./UIData";
-import { SavingState, UIStateStore } from "./UIStateStore";
+import { UIStateStore } from "./UIStateStore";
 import { findUUIDIndex } from "./path/utils";
-import { ChoreoError, Commands } from "./tauriCommands";
+import { ChoreoError, OpenFilePayload, ServerCommands, TauriCommands } from "./tauriCommands";
 import { tracing } from "./tauriTracing";
-
-export type OpenFilePayload = {
-  name: string;
-  dir: string;
-};
+import { Env, getConstructors, SelectableItemTypes } from "$src/document/Env";
+import { SavingState } from "./SavingState";
 
 export const uiState = UIStateStore.create({
   settingsTab: 0,
@@ -77,121 +36,8 @@ export const uiState = UIStateStore.create({
   projectSaveTime: new Date(),
   layers: ViewLayerDefaults
 });
-type ConstraintDataConstructor<K extends ConstraintKey> = (
-  data: Partial<DataMap[K]["props"]>
-) => IConstraintDataStore<K>;
 
-type ConstraintDataConstructors = {
-  [key in ConstraintKey]: ConstraintDataConstructor<key>;
-};
-export type EnvConstructors = {
-  RobotConfigStore: (config: RobotConfig<Expr>) => IRobotConfigStore;
-  WaypointStore: (config: Waypoint<Expr>) => IHolonomicWaypointStore;
-  CommandStore: (
-    command: Command &
-      (
-        | {
-            data: WaitCommand["data"] &
-              GroupCommand["data"] &
-              NamedCommand["data"];
-          }
-        | object
-      )
-  ) => ICommandStore;
-  EventMarkerStore: (marker: EventMarker) => IEventMarkerStore;
-  ConstraintData: ConstraintDataConstructors;
-  ConstraintStore: <K extends ConstraintKey>(
-    type: K,
-    data: Partial<DataMap[K]["props"]>,
-    enabled: boolean,
-    from: IWaypointScope,
-    to?: IWaypointScope
-  ) => IConstraintStore;
-};
-function getConstructors(vars: () => IVariables): EnvConstructors {
-  function createCommandStore(command: Command): ICommandStore {
-    return CommandStore.create({
-      type: command?.type ?? "none",
-      name: commandIsNamed(command) ? command.data.name : "",
-      commands: commandIsGroup(command)
-        ? command.data.commands.map((c) => createCommandStore(c))
-        : [],
-      time: vars().createExpression(
-        commandIsWait(command) ? command.data.waitTime : 0,
-        "Time"
-      ),
-      uuid: crypto.randomUUID()
-    });
-  }
-
-  const keys = Object.keys(ConstraintDefinitions) as ConstraintKey[];
-  const constraintDataConstructors = Object.fromEntries(
-    keys.map(
-      <K extends ConstraintKey>(key: K) =>
-        [
-          key,
-          defineCreateConstraintData(key, ConstraintDefinitions[key], vars)
-        ] as [
-          K,
-          (
-            data: Partial<DataMap[K]["props"]>
-          ) => (typeof ConstraintDataObjects)[K]["Type"]
-        ]
-    )
-  ) as ConstraintDataConstructors;
-
-  return {
-    RobotConfigStore: (config: RobotConfig<Expr>) => createRobotConfigStore(config, vars())
-    ,
-    WaypointStore: (waypoint: Waypoint<Expr>) => {
-      const w = WaypointStore.create({
-        ...waypoint,
-        x: vars().createExpression(waypoint.x, "Length"),
-        y: vars().createExpression(waypoint.y, "Length"),
-        heading: vars().createExpression(waypoint.heading, "Angle"),
-        uuid: crypto.randomUUID()
-      });
-      return w;
-    },
-    CommandStore: createCommandStore,
-    EventMarkerStore: (marker: EventMarker): IEventMarkerStore => {
-      const m = EventMarkerStore.create({
-        name: marker.name,
-        from: {
-          uuid: crypto.randomUUID(),
-
-          target: undefined,
-          targetTimestamp: marker.from.targetTimestamp ?? undefined,
-          offset: vars().createExpression(marker.from.offset, "Time")
-        },
-        event: createCommandStore(marker.event),
-        uuid: crypto.randomUUID()
-      });
-      return m;
-    },
-    ConstraintData: constraintDataConstructors,
-    ConstraintStore: <K extends ConstraintKey>(
-      type: K,
-      data: Partial<DataMap[K]["props"]>,
-      enabled: boolean,
-      from: IWaypointScope,
-      to?: IWaypointScope
-    ) => {
-      const store = ConstraintStore.create({
-        from,
-        to,
-        uuid: crypto.randomUUID(),
-        //@ts-expect-error more constraint stuff not quite working
-        data: constraintDataConstructors[type](data),
-        enabled
-      });
-      store.data.deserPartial(data);
-      return store;
-    }
-  };
-}
-
-const env = {
+const env: Env = {
   selectedSidebar: () => safeGetIdentifier(doc.selectedSidebarItem),
   hoveredItem: () => safeGetIdentifier(doc.hoveredSidebarItem),
   select: (item: SelectableItemTypes) => select(item),
@@ -211,14 +57,12 @@ const env = {
   vars: () => doc.variables,
   renameVariable: renameVariable,
   exporter: async (uuid: string) => writeTrajectory(uuid).catch(tracing.error),
-  create: getConstructors(() => doc.variables)
+  create: getConstructors(() => variables)
 };
-export type Env = typeof env;
+
 export const doc = DocumentStore.create(
   {
-    robotConfig: getConstructors(() => variables).RobotConfigStore(
-      EXPR_DEFAULTS
-    ),
+    robotConfig: env.create.RobotConfigStore(EXPR_DEFAULTS),
     type: "Swerve",
     pathlist: {
       defaultPath: undefined
@@ -260,7 +104,7 @@ export async function openProjectFile() {
   const lastOpenedFileEventPayload = localStorage.getItem(
     LocalStorageKeys.LAST_OPENED_FILE_LOCATION
   );
-  const cliRequestedProject = await Commands.requestedProject();
+  const cliRequestedProject = await TauriCommands.requestedProject();
 
   if (cliRequestedProject) {
     const fileDirectory: OpenFilePayload = cliRequestedProject;
@@ -556,7 +400,7 @@ export async function openProjectSelectFeedback() {
     kind: "warning"
   }).then((proceed) => {
     if (proceed) {
-      Commands.openProjectDialog().then((filepath) =>
+      TauriCommands.openProjectDialog().then((filepath) =>
         openProject(filepath).catch((err) => {
           tracing.error(
             `Failed to open Choreo file '${filepath.name}': ${err}`
@@ -570,7 +414,7 @@ export async function openProjectSelectFeedback() {
 
 export async function openProject(projectPath: OpenFilePayload) {
   // Capture the state prior to the deserialization
-  const originalRoot = await Commands.getDeployRoot();
+  const originalRoot = await TauriCommands.getDeployRoot();
   const originalSnapshot = getSnapshot(doc);
   const originalUiState = getSnapshot(uiState);
   const originalHistory = getSnapshot(doc.history);
@@ -582,13 +426,13 @@ export async function openProject(projectPath: OpenFilePayload) {
     const name = projectPath.name.split(".")[0];
     let project: Project | undefined = undefined;
     const trajectories: Trajectory[] = [];
-    await Commands.cancelAll();
-    await Commands.setDeployRoot(dir);
+    await ServerCommands.cancelAll();
+    await TauriCommands.setDeployRoot(dir);
     await Promise.allSettled([
-      Commands.readProject(name)
+      TauriCommands.readProject(name)
         .then((p) => (project = p))
         .catch(tracing.error),
-      Commands.readAllTrajectory()
+      TauriCommands.readAllTrajectory()
         .then((paths) =>
           paths.forEach((path) => {
             trajectories.push(path);
@@ -615,7 +459,7 @@ export async function openProject(projectPath: OpenFilePayload) {
     uiState.setProjectSavingState(SavingState.SAVED);
     uiState.setProjectSavingTime(new Date());
   } catch (e) {
-    await Commands.setDeployRoot(originalRoot);
+    await TauriCommands.setDeployRoot(originalRoot);
     if (originalLastOpenedItem != null) {
       localStorage.setItem(
         LocalStorageKeys.LAST_OPENED_FILE_LOCATION,
@@ -670,10 +514,10 @@ export async function newProject() {
     layers: ViewLayerDefaults,
     projectSavingState: SavingState.NO_LOCATION
   });
-  await Commands.setDeployRoot("");
-  const newChor = await Commands.defaultProject() as Project;
+  await TauriCommands.setDeployRoot("");
+  const newChor = (await ServerCommands.defaultProject()) as Project;
   doc.deserializeChor(newChor);
-  uiState.loadPathGradientFromLocalStorage();
+  //uiState.loadPathGradientFromLocalStorage();
   doc.pathlist.deleteAll();
   doc.pathlist.addPath("New Path");
   uiState.setProjectSavingState(SavingState.NO_LOCATION);
@@ -688,7 +532,7 @@ export function hover(item: SelectableItemTypes) {
 }
 
 export async function canSave(): Promise<boolean> {
-  return (await Commands.getDeployRoot()).length > 0;
+  return (await TauriCommands.getDeployRoot()).length > 0;
 }
 
 export async function renamePath(uuid: string, newName: string) {
@@ -696,7 +540,7 @@ export async function renamePath(uuid: string, newName: string) {
     const trajectory = doc.pathlist.paths.get(uuid);
     if (trajectory) {
       tracing.debug("renamePath", uuid, "to", newName);
-      await Commands.renameTrajectory(trajectory.serialize, newName)
+      await TauriCommands.renameTrajectory(trajectory.serialize, newName)
         .finally(() => doc.pathlist.paths.get(uuid)?.setName(newName))
         .catch(tracing.error);
     }
@@ -709,7 +553,7 @@ export async function deletePath(uuid: string) {
   if (uiState.hasSaveLocation) {
     const trajectory = doc.pathlist.paths.get(uuid);
     if (trajectory) {
-      await Commands.deleteTrajectory(trajectory.serialize)
+      await TauriCommands.deleteTrajectory(trajectory.serialize)
         .finally(() => doc.pathlist.deletePath(uuid))
         .catch(tracing.error);
     }
@@ -724,7 +568,7 @@ export async function writeTrajectory(uuid: string) {
     if (trajectory === undefined) {
       throw `Tried to export trajectory with unknown uuid ${uuid}`;
     }
-    await Commands.writeTrajectory(trajectory.serialize);
+    await TauriCommands.writeTrajectory(trajectory.serialize);
   } else {
     tracing.warn("Can't save trajectory, skipping");
   }
@@ -753,7 +597,7 @@ export async function writeAllTrajectories() {
 export async function saveProject() {
   if (await canSave()) {
     try {
-      await toast.promise(Commands.writeProject(doc.serializeChor()), {
+      await toast.promise(TauriCommands.writeProject(doc.serializeChor()), {
         error: {
           render(toastProps: ToastContentProps<ChoreoError>) {
             return `Project save fail. Alert developers: (${toastProps.data!.type}) ${toastProps.data!.content}`;
@@ -796,7 +640,7 @@ export async function saveProjectDialog() {
 
   doc.setName(name);
 
-  await Commands.setDeployRoot(dir).catch(tracing.error);
+  await TauriCommands.setDeployRoot(dir).catch(tracing.error);
 
   uiState.setSaveFileDir(dir);
   uiState.setProjectName(name);
@@ -816,5 +660,5 @@ export async function openDiagnosticZipWithInfo() {
   doc.pathlist.paths.forEach((path) => {
     trajectories.push(path.serialize);
   });
-  await Commands.openDiagnosticZip(project, trajectories);
+  await TauriCommands.openDiagnosticZip(project, trajectories);
 }

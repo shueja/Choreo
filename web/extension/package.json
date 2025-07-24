@@ -10,7 +10,7 @@
     "Other"
   ],
   "main": "./out/extension.js",
-  "type":"module",
+  "type": "module",
   "contributes": {
     "customEditors": [
       {
@@ -37,7 +37,6 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
-    
     "test-compile": "tsc -p ./",
     "test-watch": "tsc -watch -p ./",
     "pretest": "npm run test-compile && npm run lint",

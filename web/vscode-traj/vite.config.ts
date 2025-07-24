@@ -13,7 +13,7 @@ export default defineConfig(async () => ({
     manifest: true,
     rollupOptions: {
       input: {
-        main: "/web/vscode-chor/index.html"
+        main: "/web/vscode-traj/index.html"
       },
       output: {
         manualChunks: undefined,
@@ -21,11 +21,17 @@ export default defineConfig(async () => ({
         chunkFileNames: `assets/index-chunk.js`,
         assetFileNames: `assets/[name].[ext]`
       },
-      external: ["index.css"]
+      external: ["index.css"],
+
     },
+    terserOptions: {
+      compress: false,
+      mangle: false,
+    },
+    minify: false,
     // assetsDir: "./web/extension/out/vscode-chor",
 
-    outDir: "./web/extension/out/vscode-chor",
+    outDir: "./web/extension/out/vscode-traj",
     emptyOutDir: false
   }
 }));

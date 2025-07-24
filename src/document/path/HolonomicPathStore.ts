@@ -16,7 +16,8 @@ import {
   type ChoreoPath,
   type Trajectory
 } from "../2025/DocumentTypes";
-import { Env, uiState } from "../DocumentManager";
+import { Env } from "../Env";
+
 import { EventMarkerStore, IEventMarkerStore } from "../EventMarkerStore";
 import {
   DEFAULT_WAYPOINT,
@@ -26,9 +27,10 @@ import { ChoreoPathStore } from "./ChoreoPathStore";
 import { ChoreoTrajectoryStore } from "./ChoreoTrajectoryStore";
 import { PathUIStore } from "./PathUIStore";
 import { findUUIDIndex } from "./utils";
-import { ChoreoError, Commands } from "../tauriCommands";
-import { SavingState } from "../UIStateStore";
+import { ChoreoError, ServerCommands } from "../tauriCommands";
+import { SavingState } from "../SavingState";
 import { toast, ToastContentProps } from "react-toastify";
+import { IVariables } from "$src/document/ExpressionStore";
 export function waypointIDToText(
   id: WaypointUUID | undefined,
   points: IHolonomicWaypointStore[]
@@ -175,7 +177,7 @@ export const HolonomicPathStore = types
         ser.events.forEach((m) => {
           self.addEventMarker(m);
         });
-        Commands.trajectoryUpToDate(self.serialize).then((upToDate) =>
+        ServerCommands.trajectoryUpToDate(self.serialize).then((upToDate) =>
           self.ui.setUpToDate(upToDate)
         );
       }
@@ -187,9 +189,9 @@ export const HolonomicPathStore = types
     let debounceId: NodeJS.Timeout | undefined = undefined;
     const afterCreate = () => {
       const performSave = () => {
-        if (!uiState.hasSaveLocation) {
-          return;
-        }
+        // if (!uiState.hasSaveLocation) {
+        //   return;
+        // }
         self.ui.setSavingState(SavingState.SAVING);
         toast.promise(
           exporter(self.uuid)
@@ -217,7 +219,7 @@ export const HolonomicPathStore = types
           return self.serialize;
         },
         (ser) => {
-          Commands.trajectoryUpToDate(ser).then((upToDate) =>
+          ServerCommands.trajectoryUpToDate(ser).then((upToDate) =>
             self.ui.setUpToDate(upToDate)
           );
           clearTimeout(debounceId);
@@ -246,4 +248,31 @@ export interface IHolonomicPathStore
 export function getPathStore(self: IAnyStateTreeNode): IHolonomicPathStore {
   const path: IHolonomicPathStore = getParentOfType(self, HolonomicPathStore);
   return path;
+}
+export function createPathStore(vars: IVariables) {
+  return HolonomicPathStore.create({
+    uuid: crypto.randomUUID(),
+    name: "",
+    params: {
+      constraints: [],
+      waypoints: [],
+      targetDt: vars.createExpression("0.05 s", "Time")
+    },
+    ui: {
+      visibleWaypointsEnd: 0,
+      visibleWaypointsStart: 0,
+      savingState: SavingState.SAVED
+    },
+    snapshot: {
+      waypoints: [],
+      constraints: [],
+      targetDt: 0.05
+    },
+    trajectory: {
+      waypoints: [],
+      samples: [],
+      splits: []
+    },
+    markers: []
+  });
 }

@@ -1,10 +1,10 @@
 import { window as tauriWindow } from "@tauri-apps/api";
 import { getVersion } from "@tauri-apps/api/app";
 import { Instance, types } from "mobx-state-tree";
-import {
-  PathGradient,
-  PathGradients
-} from "../components/config/robotconfig/PathGradient";
+// import {
+//   PathGradient,
+//   PathGradients
+// } from "../components/config/robotconfig/PathGradient";
 import LocalStorageKeys from "../util/LocalStorageKeys";
 import { ConstraintKey } from "./ConstraintDefinitions";
 import {
@@ -18,13 +18,8 @@ import {
   navbarIndexToConstraintKey
 } from "./UIData";
 import { tracing } from "./tauriTracing";
+import { SavingState } from "$src/document/SavingState";
 
-export enum SavingState {
-  SAVED = "saved",
-  SAVING = "saving",
-  ERROR = "error",
-  NO_LOCATION = "noLocation"
-}
 export const UIStateStore = types
   .model("UIStateStore", {
     //The transform matrix between mouse event clientX/Y and field coordinates
@@ -56,11 +51,11 @@ export const UIStateStore = types
       (arr) => arr?.length == ViewItemData.length
     ),
     selectedNavbarItem: NavbarLabels.FullWaypoint,
-    selectedPathGradient: types.maybe(
-      types.union(
-        ...Object.keys(PathGradients).map((key) => types.literal(key))
-      )
-    ),
+    // selectedPathGradient: types.maybe(
+    //   types.union(
+    //     ...Object.keys(PathGradients).map((key) => types.literal(key))
+    //   )
+    // ),
 
     contextMenuSelectedWaypoint: types.maybe(types.number),
     contextMenuWaypointType: types.maybe(types.number),
@@ -179,21 +174,21 @@ export const UIStateStore = types
     setSelectedNavbarItem(item: number) {
       self.selectedNavbarItem = item;
     },
-    setSelectedPathGradient(pathGradient: PathGradient) {
-      self.selectedPathGradient = pathGradient.name;
-      this._saveSelectedPathGradientToLocalStorage();
-    },
-    _saveSelectedPathGradientToLocalStorage() {
-      localStorage.setItem(
-        LocalStorageKeys.PATH_GRADIENT,
-        self.selectedPathGradient
-      );
-    },
-    loadPathGradientFromLocalStorage() {
-      self.selectedPathGradient =
-        localStorage.getItem(LocalStorageKeys.PATH_GRADIENT) ??
-        PathGradients.LinearVelocity.name;
-    },
+    // setSelectedPathGradient(pathGradient: PathGradient) {
+    //   self.selectedPathGradient = pathGradient.name;
+    //   this._saveSelectedPathGradientToLocalStorage();
+    // },
+    // _saveSelectedPathGradientToLocalStorage() {
+    //   localStorage.setItem(
+    //     LocalStorageKeys.PATH_GRADIENT,
+    //     self.selectedPathGradient
+    //   );
+    // },
+    // loadPathGradientFromLocalStorage() {
+    //   self.selectedPathGradient =
+    //     localStorage.getItem(LocalStorageKeys.PATH_GRADIENT) ??
+    //     PathGradients.LinearVelocity.name;
+    // },
     setContextMenuSelectedWaypoint(waypointIndex: number | undefined) {
       self.contextMenuSelectedWaypoint = waypointIndex;
     },

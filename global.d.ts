@@ -1,4 +1,3 @@
-
 import {
   VscodeBadge,
   VscodeButton,
@@ -31,18 +30,18 @@ import {
   VscodeTabs,
   VscodeTextarea,
   VscodeTextfield,
-  VscodeTree,
+  VscodeTree
 } from "@vscode-elements/elements";
 import type { VscCollapsibleToggleEvent } from "@vscode-elements/elements/dist/vscode-collapsible/vscode-collapsible";
 import type { VscContextMenuSelectEvent } from "@vscode-elements/elements/dist/vscode-context-menu/vscode-context-menu";
 import type {
   VscodeSplitLayout,
-  VscSplitLayoutChangeEvent,
+  VscSplitLayoutChangeEvent
 } from "@vscode-elements/elements/dist/vscode-split-layout/vscode-split-layout";
 import type { VscTabsSelectEvent } from "@vscode-elements/elements/dist/vscode-tabs/vscode-tabs";
 import type {
   VscTreeActionEvent,
-  VscTreeSelectEvent,
+  VscTreeSelectEvent
 } from "@vscode-elements/elements/dist/vscode-tree/vscode-tree";
 
 type ElementProps<I> = Partial<Omit<I, keyof HTMLElement>>;

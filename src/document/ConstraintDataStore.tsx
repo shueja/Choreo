@@ -10,6 +10,7 @@ import { Expr, isExpr } from "./2025/DocumentTypes";
 import {
   ConstraintData,
   ConstraintDefinition,
+  ConstraintDefinitions,
   ConstraintKey,
   ConstraintPropertyDefinition,
   ConstraintPropertyType,
@@ -195,6 +196,7 @@ export function defineCreateConstraintData<
 ): (data: Partial<P>) => (typeof ConstraintDataObjects)[K]["Type"] {
   return (data: Partial<P>) => {
     const snapshot: any = {};
+    // Create the default values for expression properties
     Object.keys(def.properties).forEach((key) => {
       const prop =
         def.properties[
@@ -214,3 +216,29 @@ export function defineCreateConstraintData<
     return store;
   };
 }
+
+const keys = Object.keys(ConstraintDefinitions) as ConstraintKey[];
+export type ConstraintDataConstructor<K extends ConstraintKey> = (
+  data: Partial<DataMap[K]["props"]>,
+  vars: IVariables
+) => IConstraintDataStore<K>;
+
+export type ConstraintDataConstructors = {
+  [key in ConstraintKey]: ConstraintDataConstructor<key>;
+};
+export const constraintDataConstructors = (vars: () => IVariables) =>
+  Object.fromEntries(
+    keys.map(
+      <K extends ConstraintKey>(key: K) =>
+        [
+          key,
+          defineCreateConstraintData(key, ConstraintDefinitions[key], vars)
+        ] as [
+          K,
+          (
+            data: Partial<DataMap[K]["props"]>,
+            vars: IVariables
+          ) => (typeof ConstraintDataObjects)[K]["Type"]
+        ]
+    )
+  ) as ConstraintDataConstructors;

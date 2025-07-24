@@ -9,57 +9,20 @@ import {
   SwerveSample,
   Trajectory
 } from "./2025/DocumentTypes";
-import { ConstraintStore, IConstraintStore } from "./ConstraintStore";
-import { EventMarkerStore, IEventMarkerStore } from "./EventMarkerStore";
 import { Variables } from "./ExpressionStore";
 import {
-  HolonomicWaypointStore,
   IHolonomicWaypointStore
 } from "./HolonomicWaypointStore";
 import { PathListStore } from "./PathListStore";
 import { RobotConfigStore } from "./RobotConfigStore";
-import { Commands, SolverStatusSource } from "./tauriCommands";
+import { ServerCommands, SolverStatusSource } from "./tauriCommands";
 import { tracing } from "./tauriTracing";
-
-export type SelectableItemTypes =
-  | ((IHolonomicWaypointStore | IConstraintStore | IEventMarkerStore) & {
-      uuid: string;
-    })
-  | undefined;
-export const SelectableItem = types.union(
-  {
-    dispatcher: (snapshot): any => {
-      if (Object.hasOwn(snapshot, "mass")) return RobotConfigStore;
-      if (Object.hasOwn(snapshot, "target")) return EventMarkerStore;
-      if (Object.hasOwn(snapshot, "from")) return ConstraintStore;
-      return HolonomicWaypointStore;
-    }
-  },
-  HolonomicWaypointStore,
-  EventMarkerStore,
-  ConstraintStore
-);
-function itemType(
-  item: SelectableItemTypes
-): "marker" | "constraint" | "waypoint" | undefined {
-  if (item === undefined) {
-    return undefined;
-  }
-  if (Object.hasOwn(item, "name")) {
-    return "marker";
-  }
-  if (Object.hasOwn(item, "from")) {
-    return "constraint";
-  }
-  if (Object.hasOwn(item, "fixTranslation")) {
-    return "waypoint";
-  }
-  return undefined;
-}
-export const ISampleType = types.enumeration<SampleType>([
-  "Swerve",
-  "Differential"
-]);
+import {
+  ISampleType,
+  itemType,
+  SelectableItem,
+  SelectableItemTypes
+} from "$src/document/Env";
 
 // When adding new fields, consult
 // https://choreo.autos/contributing/schema-upgrade/
@@ -197,7 +160,7 @@ export const DocumentStore = types
         .reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0);
       const unlisten: AbortController = new AbortController();
       pathStore.ui.setIterationNumber(0);
-      await Commands.guessIntervals(config, pathStore.serialize)
+      await ServerCommands.guessIntervals(config, pathStore.serialize)
         .catch((e) => {
           tracing.error("guessIntervals:", e);
           throw e;
@@ -246,7 +209,7 @@ export const DocumentStore = types
           );
         })
         .then(() => {
-          return Commands.generate(
+          return ServerCommands.generate(
             self.serializeChor(),
             pathStore.serialize,
             handle

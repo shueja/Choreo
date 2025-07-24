@@ -51,52 +51,52 @@ function trace(level: string, stack: Error, ...data: any[]): void {
   });
 }
 
-
-export const tracing = window.__TAURI_OS_PLUGIN_INTERNALS__ ? {
-  /**
-   * A console.log substitute that logs the value to the native tracing pipeline.
-   *
-   * @param message The message to be logged. This will be converted to a string.
-   * @param optionalParams Additional parameters to be logged.
-   */
-  debug: (message: any, ...optionalParams: any[]) => {
-    console.log(message, optionalParams);
-    trace("debug", new Error(), message, ...optionalParams);
-  },
-  /**
-   * A console.log substitute that logs the value to the native tracing pipeline.
-   *
-   * @param message The message to be logged. This will be converted to a string.
-   * @param optionalParams Additional parameters to be logged.
-   */
-  info: (message: any, ...optionalParams: any[]) => {
-    console.log(message, optionalParams);
-    trace("info", new Error(), message, ...optionalParams);
-  },
-  /**
-   * A console.warn substitute that logs the warning to the native tracing pipeline.
-   *
-   * @param message The message to be logged. This will be converted to a string.
-   * @param optionalParams Additional parameters to be logged.
-   */
-  warn: (message: any, ...optionalParams: any[]) => {
-    console.warn(message, optionalParams);
-    trace("warn", new Error(), message, ...optionalParams);
-  },
-  /**
-   * A console.error substitute that logs the error to the native tracing pipeline.
-   *
-   * @param message The message to be logged. This will be converted to a string.
-   * @param optionalParams Additional parameters to be logged.
-   */
-  error: (message: any, ...optionalParams: any[]) => {
-    console.error(message, optionalParams);
-    trace("error", new Error(), message, ...optionalParams);
-  }
-} : 
-{
-  debug: console.log,
-  error: console.error,
-  warn: console.warn,
-  info: console.log
-};
+export const tracing = window.__TAURI_OS_PLUGIN_INTERNALS__
+  ? {
+      /**
+       * A console.log substitute that logs the value to the native tracing pipeline.
+       *
+       * @param message The message to be logged. This will be converted to a string.
+       * @param optionalParams Additional parameters to be logged.
+       */
+      debug: (message: any, ...optionalParams: any[]) => {
+        console.log(message, optionalParams);
+        trace("debug", new Error(), message, ...optionalParams);
+      },
+      /**
+       * A console.log substitute that logs the value to the native tracing pipeline.
+       *
+       * @param message The message to be logged. This will be converted to a string.
+       * @param optionalParams Additional parameters to be logged.
+       */
+      info: (message: any, ...optionalParams: any[]) => {
+        console.log(message, optionalParams);
+        trace("info", new Error(), message, ...optionalParams);
+      },
+      /**
+       * A console.warn substitute that logs the warning to the native tracing pipeline.
+       *
+       * @param message The message to be logged. This will be converted to a string.
+       * @param optionalParams Additional parameters to be logged.
+       */
+      warn: (message: any, ...optionalParams: any[]) => {
+        console.warn(message, optionalParams);
+        trace("warn", new Error(), message, ...optionalParams);
+      },
+      /**
+       * A console.error substitute that logs the error to the native tracing pipeline.
+       *
+       * @param message The message to be logged. This will be converted to a string.
+       * @param optionalParams Additional parameters to be logged.
+       */
+      error: (message: any, ...optionalParams: any[]) => {
+        console.error(message, optionalParams);
+        trace("error", new Error(), message, ...optionalParams);
+      }
+    }
+  : {
+      debug: console.log,
+      error: console.error,
+      warn: console.warn,
+      info: console.log
+    };

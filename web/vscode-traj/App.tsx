@@ -1,7 +1,6 @@
 import React, { useEffect } from "react";
 import { observer } from "mobx-react";
 import { createStateStore, StateStoreProvider } from "./state/State";
-import RobotConfigView from "./view/RobotConfigView";
 import { reaction } from "mobx";
 import { vscode } from "./main";
 
@@ -15,13 +14,13 @@ function App() {
   const State = createStateStore();
   let reactingToBackendUpdate = false;
   reaction(
-    () => State.serialize,
-    (project) => {
-      console.log(project);
+    () => State.path.serialize,
+    (traj) => {
+      console.log(traj);
       if (!reactingToBackendUpdate) {
         vscode.postMessage({
-          type: "update",
-          data: JSON.stringify(project)
+          type: "updateTraj",
+          data: JSON.stringify(traj)
         });
       }
     }
@@ -30,10 +29,16 @@ function App() {
     const message = event.data; // The JSON data our extension sent
 
     switch (message.type) {
-      case "update":
-      case "init":
+      case "updateChor":
+      case "initChor":
         reactingToBackendUpdate = true;
-        State.deserialize(JSON.parse(message.text));
+        State.deserializeProject(JSON.parse(message.text));
+        setTimeout(() => (reactingToBackendUpdate = false), 0);
+        break;
+      case "updateTraj":
+      case "initTraj":
+        reactingToBackendUpdate = true;
+        State.path.deserialize(JSON.parse(message.text));
         setTimeout(() => (reactingToBackendUpdate = false), 0);
         break;
     }
@@ -48,9 +53,9 @@ function App() {
           selected-index="0"
           style={{ overflow: "hidden", height: "100%" }}
         >
-          <vscode-tab-header>Robot Config</vscode-tab-header>
-          <vscode-tab-panel style={{ overflow: "hidden" }}>
-            <RobotConfigView></RobotConfigView>
+          <vscode-tab-header>Traj</vscode-tab-header>
+          <vscode-tab-panel>
+            <pre>{JSON.stringify(State.path.serialize)}</pre>
           </vscode-tab-panel>
           <vscode-tab-header>Variables</vscode-tab-header>
           <vscode-tab-panel></vscode-tab-panel>

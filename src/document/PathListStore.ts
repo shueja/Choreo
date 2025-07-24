@@ -1,12 +1,13 @@
 import { Instance, getEnv, types } from "mobx-state-tree";
 import { Trajectory } from "./2025/DocumentTypes";
-import { Env } from "./DocumentManager";
+
 import {
   HolonomicPathStore,
   IHolonomicPathStore
 } from "./path/HolonomicPathStore";
+import { Env } from "./Env";
 import * as FieldDimensions from "../components/field/svg/fields/FieldDimensions";
-import { SavingState } from "./UIStateStore";
+import { SavingState } from "./SavingState";
 
 export const PathListStore = types
   .model("PathListStore", {
@@ -94,7 +95,7 @@ export const PathListStore = types
         env.startGroup(() => {
           try {
             const path = HolonomicPathStore.create({
-              uuid: newUUID,
+              uuid: crypto.randomUUID(),
               name: usedName,
               params: {
                 constraints: [],

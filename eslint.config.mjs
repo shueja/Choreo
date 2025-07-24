@@ -42,10 +42,7 @@ export default [
           varsIgnorePattern: "^_"
         }
       ],
-      "@typescript-eslint/no-unused-expressions": [
-        "error",
-        {}
-      ],
+      "@typescript-eslint/no-unused-expressions": ["error", {}],
 
       "@typescript-eslint/no-explicit-any": "off",
       "linebreak-style": ["error", "unix"],

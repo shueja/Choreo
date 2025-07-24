@@ -12,10 +12,11 @@ import {
   Expr,
   GroupCommand,
   NamedCommand,
+  UnionCommand,
   WaitCommand
 } from "./2025/DocumentTypes";
-import { Env, EnvConstructors } from "./DocumentManager";
-import { ExpressionStore } from "./ExpressionStore";
+import { Env, EnvConstructors } from "./Env";
+import { ExpressionStore, IVariables } from "./ExpressionStore";
 
 export type CommandGroupType = "sequential" | "parallel" | "deadline" | "race";
 export type CommandType = CommandGroupType | "wait" | "named" | "none";
@@ -166,3 +167,20 @@ export const CommandStore = types
   }));
 
 export type ICommandStore = Instance<typeof CommandStore>;
+export function createCommandStore(
+  command: UnionCommand,
+  vars: IVariables
+): ICommandStore {
+  return CommandStore.create({
+    type: command?.type ?? "none",
+    name: commandIsNamed(command) ? command.data.name : "",
+    commands: commandIsGroup(command)
+      ? command.data.commands.map((c) => createCommandStore(c, vars))
+      : [],
+    time: vars.createExpression(
+      commandIsWait(command) ? command.data.waitTime : 0,
+      "Time"
+    ),
+    uuid: crypto.randomUUID()
+  });
+}

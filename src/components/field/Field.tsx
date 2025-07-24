@@ -12,7 +12,7 @@ import { Box, CircularProgress, IconButton, Tooltip } from "@mui/material";
 import { IConstraintStore } from "../../document/ConstraintStore";
 import { IEventMarkerStore } from "../../document/EventMarkerStore";
 import { IHolonomicWaypointStore } from "../../document/HolonomicWaypointStore";
-import { Commands } from "../../document/tauriCommands";
+import { ServerCommands } from "../../document/tauriCommands";
 import ConstraintsConfigPanel from "../config/ConstraintsConfigPanel";
 import ViewOptionsPanel from "../config/ViewOptionsPanel";
 import WaypointVisibilityPanel from "../config/WaypointVisibilityPanel";
@@ -123,7 +123,7 @@ export class Field extends Component<Props, State> {
                 }
               }}
               onClick={(_event) => {
-                Commands.cancel(
+                ServerCommands.cancel(
                   activePath.uuid
                     .split("")
                     .reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0)

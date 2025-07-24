@@ -38,7 +38,7 @@ export default class AppPanel {
         enableScripts: true,
 
         // And restrict the webview to only loading content from our extension's `media` directory.
-        localResourceRoots: [vscode.Uri.joinPath(extensionUri, "media")],
+        localResourceRoots: [vscode.Uri.joinPath(extensionUri, "media")]
       }
     );
 
@@ -164,7 +164,7 @@ export default class AppPanel {
 				<title>App Panel</title>
 			</head>
 			<body>
-				
+
 				<h1>${EXT_NAME} BY ${EXT_AUTHOR}</h1>
         <input />
         <button>Hey</button>
