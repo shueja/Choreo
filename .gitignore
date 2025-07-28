@@ -54,4 +54,6 @@ CMakeUserPresets.json
 build/
 cli/
 test-tmp*/
+apps/**/out/*
 web/**/out/*
+packages/**/out/*

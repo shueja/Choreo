@@ -3,26 +3,28 @@ import {
   createRobotConfigStore,
   EXPR_DEFAULTS,
   RobotConfigStore
-} from "packages/stores/RobotConfigStore";
-import { Variables } from "$src/document/ExpressionStore";
+} from "@choreo/stores/RobotConfigStore";
+import { VariablesStore } from "@choreo/stores/VariablesStore";
 import { Instance } from "mobx-state-tree";
-import {
-  Project,
-  PROJECT_SCHEMA_VERSION
-} from "@choreo/document";
+
 import { createContext } from "react";
+import {Project} from "@choreo/document/Project";
+import { PROJECT_SCHEMA_VERSION } from "@choreo/document/version/ProjectSchemaVersion";
+import {ISampleType} from "@choreo/stores/SampleType"
+import { SampleType } from "@choreo/document/sample/SampleType";
 
 const StateStore = types
   .model("ChorViewerState", {
     config: RobotConfigStore,
-    variables: Variables
+    variables: VariablesStore,
+    type: ISampleType
   })
   .views((self) => ({
     get serialize(): Project {
       return {
         config: self.config.serialize,
         name: "",
-        type: "Swerve",
+        type: self.type,
         version: PROJECT_SCHEMA_VERSION,
         variables: self.variables.serialize
       };
@@ -32,6 +34,10 @@ const StateStore = types
     deserialize(ser: Project) {
       self.variables.deserialize(ser.variables);
       self.config.deserialize(ser.config);
+      self.type = ser.type;
+    },
+    setType(type: SampleType) {
+      self.type = type;
     }
   }));
 
@@ -39,9 +45,10 @@ export type IStateStore = Instance<typeof StateStore>;
 export const StateStoreContext = createContext<null | IStateStore>(null);
 export const StateStoreProvider = StateStoreContext.Provider;
 export const createStateStore = () => {
-  const variables = Variables.create({ expressions: {}, poses: {} });
+  const variables = VariablesStore.create({ expressions: {}, poses: {} });
   return StateStore.create({
     config: createRobotConfigStore(EXPR_DEFAULTS, variables),
-    variables
+    variables,
+    type: "Swerve"
   });
 };

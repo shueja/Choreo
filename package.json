@@ -27,9 +27,9 @@
     "build-cli": "cargo build --release -p choreo-cli",
     "tauri": "tauri",
     "server": "cargo run --bin choreo-server",
-    "devExtension": "vite --config ./web/vscode-chor/vite.config.ts",
-    "compileExt": "vite build --config ./web/extension/vite.config.ts && vite build --config ./web/vscode-chor/vite.config.ts",
-    "watchExt": "concurrently \"vite build --watch --config ./web/vscode-chor/vite.config.ts\" \"vite build --watch --config ./web/vscode-traj/vite.config.ts\" \"vite build --watch --config ./web/extension/vite.config.ts\""
+    "devExtension": "vite --config ./apps/ext_project/vite.config.ts",
+    "compileExt": "vite build --config ./apps/ext_core/vite.config.ts && vite build --config ./apps/ext_project/vite.config.ts",
+    "watchExt": "concurrently \"vite build --watch --config ./apps/ext_project/vite.config.ts\" \"vite build --watch --config ./apps/ext_trajectory/vite.config.ts\" \"vite build --watch --config ./apps/ext_core/vite.config.ts\""
   },
   "dependencies": {
     "@emotion/styled": "^11.14.0",

@@ -1,0 +1,6 @@
+{
+    "name": "@choreo/document",
+    "devDependencies": {
+        "typescript": "^5.8.3"
+    }
+}

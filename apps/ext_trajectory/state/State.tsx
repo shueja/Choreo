@@ -3,26 +3,23 @@ import {
   createRobotConfigStore,
   EXPR_DEFAULTS,
   RobotConfigStore
-} from "packages/stores/RobotConfigStore";
-import { Variables } from "$src/document/ExpressionStore";
+} from "@choreo/stores/RobotConfigStore";
+import { VariablesStore } from "@choreo/stores/VariablesStore";
 import { Instance } from "mobx-state-tree";
 import {
-  Project,
-  PROJECT_SCHEMA_VERSION,
-  Trajectory
-} from "@choreo/document";
+  Project
+} from "@choreo/document/Project";
 import { createContext } from "react";
 import {
-  createPathStore,
-  HolonomicPathStore
-} from "$src/document/path/HolonomicPathStore";
+  PathStore
+} from "@choreo/stores/path/PathStore";
 
 const StateStore = types
   .model("ChorViewerState", {
     config: RobotConfigStore,
-    variables: Variables,
+    variables: VariablesStore,
     chorIsDefault: true,
-    path: HolonomicPathStore
+    path: PathStore
   })
   .views((self) => ({
     // get serialize() : Trajectory {
@@ -47,7 +44,7 @@ export type IStateStore = Instance<typeof StateStore>;
 export const StateStoreContext = createContext<null | IStateStore>(null);
 export const StateStoreProvider = StateStoreContext.Provider;
 export const createStateStore = () => {
-  const variables = Variables.create({ expressions: {}, poses: {} });
+  const variables = VariablesStore.create({ expressions: {}, poses: {} });
   return StateStore.create({
     config: createRobotConfigStore(EXPR_DEFAULTS, variables),
     variables,

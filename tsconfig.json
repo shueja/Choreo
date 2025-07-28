@@ -18,8 +18,8 @@
     "baseUrl": ".",
     "paths": {
       "$src/*": ["src/*"]
-    }
+    },
   },
-  "include": ["src", "web", "*.d.ts"],
+  "include": ["src", "web", "*.d.ts", "apps/standalone/assets", "apps/standalone/components", "apps/standalone/document", "apps/standalone/util", "apps/standalone/App.tsx", "apps/standalone/AppMenu.tsx", "apps/standalone/Body.tsx", "apps/standalone/vite-env.d.ts", "packages/icons/Angle.tsx", "packages/icons/EventMarker.tsx", "packages/icons/GenerateInProgress.tsx", "packages/icons/IconInProgress.tsx", "packages/icons/InitialGuessPoint.tsx", "packages/icons/KeepInLane.tsx", "packages/icons/Mass.tsx", "packages/icons/MoI.tsx", "packages/icons/SaveInProgress.tsx", "packages/icons/Torque.tsx", "packages/icons/Waypoint.tsx", "apps/standalone/document", "apps/standalone/tsconfig.json", "apps/standalone/tsconfig.node.json", "packages/stores/RobotConfigStore.ts", "packages/stores/PathListStore.ts", "packages/math/UnitConversions.ts", "packages/math/MathUtil.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

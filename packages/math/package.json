@@ -1,0 +1,7 @@
+{
+    "name": "@choreo/math",
+    "dependencies": {
+        "@choreo/document": "workspace:*",
+        "mathjs": "^14.4.0"
+    }
+}
