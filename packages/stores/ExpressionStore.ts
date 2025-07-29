@@ -5,6 +5,7 @@ import { Instance, types } from "mobx-state-tree";
 import DimensionUnits from "@choreo/math/DimensionUnits";
 import { addUnitToExpression, math } from "@choreo/math/math";
 import { Expr, ExprOrNumber, isExpr } from "@choreo/document/math/Expr";
+import { VariablesScope, VariablesScopeGetter } from "@choreo/math/VariablesScope";
 
 export type Evaluated = MathType | null | undefined;
 type Evaluator = (arg: MathNode) => Evaluated;
@@ -193,7 +194,7 @@ export const ExpressionStore = types
         setDimension(newDefault: DimensionName) {
             self.dimension = newDefault;
         },
-        setScopeGetter(getter: () => Map<string, any>) {
+        setScopeGetter(getter: VariablesScopeGetter) {
             self.getScope = getter;
         },
         set(newNode: MathNode | number) {
@@ -224,7 +225,7 @@ export const ExpressionStore = types
         evaluator(node: MathNode): MathType | undefined {
             try {
                 // TODO investigate whether this should be untracked
-                const scope: Map<string, any> =
+                const scope: VariablesScope =
                     self.getScope() ??
                     ((() => {
                         console.error("Evaluating without variables!");
@@ -361,7 +362,7 @@ export const ExpressionStore = types
         };
     });
 export type IExpressionStore = Instance<typeof ExpressionStore>;
-export function createExpressionStore(expr: string | Expr | number, dimension: DimensionName, getScope: () => Map<string, any>): IExpressionStore {
+export function createExpressionStore(expr: string | Expr | number, dimension: DimensionName, getScope: VariablesScopeGetter): IExpressionStore {
     let mathNode: MathNode = (() => {
         if (typeof expr === "number") {
             if (dimension === "Number") {

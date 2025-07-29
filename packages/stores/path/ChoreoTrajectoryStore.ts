@@ -99,3 +99,12 @@ export const ChoreoTrajectoryStore = types
   }));
 
 export type IChoreoTrajectoryStore = Instance<typeof ChoreoTrajectoryStore>;
+export function createTrajectoryStore() : IChoreoTrajectoryStore {
+  return ChoreoTrajectoryStore.create({
+            sampleType: "Swerve",
+            waypoints: [],
+            samples: [],
+            splits: []
+          });
+
+}

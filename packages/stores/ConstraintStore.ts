@@ -1,5 +1,6 @@
 import { Instance, getEnv, getParent, isAlive, types } from "mobx-state-tree";
 import {
+  constraintDataConstructors as createConstraintDataStore,
   ConstraintDataConstructors,
   ConstraintDataObjects,
   IConstraintDataStore
@@ -9,6 +10,7 @@ import { ConstraintKey, DataMap } from "@choreo/document/constraint/ConstraintDe
 import { findUUIDIndex, getByWaypointID } from "./path/utils";
 import { IVariables } from "./VariablesStore";
 import { IWaypointStore } from "./WaypointStore";
+import { VariablesScopeGetter } from "@choreo/math/VariablesScope";
 
 export const WaypointScope = types.union(
   types.literal("first"),
@@ -115,26 +117,22 @@ export const ConstraintStore = types
     }
   }));
 
-export function constraintStoreConstructor(
-  dataConstructors: ConstraintDataConstructors
-) {
-  return <K extends ConstraintKey>(
+export function createConstraintStore <K extends ConstraintKey>(
     type: K,
     data: Partial<DataMap[K]["props"]>,
     enabled: boolean,
-    vars: IVariables,
+    vars: VariablesScopeGetter,
     from: IWaypointScope,
     to?: IWaypointScope
-  ): IConstraintStore => {
+  ): IConstraintStore {
     const store = ConstraintStore.create({
       from,
       to,
       uuid: crypto.randomUUID(),
-      //@ts-expect-error more constraint stuff not quite working
-      data: dataConstructors[type](data, vars),
+      //@ts-expect-error
+      data: createConstraintDataStore[type](data, vars),
       enabled
     });
     store.data.deserPartial(data);
     return store;
   };
-}

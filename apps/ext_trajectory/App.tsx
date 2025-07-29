@@ -1,61 +1,102 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { observer } from "mobx-react";
 import { createStateStore, StateStoreProvider } from "./state/State";
-import { reaction } from "mobx";
-import { vscode } from "./main";
-
+import { reaction, untracked } from "mobx";
+import { vscode } from "./vscode";
+import "./App.css"
 import "@vscode-elements/elements/dist/vscode-tabs";
 import "@vscode-elements/elements/dist/vscode-tab-header";
 import "@vscode-elements/elements/dist/vscode-tab-panel";
-if (import.meta.env.DEV) {
-  await import("@vscode-elements/webview-playground");
-}
-function App() {
-  const State = createStateStore();
-  let reactingToBackendUpdate = false;
-  reaction(
-    () => State.path.serialize,
-    (traj) => {
-      console.log(traj);
-      if (!reactingToBackendUpdate) {
-        vscode.postMessage({
-          type: "updateTraj",
-          data: JSON.stringify(traj)
-        });
-      }
-    }
-  );
-  window.addEventListener("message", (event) => {
-    const message = event.data; // The JSON data our extension sent
+// if (import.meta.env.DEV) {
+//   await import("@vscode-elements/webview-playground");
+// }
+import { configure } from "mobx"
 
-    switch (message.type) {
-      case "updateChor":
-      case "initChor":
-        reactingToBackendUpdate = true;
-        State.deserializeProject(JSON.parse(message.text));
-        setTimeout(() => (reactingToBackendUpdate = false), 0);
-        break;
-      case "updateTraj":
-      case "initTraj":
-        reactingToBackendUpdate = true;
-        State.path.deserialize(JSON.parse(message.text));
-        setTimeout(() => (reactingToBackendUpdate = false), 0);
-        break;
+configure({
+  disableErrorBoundaries: true
+})
+const State = createStateStore();
+      const previousState = vscode.getState();
+      if (previousState !== undefined) {
+        console.log("previousState", previousState);
+        State.reloadFromState(previousState);
+      } else {
+        vscode.postMessage({ type: "init-view" });
+        console.log("init-view sent");
+      }
+
+let reactingToBackendUpdate = false;
+window.addEventListener("message", (event) => {
+  const message = event.data; // The JSON data our extension sent
+
+  switch (message.type) {
+    case "updateChor":
+    case "initChor":
+      reactingToBackendUpdate = true;
+      State.deserializeProject(JSON.parse(message.text));
+      setTimeout(() => (reactingToBackendUpdate = false), 0);
+      break;
+    case "updateTraj":
+    case "initTraj":
+      console.log(message);
+      reactingToBackendUpdate = true;
+      State.path.deserialize(JSON.parse(message.text));
+      setTimeout(() => (reactingToBackendUpdate = false), 0);
+      break;
+  }
+
+});
+reaction(
+  () => {
+    try {
+      return State.path.serialize
+    } catch (e) {
+      console.error(e);
+      throw e;
     }
-  });
-  vscode.postMessage({ type: "init-view" });
+  },
+  (traj) => {
+    console.log(traj);
+    if (!reactingToBackendUpdate) {
+      vscode.postMessage({
+        type: "updateTraj",
+        data: JSON.stringify(traj)
+      });
+    }
+  }
+);
+reaction(
+  () => {
+    try {
+      return State.serialize
+    } catch (e) {
+      console.error(e);
+      throw e;
+    }
+  },
+  (traj) => {
+    console.log(traj);
+    if (!reactingToBackendUpdate) {
+      vscode.setState(traj)
+    }
+  }
+);
+function App() {
+
+  console.log("app rerender");
 
   return (
     <>
-      {import.meta.env.DEV ? <vscode-dev-toolbar></vscode-dev-toolbar> : null}
+      {/* {import.meta.env.DEV ? <vscode-dev-toolbar></vscode-dev-toolbar> : null} */}
       <StateStoreProvider value={State}>
+        {JSON.stringify(State.path.serialize)}
         {/* <vscode-tabs
           selected-index="0"
           style={{ overflow: "hidden", height: "100%" }}
         >
           <vscode-tab-header>Traj</vscode-tab-header>
           <vscode-tab-panel>
-            <pre>{JSON.stringify(State.path.serialize)}</pre>
+            
           </vscode-tab-panel>
           <vscode-tab-header>Variables</vscode-tab-header>
           <vscode-tab-panel></vscode-tab-panel>

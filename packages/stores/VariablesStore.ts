@@ -30,7 +30,7 @@ export const VariablesStore = types
       return out;
     },
     get scope() {
-      const vars: Map<string, any> = new Map();
+      const vars: VariablesScope = new Map();
       //vars.set("m", math.unit("m"));
       for (const [key, val] of self.expressions.entries()) {
         vars.set(key, val.asScope);

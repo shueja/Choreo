@@ -46,7 +46,7 @@ class InterpolatedRobot extends Component<Props, State> {
     return (
       <g
         transform={`translate(${pose1.x}, ${pose1.y}) rotate(${
-          (pose1.rot * 180) / Math.PI
+          (pose1.heading * 180) / Math.PI
         })`}
         style={{ pointerEvents: "none" }}
       >

@@ -68,7 +68,7 @@ export default class EditorProvider implements vscode.CustomTextEditorProvider {
             text: document.getText()
           });
           return;
-        case "updateTraj": //added in this route
+        case "saveTraj": //added in this route
           reactingToFrontendUpdate = true;
           this.updateTextDocument(document, data.data);
           reactingToFrontendUpdate = false;
@@ -93,32 +93,36 @@ export default class EditorProvider implements vscode.CustomTextEditorProvider {
         "index.js"
       )
     );
-    // const styleMainUri = webview.asWebviewUri(
-    //   vscode.Uri.joinPath(this._extensionUri, "out", "compiled/editor.css")
-    // );
+    const styleMainUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri,
+        "out",
+        "vscode-traj",
+        "assets",
+        "main.css")
+    );
 
     // Use a nonce to only allow a specific script to be run.
     const nonce = getNonce();
 
     return `<!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <!--
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <!--
                     Use a content security policy to only allow loading images from https or from our extension directory,
                     and only allow scripts that have a specific nonce.
         -->
         <meta http-equiv="Content-Security-Policy" content="img-src https: data:; style-src 'unsafe-inline' ${webview.cspSource}; script-src 'nonce-${nonce}'">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" href="${styleMainUri}"/>
 
-
-            </head>
+      </head>
       <body>
 
        <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
-        <div id="root" style="position:fixed;height:100%;width:100%;top:0;left:0;overflow:hidden"></div>
-            </body>
-            </html>`;
+        <div id="root"></div>
+      </body>
+      </html>`;
   }
   //
 

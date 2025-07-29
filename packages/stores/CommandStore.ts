@@ -10,6 +10,7 @@ import { moveItem } from "mobx-utils";
 import { Command, CommandGroupType, commandIsGroup, commandIsNamed, commandIsWait, CommandType, commandTypeIsGroup, UnionCommand } from "@choreo/document/Command";
 import {createExpressionStore, ExpressionStore} from "./ExpressionStore";
 import { Expr } from "@choreo/document/math/Expr";
+import { VariablesScopeGetter } from "@choreo/math/VariablesScope";
 
 
 // When adding new fields, consult
@@ -74,7 +75,7 @@ export const CommandStore = types
     }
   }))
   .actions((self) => ({
-    deserialize(ser: Command, getScope: ()=>Map<string,any>) {
+    deserialize(ser: Command, getScope: VariablesScopeGetter) {
       self.commands.clear();
       self.name = "";
       if (ser === undefined || ser === null) {
@@ -103,7 +104,7 @@ export const CommandStore = types
     setName(name: string) {
       self.name = name;
     },
-    addSubCommand(getScope: ()=>Map<string,any>) {
+    addSubCommand(getScope: VariablesScopeGetter) {
       // TODO add subcommand
       const newCommand = createCommandStore({
         type: "named",
@@ -133,7 +134,7 @@ export const CommandStore = types
 export type ICommandStore = Instance<typeof CommandStore>;
 export function createCommandStore(
   command: UnionCommand,
-  getScope: ()=>Map<string,any>
+  getScope: VariablesScopeGetter
 ): ICommandStore {
   return CommandStore.create({
     type: command?.type ?? "none",

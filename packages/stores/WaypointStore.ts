@@ -3,6 +3,7 @@ import { Expr } from "@choreo/document/math/Expr"
 import {Waypoint} from "@choreo/document/waypoint/Waypoint"
 //import { Env } from "./Env";
 import { createExpressionStore, ExpressionStore } from "./ExpressionStore";
+import { VariablesScopeGetter } from "@choreo/math/VariablesScope";
 
 export const DEFAULT_WAYPOINT: Waypoint<number> = {
   x: 0,
@@ -45,6 +46,18 @@ export const WaypointStore = types
           x: self.x.serialize,
           y: self.y.serialize,
           heading: self.heading.serialize,
+          fixTranslation: self.fixTranslation,
+          fixHeading: self.fixHeading,
+          intervals: self.intervals,
+          overrideIntervals: self.overrideIntervals,
+          split: self.split
+        };
+      },
+      get snapshot(): Waypoint<number> {
+          return {
+          x: self.x.value,
+          y: self.y.value,
+          heading: self.heading.value,
           fixTranslation: self.fixTranslation,
           fixHeading: self.fixHeading,
           intervals: self.intervals,
@@ -123,8 +136,8 @@ export const WaypointStore = types
 export type IWaypointStore = Instance<typeof WaypointStore>;
 export function createWaypointStore(
   waypoint: Waypoint<Expr>,
-  getScope: ()=>Map<string, any>
-) {
+  getScope: VariablesScopeGetter
+) :IWaypointStore {
   const w = WaypointStore.create({
     ...waypoint,
     x: createExpressionStore(waypoint.x, "Length", getScope),

@@ -20,13 +20,13 @@ export default defineConfig(async () => ({
 
     },
     terserOptions: {
-      compress: false,
-      mangle: false,
+      compress: true,
+      mangle: true,
     },
-    minify: false,
+    minify: true,
     // assetsDir: "./web/extension/out/vscode-chor",
 
-    outDir: "./apps/ext_trajectory/out/vscode-traj",
+    outDir: "./apps/ext_core/out/vscode-traj",
     emptyOutDir: false
   }
 }));

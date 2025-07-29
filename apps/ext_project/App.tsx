@@ -18,7 +18,12 @@ function App() {
   const State = createStateStore();
   let reactingToBackendUpdate = false;
   reaction(
-    () => State.serialize,
+    () => {
+      try{
+        return State.serialize} catch (e) {
+          console.error(e);
+          throw e;
+        }},
     (project) => {
       console.log(project);
       if (!reactingToBackendUpdate) {

@@ -11,6 +11,7 @@ import {
 } from "@choreo/document/Project";
 import { createContext } from "react";
 import {
+  createPathStore,
   PathStore
 } from "@choreo/stores/path/PathStore";
 
@@ -22,21 +23,30 @@ const StateStore = types
     path: PathStore
   })
   .views((self) => ({
-    // get serialize() : Trajectory {
-    //     return {
-    //         config: self.config.serialize,
-    //         name: "",
-    //         type: "Swerve",
-    //         version: PROJECT_SCHEMA_VERSION,
-    //         variables: self.variables.serialize
-    //     }
-    // }
+    get serialize() {
+      return  {
+        config: self.config.serialize,
+        variables: self.variables.serialize,
+        path: self.path.serialize,
+      }
+    }
   }))
   .actions((self) => ({
     deserializeProject(ser: Project) {
       self.variables.deserialize(ser.variables);
       self.config.deserialize(ser.config);
       self.chorIsDefault = false;
+    },
+    
+  }))
+  .actions((self)=>({
+    reloadFromState(state) {
+      self.config.deserialize(state.config);
+      self.variables.deserialize(state.variables);
+      self.path.deserialize(state.path);
+    },
+    afterCreate(){
+
     }
   }));
 
@@ -45,6 +55,7 @@ export const StateStoreContext = createContext<null | IStateStore>(null);
 export const StateStoreProvider = StateStoreContext.Provider;
 export const createStateStore = () => {
   const variables = VariablesStore.create({ expressions: {}, poses: {} });
+
   return StateStore.create({
     config: createRobotConfigStore(EXPR_DEFAULTS, variables),
     variables,

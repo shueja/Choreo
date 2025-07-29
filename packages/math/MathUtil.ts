@@ -1,7 +1,7 @@
-import {
-  DifferentialSample,
-  SwerveSample
-} from "../document/2025/DocumentTypes";
+import DifferentialSample from "packages/document/sample/DifferentialSample";
+import SwerveSample from "packages/document/sample/SwerveSample";
+
+
 
 /**
  * A port of WPILib's MathUtil.inputModulus
@@ -31,20 +31,21 @@ export function angleModulus(input: number) {
   return inputModulus(input, Math.PI, -Math.PI);
 }
 
-export type Pose = { x: number; y: number; rot: number };
-export function storeToPose(store: SwerveSample | DifferentialSample) {
-  return { x: store.x, y: store.y, rot: store.heading };
+export type Pose = { x: number; y: number; heading: number };
+// Mostly to strip out any extra
+export function toPose(store: Pose): Pose {
+  return { x: store.x, y: store.y, heading: store.heading };
 }
-export function interpolate(p1: Pose, p2: Pose, frac: number) {
-  const rot1 = p1.rot;
-  const rot2 = p2.rot;
+export function interpolate(p1: Pose, p2: Pose, frac: number):Pose {
+  const rot1 = p1.heading;
+  const rot2 = p2.heading;
 
   const shortest_angle =
     ((((rot2 - rot1) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
   return {
     x: p1.x + frac * (p2.x - p1.x),
     y: p1.y + frac * (p2.y - p1.y),
-    rot: p1.rot + frac * shortest_angle
+    heading: p1.heading + frac * shortest_angle
   };
 }
 export function sample(
@@ -55,10 +56,10 @@ export function sample(
     return undefined;
   }
   if (m_states.length == 1 || timeSeconds <= m_states[0].t) {
-    return storeToPose(m_states[0]);
+    return toPose(m_states[0]);
   }
   if (timeSeconds >= m_states[m_states.length - 1].t) {
-    return storeToPose(m_states[m_states.length - 1]);
+    return toPose(m_states[m_states.length - 1]);
   }
 
   // To get the element that we want, we will use a binary search algorithm
@@ -94,12 +95,12 @@ export function sample(
 
   // If the difference in states is negligible, then we are spot on!
   if (Math.abs(sample.t - prevSample.t) < 1e-9) {
-    return storeToPose(sample);
+    return toPose(sample);
   }
   // Interpolate between the two states for the state that we want.
   return interpolate(
-    storeToPose(prevSample),
-    storeToPose(sample),
+    toPose(prevSample),
+    toPose(sample),
     (timeSeconds - prevSample.t) / (sample.t - prevSample.t)
   );
 }

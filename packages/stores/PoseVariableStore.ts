@@ -2,6 +2,7 @@ import { Instance, types } from "mobx-state-tree";
 import { createExpressionStore, ExpressionStore } from "./ExpressionStore";
 import { PoseVariable } from "@choreo/document/math/Variable";
 import { Expr, ExprOrNumber } from "@choreo/document/math/Expr";
+import { VariablesScopeGetter } from "./VariablesStore";
 
 export const PoseVariableStore = types
   .model({
@@ -35,7 +36,7 @@ export const PoseVariableStore = types
     }
   }));
 export type IExprPose = Instance<typeof PoseVariableStore>;
-export function createPose(pose: PoseVariable<Expr> | PoseVariable<number>, getScope: ()=>Map<string, any>) {
+export function createPose(pose: PoseVariable<Expr> | PoseVariable<number>, getScope: VariablesScopeGetter) {
     return PoseVariableStore.create({
     x: createExpressionStore(pose.x, "Length", getScope),
     y: createExpressionStore(pose.y, "Length", getScope),

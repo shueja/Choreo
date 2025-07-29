@@ -5,8 +5,8 @@
 
 import { destroy, Instance, types} from "mobx-state-tree";
 import {moveItem} from "mobx-utils";
-import { IWaypointStore, WaypointStore } from "../WaypointStore";
-import { ConstraintStore, IConstraintStore, IWaypointScope } from "../ConstraintStore";
+import { createWaypointStore, DEFAULT_WAYPOINT, IWaypointStore, WaypointStore } from "../WaypointStore";
+import { ConstraintStore, createConstraintStore, IConstraintStore, IWaypointScope } from "../ConstraintStore";
 import { ExpressionStore } from "../ExpressionStore";
 import { Expr } from "@choreo/document/math/Expr";
 import { toWaypointIndex, toWaypointUUID } from "./utils";
@@ -14,6 +14,8 @@ import { ConstraintKey, DataMap } from "@choreo/document/constraint/ConstraintDe
 import { Waypoint } from "@choreo/document/waypoint/Waypoint";
 import { Params } from "@choreo/document/Params";
 import { Constraint } from "@choreo/document/constraint/Constraint";
+import { IVariables } from "../VariablesStore";
+import { VariablesScopeGetter } from "@choreo/math/VariablesScope";
 
 // to see all the places that change with every schema upgrade.
 export const ParamsStore = types
@@ -22,6 +24,9 @@ export const ParamsStore = types
     constraints: types.array(ConstraintStore),
     targetDt: ExpressionStore
   })
+  .volatile((self)=>({
+    getVariables: ()=>new Map<string, any>()
+  }))
   .views((self) => ({
     get nonGuessPoints() {
       return self.waypoints.filter((waypoint) => !(waypoint.type == 2));
@@ -51,6 +56,9 @@ export const ParamsStore = types
     }
   }))
   .actions((self) => ({
+    setGetVariables(getVariables: VariablesScopeGetter) {
+      self.getVariables = getVariables
+    },
     addConstraint<K extends ConstraintKey>(
       key: K,
       enabled: boolean,
@@ -58,9 +66,9 @@ export const ParamsStore = types
       to?: IWaypointScope,
       data: Partial<DataMap[K]["props"]> = {}
     ): Instance<typeof ConstraintStore> | undefined {
-    //   self.constraints.push(
-    //     getEnv<Env>(self).create.ConstraintStore(key, data, enabled, from, to)
-    //   );
+      self.constraints.push(
+        createConstraintStore(key, data, enabled, self.getVariables, from, to)
+      );
       const store = self.constraints[self.constraints.length - 1];
       store.data.deserPartial(data);
       return store;
@@ -74,16 +82,16 @@ export const ParamsStore = types
       moveItem(self.waypoints, startIndex, endIndex);
     },
     addWaypoint(waypoint?: Partial<Waypoint<Expr>>): IWaypointStore {
-    //   self.waypoints.push(
-    //     getEnv<Env>(self).create.WaypointStore(
-    //       Object.assign({ ...DEFAULT_WAYPOINT }, waypoint)
-    //     )
-    //   );
-    //   if (self.waypoints.length === 1) {
-    //     getEnv<Env>(self).select(self.waypoints[0]);
-    //   }
-      return self.waypoints[self.waypoints.length - 1];
-    },
+        const w =           createWaypointStore(
+            Object.assign({ ...DEFAULT_WAYPOINT }, waypoint),
+            self.getVariables
+          )
+        self.waypoints.push(
+w
+        );
+
+        return w;
+      },
     deleteWaypoint(id: number | string) {
       let index = 0;
       if (typeof id === "string") {
@@ -139,21 +147,9 @@ export const ParamsStore = types
             // deleted start? move new start forward till first constrainable waypoint
             if (deletedIndex == startIndex && firstIsUUID) {
               startIndex++;
-              // while (startIndex < endIndex) {
-              //   startIndex++;
-              //   // if (self.waypoints[startIndex].isConstrainable()) {
-              //   //   break;
-              //   // }
-              // }
             } else if (deletedIndex == endIndex && secondIsUUID) {
               endIndex--;
               // deleted end? move new end backward till first constrainable waypoint
-              // while (startIndex < endIndex) {
-              //   endIndex--;
-              //   if (self.waypoints[endIndex].isConstrainable()) {
-              //     break;
-              //   }
-              // }
             }
             // if we shrunk to a single point and the constraint can't be wpt scope, delete constraint
             if (
@@ -233,4 +229,14 @@ export const ParamsStore = types
     }
   }));
 
-export type IChoreoPathStore = Instance<typeof ParamsStore>;
+export type IParamsStore = Instance<typeof ParamsStore>;
+
+export function createParamsStore(variables: IVariables) {
+  return ParamsStore.create(
+         {
+            constraints: [],
+            waypoints: [],
+            targetDt: variables.createExpression("0.05 s", "Time")
+          }
+  );
+}

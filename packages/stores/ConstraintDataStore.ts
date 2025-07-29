@@ -19,12 +19,14 @@ import {
   consts
 } from "@choreo/document/constraint/ConstraintDefinitions";
 import {
+  createExpressionStore,
   ExpressionStore,
   IExpressionStore
 } from "./ExpressionStore";
 import {
     IVariables
 } from "./VariablesStore";
+import { VariablesScopeGetter } from "@choreo/math/VariablesScope";
 
 /**
  * Evaluates to ExpressionStore for T extends Expr,
@@ -89,8 +91,8 @@ function createDataStore<
   let serialize: (self: any) => Partial<D["props"]> = (_self) => ({});
   let deserialize: (self: any, data: D["props"]) => void = (_self, _data) => {};
   let deserPartial: (self: any, data: Partial<D["props"]>) => void = (
-    self,
-    data
+    _self,
+    _data
   ) => {};
   // Iterate through each property. based on the type of its default value, add the correct infrastructure
   Object.keys(def.properties).forEach((k) => {
@@ -200,10 +202,9 @@ export function defineCreateConstraintData<
   P extends D["props"]
 >(
   key: K,
-  def: ConstraintDefinition<K>,
-  vars: () => IVariables
-): (data: Partial<P>) => (typeof ConstraintDataObjects)[K]["Type"] {
-  return (data: Partial<P>) => {
+  def: ConstraintDefinition<K>
+): (data: Partial<P>, getVariables: VariablesScopeGetter) => (typeof ConstraintDataObjects)[K]["Type"] {
+  return (data, getVariables) => {
     const snapshot: any = {};
     // Create the default values for expression properties
     Object.keys(def.properties).forEach((key) => {
@@ -213,9 +214,10 @@ export function defineCreateConstraintData<
         ];
       if (isExpr(prop.defaultVal)) {
         const exprProp = prop as ConstraintPropertyDefinition<Expr>;
-        snapshot[key as keyof P] = vars().createExpression(
+        snapshot[key as keyof P] = createExpressionStore(
           exprProp.defaultVal,
-          exprProp!.dimension
+          exprProp!.dimension,
+          getVariables
         );
       }
       // defaults for primitives are set in the store definition
@@ -229,24 +231,24 @@ export function defineCreateConstraintData<
 const keys = Object.keys(ConstraintDefinitions) as ConstraintKey[];
 export type ConstraintDataConstructor<K extends ConstraintKey> = (
   data: Partial<DataMap[K]["props"]>,
-  vars: IVariables
+  vars: VariablesScopeGetter
 ) => IConstraintDataStore<K>;
 
 export type ConstraintDataConstructors = {
   [key in ConstraintKey]: ConstraintDataConstructor<key>;
 };
-export const constraintDataConstructors = (vars: () => IVariables) =>
+export const constraintDataConstructors =
   Object.fromEntries(
     keys.map(
       <K extends ConstraintKey>(key: K) =>
         [
           key,
-          defineCreateConstraintData(key, ConstraintDefinitions[key], vars)
+          defineCreateConstraintData(key, ConstraintDefinitions[key])
         ] as [
           K,
           (
             data: Partial<DataMap[K]["props"]>,
-            vars: IVariables
+            vars: VariablesScopeGetter
           ) => (typeof ConstraintDataObjects)[K]["Type"]
         ]
     )
