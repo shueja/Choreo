@@ -1,0 +1,218 @@
+import { Expr } from "@choreo/document/math/Expr";
+import { Project } from "@choreo/document/Project";
+import { RobotConfig } from "@choreo/document/RobotConfig";
+import { Trajectory } from "@choreo/document/Trajectory";
+import { invoke } from "@tauri-apps/api/core";
+
+export type ChoreoError = { type: string; content: string };
+export type ChoreoResult<T> = T | ChoreoError;
+const BACKEND = (route: string) => `http://127.0.0.1:8080/${route}`;
+
+export const SolverStatusSource = new EventSource(BACKEND("events"));
+SolverStatusSource.onmessage = function (event) {
+  console.log(event);
+};
+// SolverStatusSource.addEventListener("swerveTrajectory", (e)=>{
+//   console.log(JSON.parse(e.data))
+// })
+// SolverStatusSource.addEventListener("differentialTrajectory", (e)=>{
+//   console.log(JSON.parse(e.data))
+// })
+// SolverStatusSource.addEventListener("diagnosticText", (e)=>{
+//   console.log(e.data)
+// })
+enum Method {
+  GET = "GET",
+  POST = "POST"
+}
+async function command<T>(
+  cmd: string,
+  method: Method,
+  payload: object
+): Promise<T> {
+  const getOptions = {
+    method: Method.GET
+  };
+  const postOptions = {
+    method: Method.POST,
+    body: JSON.stringify(payload),
+    headers: {
+      "Content-Type": "application/json"
+    },
+    credentials: "include"
+  };
+  const options = Method.GET == method ? getOptions : postOptions;
+  console.log(cmd, options);
+  const result = await fetch(BACKEND(cmd), options);
+  if (!result.ok) {
+    throw result.statusText;
+  }
+  const json = (await result.json()) as T;
+  console.log(cmd, "reply: ", json);
+  return json;
+}
+
+export type OpenFilePayload = {
+  name: string;
+  dir: string;
+};
+
+export const TauriCommands = {
+  /**
+   * Opens the specified directory in the system's file explorer.
+   *
+   * @param path The path of the directory to open.
+   * @returns `void`
+   */
+  openInExplorer: (path: string) => {},//invoke<void>("open_in_explorer", { path }),
+
+  /**
+   * Opens a file dialog for the user to select a file to open, only permits `.chor` files.
+   *
+   * @returns The path of the file that the user selected, or `null` if the user canceled the dialog.
+   */
+  openProjectDialog: () => null,//invoke<OpenFilePayload>("open_project_dialog"),
+
+  /**
+   * Sets an application-wide directory path that will be used as the root for all file operations.
+   *
+   * @param dir The directory path to set as the root.
+   * @returns `void`
+   */
+  setDeployRoot: (dir: string) => {
+    //return invoke<void>("set_deploy_root", { dir });
+  },
+
+  /**
+   * Gets the application-wide directory path that is used as the root for all file operations.
+   *
+   * @returns The directory path that is set as the root.
+   */
+  getDeployRoot: () => invoke<string>("get_deploy_root"),
+  /**
+   * Reads the `Project` with the specified name from the deploy root directory.
+   *
+   * @param name The name of the `Project` to read without the `.chor` extension.
+   * @returns The `Project` that was read.
+   */
+  readProject: (name: string) => invoke<Project>("read_project", { name }),
+  /**
+   * Writes the specified `Project` to the deploy root directory.
+   *
+   * @param project The `Project` to write.
+   * @returns a `ChoreoResult<void>`
+   */
+  writeProject: (project: Project) =>
+    invoke<ChoreoResult<void>>("write_project", { project }),
+  /**
+   * Reads the `Trajectory` with the specified name from the deploy root directory.
+   *
+   * @param name The name of the `Trajectory` to read without the `.traj` extension.
+   * @returns The `Trajectory` that was read.
+   */
+  readTrajectory: (name: string) =>
+    invoke<Trajectory>("read_trajectory", { name }),
+  /**
+   * Scans the deploy root directory for all of the `Trajectory` files and returns them.
+   *
+   * @returns All of the `Trajectory` files in the deploy root directory.
+   */
+  readAllTrajectory: () => invoke<Trajectory[]>("read_all_trajectory"),
+  /**
+   * Writes the specified `Trajectory` to the deploy root directory.
+   *
+   * @param trajectory The `Trajectory` to write.
+   * @returns a `ChoreoResult<void>`
+   */
+  writeTrajectory: (trajectory: Trajectory) =>
+    invoke<ChoreoResult<void>>("write_trajectory", { trajectory }),
+  /**
+   * Renames the specified `Trajectory` to the specified name.
+   *
+   * @param oldTrajectory The `Trajectory` to rename.
+   * @param newName The new name for the `Trajectory`.
+   * @returns `void`
+   */
+  renameTrajectory: (oldTrajectory: Trajectory, newName: string) =>
+    invoke<void>("rename_trajectory", { oldTrajectory, newName }),
+  /**
+   * Deletes the specified `Trajectory` from the deploy root directory.
+   *
+   * @param trajectory The `Trajectory` to delete.
+   * @returns `void`
+   */
+  deleteTrajectory: (trajectory: Trajectory) =>
+    invoke<void>("delete_trajectory", { trajectory }),
+  /**
+   * If the application was opened via CLI and a file was specified, this will return the path of that file.
+   *
+   * @returns The path of the file that was opened via CLI, or `null` if no file was specified.
+   */
+  requestedProject: () => invoke<OpenFilePayload | null>("requested_file"),
+
+  /**
+   * Opens the platforms file explorer to the directory holding a newly generated diagnostic zip file.
+   */
+  openDiagnosticZip: (project: Project, trajectories: Trajectory[]) =>
+    invoke<void>("open_diagnostic_file", { project, trajectories })
+};
+
+export const VsCodeCommands = {
+  openInExplorer: () => console.error("openInExplorer TODO"),
+  openProjectDialog: () => console.error("openProjectDialog TODO"),
+  setDeployRoot: () => console.error("setDeployRoot TODO"),
+  getDeployRoot: () => console.error("getDeployRoot TODO")
+};
+
+export const ServerCommands = {
+  guessIntervals: (config: RobotConfig<Expr>, trajectory: Trajectory) =>
+    command<number[]>("guess_control_interval_counts", Method.POST, {
+      config,
+      trajectory
+    }),
+  /**
+   * Generates a `Trajectory` using the specified `Project` and `Trajectory`.
+   *
+   * @param project The `Project` to use for generation.
+   * @param trajectory The `Trajectory` to use for generation.
+   * @param handle The handle of the generator to use.
+   *
+   * @returns The generated `Trajectory`.
+   */
+  generate: (project: Project, trajectory: Trajectory, handle: number) =>
+    command<Trajectory>("generate_remote", Method.POST, {
+      project,
+      trajectory,
+      handle
+    }),
+
+  /**
+   * @returns The default `Project` that is loaded when a new `Project` is created.
+   */
+  defaultProject: () => {
+    return command("default_project", Method.GET, {}).then((r) => {
+      console.log(r);
+      return r;
+    });
+  },
+  /**
+   * Cancels all of the generators that are currently running.
+   *
+   * @returns `void`
+   */
+  cancelAll: () => console.log("cancelAll not implemented"),
+  /**
+   * Cancels the generator with the specified handle.
+   *
+   * @param handle The handle of the generator to cancel.
+   * @returns `void`
+   */
+  cancel: (handle: number) => console.log("cancel not implemented"),
+
+  /**
+   * Returns if the `Trajectory` parameters and snapshot are equivalent.
+   * @param trajectory The `Trajectory` to check
+   * @returns true if the parameters and snapshots are equivalent, false if not.
+   */
+  trajectoryUpToDate: (trajectory: Trajectory) => Promise.resolve(false)
+};

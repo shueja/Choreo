@@ -1,6 +1,6 @@
 {
-  "name": "vscode-svelte-template",
-  "displayName": "vscode-svelte-template",
+  "name": "choreo-vscode",
+  "displayName": "Choreo VSCode",
   "description": "",
   "version": "0.0.1",
   "engines": {
@@ -12,6 +12,44 @@
   "main": "./out/extension.js",
   "type": "module",
   "contributes": {
+    "commands": [
+      {
+        "command": "choreo-paths.generate",
+        "title": "Generate"
+      }
+    ],
+    "menus": {
+      "view/item/context": [
+      {
+        "command": "choreo-paths.generate",
+        "when": "view == choreo-paths && viewItem == path",
+        "group": "inline"
+      }
+    ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "icon": "",
+          "id": "choreo-activitybar",
+          "title": "Choreo"
+        }
+      ]
+    },
+    "views": {
+      "choreo-activitybar": [
+        {
+          "id": "choreo-robot-config",
+          "name": "Robot Config",
+          "icon": ""
+        },
+        {
+          "id": "choreo-paths",
+          "name": "Paths",
+          "icon": ""
+        }
+      ]
+    },
     "customEditors": [
       {
         "viewType": "choreo-traj-editor",

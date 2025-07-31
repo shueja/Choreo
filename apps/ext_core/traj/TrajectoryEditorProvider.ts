@@ -118,8 +118,8 @@ export default class EditorProvider implements vscode.CustomTextEditorProvider {
 
       </head>
       <body>
-
-       <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
+        ${nonce}
+       <!--<script nonce="${nonce}" type="module" src="${scriptUri}"></script>-->
         <div id="root"></div>
       </body>
       </html>`;

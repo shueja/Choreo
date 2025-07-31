@@ -3,7 +3,7 @@ import AppPanel from "./AppPanel";
 import SidebarProvider from "./SidebarProvider";
 import ProjectEditorProvider from "./chor/ProjectEditorProvider";
 import TrajectoryEditorProvider from "./traj/TrajectoryEditorProvider";
-
+import {PathListProvider} from "./paths/PathListProvider";
 export function activate(context: vscode.ExtensionContext) {
   //const sidebarProvider = new SidebarProvider(context.extensionUri);
   const chorEditorProvider = new ProjectEditorProvider(
@@ -25,7 +25,11 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerCustomEditorProvider(
       "choreo-traj-editor",
       trajEditorProvider
-    )
+    ),
+    vscode.window.createTreeView('choreo-paths', {
+      treeDataProvider: new PathListProvider(vscode.workspace.workspaceFolders![0]!.uri)
+    }),
+    vscode.commands.registerCommand("choreo-paths.generate", (name:string)=>{vscode.window.showInformationMessage(name)})
   );
 
   // context.subscriptions.push(
