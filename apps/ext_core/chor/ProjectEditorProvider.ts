@@ -17,7 +17,6 @@ export default class EditorProvider implements vscode.CustomTextEditorProvider {
     webviewPanel: vscode.WebviewPanel
   ) {
     this._view = webviewPanel;
-
     webviewPanel.webview.options = {
       // Allow scripts in the webview
       enableScripts: true,

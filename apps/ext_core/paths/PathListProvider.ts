@@ -23,24 +23,24 @@ export class PathListProvider implements vscode.TreeDataProvider<Dependency> {
 		}
 
 		const packageJsonPath = vscode.Uri.joinPath(this.workspaceRoot, 'src/main/deploy/choreo');
-				return this.getDepsInPackageJson(packageJsonPath);
+				return this.getPathsInProject(packageJsonPath);
 
 	}
 
 	/**
 	 * Given the path to package.json, read all its dependencies and devDependencies.
 	 */
-	 private async getDepsInPackageJson(packageJsonPath: vscode.Uri): Promise<Dependency[]> {
+	 private async getPathsInProject(projectDirectory: vscode.Uri): Promise<Dependency[]> {
 		const workspaceRoot = this.workspaceRoot;
 		if (workspaceRoot) {
-			const files = await vscode.workspace.fs.readDirectory(packageJsonPath);
+			const files = await vscode.workspace.fs.readDirectory(projectDirectory);
             return files
                 .filter(f=>{
                     return f[1]==vscode.FileType.File && f[0].slice(-5) === ".traj"})
                 .map(entry=>new Dependency(
                     entry[0].slice(0, -5),
                     vscode.TreeItemCollapsibleState.None,
-                    vscode.Uri.joinPath(packageJsonPath, entry[0])));
+                    vscode.Uri.joinPath(projectDirectory, entry[0])));
 
 		} else {
 			return [];

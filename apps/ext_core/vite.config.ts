@@ -4,6 +4,7 @@ import path from "path";
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
+  base: "./",
   build: {
     minify:false,
     lib: {
