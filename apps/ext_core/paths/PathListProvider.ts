@@ -59,7 +59,7 @@ export class Dependency extends vscode.TreeItem {
 		super(label, collapsibleState);
         this.command = {
                 
-                command: 'vscode.open',
+                command: 'choreo-paths.open',
                 title: 'gen',
                 arguments: [itemUri]
             
@@ -67,4 +67,4 @@ export class Dependency extends vscode.TreeItem {
 	}
 
 	contextValue = 'path';
-}
+} 

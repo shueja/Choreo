@@ -4,6 +4,7 @@ import { createStateStore, StateStoreProvider } from "./state/State";
 import { reaction, untracked } from "mobx";
 import { vscode } from "./vscode";
 import "./App.css"
+import { ChoreoThemeProvider } from "@choreo/components/theme/ChoreoThemeProvider"
 import "@vscode-elements/elements/dist/vscode-tabs";
 import "@vscode-elements/elements/dist/vscode-tab-header";
 import "@vscode-elements/elements/dist/vscode-tab-panel";
@@ -11,24 +12,28 @@ import "@vscode-elements/elements/dist/vscode-tab-panel";
 //   await import("@vscode-elements/webview-playground");
 // }
 import { configure } from "mobx"
+import Sidebar from "./components/sidebar/Sidebar";
+import Navbar from "./components/navbar/Navbar";
+import PathAnimationPanel from "@choreo/components/field/PathAnimationPanel";
+import Field from "@choreo/components/field/Field";
 
 configure({
   disableErrorBoundaries: true
 })
 const State = createStateStore();
-      const previousState = vscode.getState();
-      if (previousState !== undefined) {
-        console.log("previousState", previousState);
-        State.reloadFromState(previousState);
-      } else {
-        vscode.postMessage({ type: "init-view" });
-        console.log("init-view sent");
-      }
+const previousState = vscode.getState();
+if (previousState !== undefined) {
+  console.log("previousState", previousState);
+  State.reloadFromState(previousState);
+} else {
+  vscode.postMessage({ type: "init-view" });
+  console.log("init-view sent");
+}
 
 let reactingToBackendUpdate = false;
 window.addEventListener("message", (event) => {
   const message = event.data; // The JSON data our extension sent
-
+  console.log(JSON.stringify(event));
   switch (message.type) {
     case "updateChor":
     case "initChor":
@@ -38,7 +43,7 @@ window.addEventListener("message", (event) => {
       break;
     case "updateTraj":
     case "initTraj":
-      console.log(message);
+      console.error(message);
       reactingToBackendUpdate = true;
       State.path.deserialize(JSON.parse(message.text));
       setTimeout(() => (reactingToBackendUpdate = false), 0);
@@ -87,21 +92,41 @@ function App() {
 
   return (
     <>
-      {/* {import.meta.env.DEV ? <vscode-dev-toolbar></vscode-dev-toolbar> : null} */}
-      <StateStoreProvider value={State}>
-        {JSON.stringify(State.path.serialize)}
-        {/* <vscode-tabs
-          selected-index="0"
-          style={{ overflow: "hidden", height: "100%" }}
-        >
-          <vscode-tab-header>Traj</vscode-tab-header>
-          <vscode-tab-panel>
-            
-          </vscode-tab-panel>
-          <vscode-tab-header>Variables</vscode-tab-header>
-          <vscode-tab-panel></vscode-tab-panel>
-        </vscode-tabs> */}
-      </StateStoreProvider>
+      <ChoreoThemeProvider>
+        {/* {import.meta.env.DEV ? <vscode-dev-toolbar></vscode-dev-toolbar> : null} */}
+        <StateStoreProvider value={State}>
+          <div className="App">
+            <div className="Page">
+              <span
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  flexGrow: 1,
+                  width: "100%"
+                }}
+              >
+                <Navbar></Navbar>
+                <span
+                  style={{
+                    display: "flex",
+                    flexDirection: "row",
+                    flexGrow: 1,
+                    height: 0,
+                    width: "100%"
+                  }}
+                >
+                  <Sidebar path={State.path}></Sidebar>
+
+
+                  <Field doc={State}></Field>
+                </span>
+                <PathAnimationPanel setTimestamp={function (time: number): void {
+                  
+                } } timestamp={0} path={State.path}></PathAnimationPanel>
+              </span>
+            </div></div>
+        </StateStoreProvider>
+      </ChoreoThemeProvider>
     </>
   );
 }

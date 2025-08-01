@@ -1,25 +1,10 @@
 import * as vscode from "vscode";
 import { getNonce } from "../Utils";
 let currentPanel: vscode.WebviewPanel | undefined = undefined;
-export const getStartTrajectoryViewHandler = (context: vscode.ExtensionContext) => () => {
-      const columnToShowIn = vscode.window.activeTextEditor
-        ? vscode.window.activeTextEditor.viewColumn
-        : undefined;
 
-      if (currentPanel) {
-        // If we already have a panel, show it in the target column
-        currentPanel.reveal(columnToShowIn);
-      } else {
-        // Otherwise, create a new panel
-        currentPanel = vscode.window.createWebviewPanel(
-          'choreo-traj-view',
-          'Choreo',
-          columnToShowIn || vscode.ViewColumn.One,
-          {
-            retainContextWhenHidden: true
-          }
-        );
-        currentPanel.webview.html = getHtmlForWebview(currentPanel.webview, context);
+function addListenersToPanel(context: vscode.ExtensionContext, trajectoryUri: vscode.Uri) {
+  if (currentPanel === undefined) return;
+currentPanel.webview.html = getHtmlForWebview(currentPanel.webview, context);
 
         // Reset when the current panel is closed
         currentPanel.onDidDispose(
@@ -29,6 +14,71 @@ export const getStartTrajectoryViewHandler = (context: vscode.ExtensionContext) 
           null,
           context.subscriptions
         );
+        currentPanel.webview.onDidReceiveMessage(async (data: any) => {
+          if (currentPanel !== undefined){
+              switch (data.type) {
+                case "onInfo": {
+                  if (!data.value) {
+                    return;
+                  }
+                  vscode.window.showInformationMessage(data.value);
+                  break;
+                }
+                case "onError": {
+                  if (!data.value) {
+                    return;
+                  }
+                  vscode.window.showErrorMessage(data.value);
+                  break;
+                }
+                case "init-view": //added this route
+                  currentPanel.webview.postMessage({
+                    type: "initTraj",
+                    text: await vscode.workspace.openTextDocument(trajectoryUri).then((document) => {
+                    return document.getText();
+                    })
+                  });
+                  return;
+                // case "saveTraj": //added in this route
+                //   reactingToFrontendUpdate = true;
+                //   this.updateTextDocument(document, data.data);
+                //   reactingToFrontendUpdate = false;
+                //   return;
+              }}});
+}
+
+function sendToWebview(trajectoryUri: vscode.Uri): Thenable<void> {
+
+  return  vscode.workspace.openTextDocument(trajectoryUri).then((document) => {
+          console.log(document.getText());
+                          currentPanel?.webview.postMessage({
+          type: "initTraj",
+          text: document.getText()
+        });
+      });
+}
+export const getStartTrajectoryViewHandler = (context: vscode.ExtensionContext) => (name:vscode.Uri) => {
+      const columnToShowIn = vscode.window.activeTextEditor
+        ? vscode.window.activeTextEditor.viewColumn
+        : undefined;
+
+      if (currentPanel) {
+        // If we already have a panel, show it in the target column
+        currentPanel.reveal(columnToShowIn);
+        sendToWebview(name);
+
+      } else {
+        // Otherwise, create a new panel
+        currentPanel = vscode.window.createWebviewPanel(
+          'choreo-traj-view',
+          'Choreo',
+          columnToShowIn || vscode.ViewColumn.One,
+          {
+            retainContextWhenHidden: true,
+            enableScripts:true
+          }
+        );
+        addListenersToPanel(context, name);
       }}
     ;
 
@@ -73,7 +123,6 @@ function getHtmlForWebview(webview: vscode.Webview, context: vscode.ExtensionCon
   
         </head>
         <body>
-          ${nonce}
          <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
           <div id="root"></div>
         </body>

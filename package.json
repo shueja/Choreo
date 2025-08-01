@@ -29,7 +29,7 @@
     "server": "cargo run --bin choreo-server",
     "devExtension": "vite --config ./apps/ext_project/vite.config.ts",
     "compileExt": "vite build --config ./apps/ext_core/vite.config.ts && vite build --config ./apps/ext_project/vite.config.ts",
-    "watchExt": "concurrently \"vite build --watch --config ./apps/ext_project/vite.config.ts\" \"vite build --watch --config ./apps/ext_trajectory/vite.config.ts\" \"vite build --watch --config ./apps/ext_core/vite.config.ts\""
+    "watchExt": "concurrently \"vite build --watch --config ./apps/ext_project/vite.config.ts\" \"vite build --watch --config ./apps/ext_trajectory/vite.config.ts\" \"pnpm -C ./apps/ext_core run watch-web\""
   },
   "dependencies": {
     "@emotion/styled": "^11.14.0",
