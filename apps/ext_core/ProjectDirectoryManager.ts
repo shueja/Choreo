@@ -14,3 +14,4 @@ export async function checkForProjects(context: vscode.ExtensionContext): Promis
 
     //return (await vscode.workspace.findFiles("/src/main/deploy/choreo/*.chor"));
 }
+
