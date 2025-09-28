@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { getChor, getTrajsInProject } from '../ProjectDirectoryManager';
 
 export class PathListProvider implements vscode.TreeDataProvider<Dependency> {
 
@@ -22,38 +23,28 @@ export class PathListProvider implements vscode.TreeDataProvider<Dependency> {
 			return Promise.resolve([]);
 		}
 
-		const packageJsonPath = vscode.Uri.joinPath(this.workspaceRoot, 'src/main/deploy/choreo');
-				return this.getPathsInProject(packageJsonPath);
+		const projectDirectory = vscode.Uri.joinPath(this.workspaceRoot, 'src/main/deploy/choreo');
+				return this.getPathsInProject(projectDirectory);
 
 	}
-
-	/**
-	 * Given the path to package.json, read all its dependencies and devDependencies.
-	 */
 	 private async getPathsInProject(projectDirectory: vscode.Uri): Promise<Dependency[]> {
-		const workspaceRoot = this.workspaceRoot;
-		if (workspaceRoot) {
-			const files = await vscode.workspace.fs.readDirectory(projectDirectory);
-            return files
-                .filter(f=>{
-                    return f[1]==vscode.FileType.File && f[0].slice(-5) === ".traj"})
-                .map(entry=>new Dependency(
-                    entry[0].slice(0, -5),
+		return (await getTrajsInProject(projectDirectory))
+                .map(uri=>new Dependency(
+                    uri.toString().slice(0, -5),
                     vscode.TreeItemCollapsibleState.None,
-                    vscode.Uri.joinPath(projectDirectory, entry[0])));
-
-		} else {
-			return [];
-		}
+                    uri,
+				await getChor()));
 	}
 }
 
+// This object is passed to the handler for the "Generate" button on the 
 export class Dependency extends vscode.TreeItem {
 
 	constructor(
 		public readonly label: string,
 		public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly itemUri: vscode.Uri
+        public readonly itemUri: vscode.Uri,
+		public readonly chorUri: vscode.Uri
 
 	) {
 		super(label, collapsibleState);

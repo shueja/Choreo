@@ -21,10 +21,10 @@ configure({
   disableErrorBoundaries: true
 })
 const State = createStateStore();
-const previousState = vscode.getState();
-if (previousState !== undefined) {
-  console.log("previousState", previousState);
-  State.reloadFromState(previousState);
+const previousSerialize = vscode.getState();
+if (previousSerialize !== undefined) {
+  console.log("previousSerialize", previousSerialize);
+  State.reloadFromState(previousSerialize);
 } else {
   vscode.postMessage({ type: "init-view" });
   console.log("init-view sent");
