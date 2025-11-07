@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { getNonce } from "../Utils";
 let currentPanel: vscode.WebviewPanel | undefined = undefined;
 
-function addListenersToPanel(context: vscode.ExtensionContext, trajectoryUri: vscode.Uri) {
+function addListenersToPanel(context: vscode.ExtensionContext, trajectoryUri: vscode.Uri, chorUri: vscode.Uri) {
   if (currentPanel === undefined) return;
 currentPanel.webview.html = getHtmlForWebview(currentPanel.webview, context);
 
@@ -32,40 +32,48 @@ currentPanel.webview.html = getHtmlForWebview(currentPanel.webview, context);
                   break;
                 }
                 case "init-view": //added this route
-                  currentPanel.webview.postMessage({
-                    type: "initTraj",
-                    text: await vscode.workspace.openTextDocument(trajectoryUri).then((document) => {
-                    return document.getText();
-                    })
-                  });
+                  sendTrajectoryToWebview(trajectoryUri);
+                  sendChorToWebview(chorUri);
                   return;
-                // case "saveTraj": //added in this route
-                //   reactingToFrontendUpdate = true;
-                //   this.updateTextDocument(document, data.data);
-                //   reactingToFrontendUpdate = false;
-                //   return;
+                case "updateTraj":
+                  console.log(data);
+                  if (!data.data) {
+                    return;
+                  }
+                  vscode.workspace.fs.writeFile(trajectoryUri, new Uint8Array([...data.data].map((c) => c.charCodeAt(0))));
+                  return;
               }}});
 }
 
-function sendToWebview(trajectoryUri: vscode.Uri): Thenable<void> {
+function sendTrajectoryToWebview(trajectoryUri: vscode.Uri): Thenable<void> {
 
   return  vscode.workspace.openTextDocument(trajectoryUri).then((document) => {
-          console.log(document.getText());
                           currentPanel?.webview.postMessage({
           type: "initTraj",
           text: document.getText()
         });
       });
 }
-export const getStartTrajectoryViewHandler = (context: vscode.ExtensionContext) => (name:vscode.Uri) => {
+
+function sendChorToWebview(chorUri: vscode.Uri): Thenable<void> {
+
+  return  vscode.workspace.openTextDocument(chorUri).then((document) => {
+                          currentPanel?.webview.postMessage({
+          type: "initChor",
+          text: document.getText()
+        });
+      });
+}
+export const getStartTrajectoryViewHandler = (context: vscode.ExtensionContext) => (trajectoryUri:vscode.Uri, chorUri:vscode.Uri) => {
       const columnToShowIn = vscode.window.activeTextEditor
         ? vscode.window.activeTextEditor.viewColumn
         : undefined;
-
+      
       if (currentPanel) {
         // If we already have a panel, show it in the target column
         currentPanel.reveal(columnToShowIn);
-        sendToWebview(name);
+        sendTrajectoryToWebview(trajectoryUri);
+        sendChorToWebview(chorUri);
 
       } else {
         // Otherwise, create a new panel
@@ -78,7 +86,7 @@ export const getStartTrajectoryViewHandler = (context: vscode.ExtensionContext) 
             enableScripts:true
           }
         );
-        addListenersToPanel(context, name);
+        addListenersToPanel(context, trajectoryUri, chorUri);
       }}
     ;
 

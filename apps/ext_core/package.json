@@ -20,6 +20,10 @@
       {
         "command": "choreo-paths.open",
         "title": "Open"
+      },
+      {
+        "command": "choreo-paths.searchForProjects",
+        "title": "Scan for Projects"
       }
     ],
     "menus": {
@@ -29,12 +33,18 @@
           "when": "view == choreo-paths && viewItem == path",
           "group": "inline"
         }
+      ],
+      "view/title": [
+        {
+          "command": "choreo-paths.searchForProjects",
+          "group": "choreo-project-selector"
+        }
       ]
     },
     "viewsContainers": {
       "activitybar": [
         {
-          "icon": "",
+          "icon": "./icons/icon.svg",
           "id": "choreo-activitybar",
           "title": "Choreo"
         }
@@ -42,6 +52,11 @@
     },
     "views": {
       "choreo-activitybar": [
+        {
+          "id": "choreo-project-selector",
+          "name": "Projects",
+          "icon": ""
+        },
         {
           "id": "choreo-robot-config",
           "name": "Robot Config",

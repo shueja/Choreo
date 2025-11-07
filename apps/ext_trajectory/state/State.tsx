@@ -34,6 +34,7 @@ const StateStore = types
   .actions((self) => ({
     deserializeProject(ser: Project) {
       self.variables.deserialize(ser.variables);
+      console.log(ser.config.bumper)
       self.config.deserialize(ser.config);
       self.chorIsDefault = false;
     },

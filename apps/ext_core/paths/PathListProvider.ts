@@ -1,60 +1,64 @@
 import * as vscode from 'vscode';
-import { getChor, getTrajsInProject } from '../ProjectDirectoryManager';
+import { ProjectDirectory, ProjectDirectoryList } from '../ProjectDirectoryManager';
+// import { getChor, getTrajsInProject } from '../ProjectDirectoryManager';
 
-export class PathListProvider implements vscode.TreeDataProvider<Dependency> {
+export class PathListProvider implements vscode.TreeDataProvider<Item> {
 
-	private _onDidChangeTreeData: vscode.EventEmitter<Dependency | undefined | void> = new vscode.EventEmitter<Dependency | undefined | void>();
-	readonly onDidChangeTreeData: vscode.Event<Dependency | undefined | void> = this._onDidChangeTreeData.event;
+	private _onDidChangeTreeData: vscode.EventEmitter<Item | undefined | void> = new vscode.EventEmitter<Item | undefined | void>();
+	readonly onDidChangeTreeData: vscode.Event<Item | undefined | void> = this._onDidChangeTreeData.event;
 
-	constructor(private workspaceRoot: vscode.Uri | undefined) {
-	}
+	readonly disposeProjectListListener: vscode.Disposable;
+	
+		constructor(readonly projectDirectoryList: ProjectDirectoryList) {
+			this.disposeProjectListListener = projectDirectoryList.subscribeToChanges(()=>this.refresh());
+		}
+	
+		refresh(): void {
+			this._onDidChangeTreeData.fire();
+		}
 
-	refresh(): void {
-		this._onDidChangeTreeData.fire();
-	}
-
-	getTreeItem(element: Dependency): vscode.TreeItem {
+	getTreeItem(element: Item): vscode.TreeItem {
 		return element;
 	}
 
-	async getChildren(element?: Dependency):Promise<Dependency[]> {
-		if (!this.workspaceRoot) {
-			vscode.window.showInformationMessage('No dependency in empty workspace');
-			return Promise.resolve([]);
+	async getChildren(element?: Item):Promise<Item[]> {
+		if (element === undefined)
+			return this.projectDirectoryList.getProjects().map((dir : ProjectDirectory)=>
+				new Item(`${dir.workspaceName} (${dir.chorName})`, dir, undefined));
+		else {
+			return element.getChildren();
 		}
 
-		const projectDirectory = vscode.Uri.joinPath(this.workspaceRoot, 'src/main/deploy/choreo');
-				return this.getPathsInProject(projectDirectory);
 
-	}
-	 private async getPathsInProject(projectDirectory: vscode.Uri): Promise<Dependency[]> {
-		return (await getTrajsInProject(projectDirectory))
-                .map(uri=>new Dependency(
-                    uri.toString().slice(0, -5),
-                    vscode.TreeItemCollapsibleState.None,
-                    uri,
-				await getChor()));
 	}
 }
 
 // This object is passed to the handler for the "Generate" button on the 
-export class Dependency extends vscode.TreeItem {
+export class Item extends vscode.TreeItem {
 
 	constructor(
 		public readonly label: string,
-		public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly itemUri: vscode.Uri,
-		public readonly chorUri: vscode.Uri
-
+        public readonly projectDirectory : ProjectDirectory | undefined,
+		public readonly command: vscode.Command | undefined
 	) {
-		super(label, collapsibleState);
-        this.command = {
+		super(label, projectDirectory !== undefined ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
+	}
+
+	getChildren() {
+		if (this.projectDirectory !== undefined) {
+			let projectDirectory = this.projectDirectory;
+			return projectDirectory.trajectories.map((uri)=>{console.log(uri); return new Item(
+				uri.trajName, undefined, {
                 
-                command: 'choreo-paths.open',
+                command: 'vscode.open',
                 title: 'gen',
-                arguments: [itemUri]
+                arguments: [uri.uri(projectDirectory.directory), projectDirectory.chorUri]
             
-        }
+        		}
+			)})
+		} else {
+			return [];
+		}
 	}
 
 	contextValue = 'path';

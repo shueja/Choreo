@@ -81,9 +81,6 @@ reaction(
   },
   (traj) => {
     console.log(traj);
-    if (!reactingToBackendUpdate) {
-      vscode.setState(traj)
-    }
   }
 );
 function App() {

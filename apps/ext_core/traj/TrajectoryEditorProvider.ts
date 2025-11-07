@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { getNonce } from "../Utils";
 //import { readFileSync } from "fs";
-import path from "path";
 
 export default class EditorProvider implements vscode.CustomTextEditorProvider {
   _view?: vscode.WebviewPanel;
@@ -68,7 +67,7 @@ export default class EditorProvider implements vscode.CustomTextEditorProvider {
             text: document.getText()
           });
           return;
-        case "saveTraj": //added in this route
+        case "updateTraj": //added in this route
           reactingToFrontendUpdate = true;
           this.updateTextDocument(document, data.data);
           reactingToFrontendUpdate = false;
@@ -118,8 +117,8 @@ export default class EditorProvider implements vscode.CustomTextEditorProvider {
 
       </head>
       <body>
-        ${nonce}
-       <!--<script nonce="${nonce}" type="module" src="${scriptUri}"></script>-->
+
+       <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
         <div id="root"></div>
       </body>
       </html>`;
