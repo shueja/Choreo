@@ -42,6 +42,10 @@ import {
   isValidIdentifier,
   NameIssue
 } from "./path/NameIsIdentifier";
+import {
+  FIELD_LENGTH,
+  FIELD_WIDTH
+} from "../components/field/svg/fields/FieldDimensions";
 
 export const math = create(all, { predictable: true });
 
@@ -87,6 +91,18 @@ export const Units = {
 };
 // not sure why the alias above doesn't work
 math.createUnit("rpm", "1 RPM");
+// Any hardcoded variables to have in the expression parser
+const FIELD_X_UNIT = Unit.parse(`${FIELD_LENGTH} m`);
+const FIELD_Y_UNIT = Unit.parse(`${FIELD_WIDTH} m`);
+const DEFAULT_SCOPE = [
+  [
+    "Field",
+    {
+      w: FIELD_X_UNIT,
+      h: FIELD_Y_UNIT
+    }
+  ]
+] as const;
 
 export function isMathJSReserved(name: string): NameIssue | undefined {
   //@ts-expect-error indexing `math`
@@ -627,7 +643,7 @@ export const Variables = types
       return out;
     },
     get scope() {
-      const vars: Map<string, any> = new Map();
+      const vars: Map<string, any> = new Map(DEFAULT_SCOPE);
       //vars.set("m", math.unit("m"));
       for (const [_varUUID, { name, expr }] of self.expressions.entries()) {
         vars.set(name, expr.asScope);
