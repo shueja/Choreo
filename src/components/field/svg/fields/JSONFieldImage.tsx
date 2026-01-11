@@ -74,7 +74,7 @@ export default class CustomFieldImage extends Component<Props, State> {
     const fuelWidth = 6 * inch;
     const centerBlueHub = -4.208718 + 0.563024;
     const endOfRamp = 2.450338;
-    const darkCurrentColor = "hsl(from currentColor h s calc(l*0.8))";
+    const darkCurrentColor = "currentColor";
     return (
       <><g
         id="layer1"
@@ -86,24 +86,25 @@ export default class CustomFieldImage extends Component<Props, State> {
           width={fullLengthM}
           height={fullWidthM}
           href={customField.fieldImageBase64}
-          style={{ opacity: `${50}%` }}
+          style={{ opacity: `${0}%` }}
         />
       </g>
       <g id="field">
         <defs>
-          <circle id="fuel" cx="0" cy="0" r={(fuelWidth - 0.09 * inch) / 2} fill="#B1902F" />
-          <pattern id="neutralFuelGrid" x={(FIELD_LENGTH / 2) % fuelWidth} y={(FIELD_WIDTH / 2 + inch) % fuelWidth} width={fuelWidth} height={fuelWidth} patternContentUnits="userSpaceOnUse" patternUnits="userSpaceOnUse">
-            <use x={fuelWidth / 2} y={fuelWidth / 2} href="#fuel"></use>
-          </pattern>
-          <pattern id="depotFuelGrid" x={0} y={(5.431631 + 0.0762) % fuelWidth} width={fuelWidth} height={fuelWidth} patternContentUnits="userSpaceOnUse" patternUnits="userSpaceOnUse">
-            <use x={fuelWidth / 2} y={fuelWidth / 2} href="#fuel"></use>
-          </pattern>
-          <pattern id="chuteFuelGrid" x={0} y={(0.285) % fuelWidth} width={fuelWidth} height={fuelWidth} patternContentUnits="userSpaceOnUse" patternUnits="userSpaceOnUse">
-            <use x={fuelWidth / 2} y={fuelWidth / 2} href="#fuel"></use>
-          </pattern>
+          <filter id="dark">
+<feComponentTransfer>
+  <feFuncR type="linear" slope="0.5" />
+  <feFuncG type="linear" slope="0.5" />
+  <feFuncB type="linear" slope="0.5" />
+</feComponentTransfer>
+
+
+          </filter>
+
+          <circle id="fuel" cx={fuelWidth/2} cy={fuelWidth/2} r={(fuelWidth - 0.09 * inch) / 2} fill="#B1902F" />
           <g id="blueRampTrench">
             {/* wall between ramp and trench */}
-            <rect height={2.7559 - endOfRamp} width={1.193852} x={centerBlueHub - 1.193852 / 2} y={endOfRamp} fill={darkCurrentColor}></rect>
+            <rect height={2.7559 - endOfRamp} width={1.193852} x={centerBlueHub - 1.193852 / 2} y={endOfRamp} fill={darkCurrentColor} filter="url(#dark)"></rect>
             {/* ramps */}
             <rect x={centerBlueHub - 0.563024} y={endOfRamp - 1.856263} width={0.563024} height={1.856263} fill="currentColor"></rect>
 
@@ -114,20 +115,30 @@ export default class CustomFieldImage extends Component<Props, State> {
             <line x1={centerBlueHub} y1={2.7559} x2={centerBlueHub} y2={FIELD_WIDTH / 2} stroke={darkCurrentColor} strokeWidth={0.1524}></line>
           </g>
           <g id="blueSide">
-            <rect id="neutralFuel" x={FIELD_LENGTH / 2 - fuelWidth * 6} y={FIELD_WIDTH / 2 + inch} width={fuelWidth * 12} height={fuelWidth * 15} fill="url(#neutralFuelGrid)"></rect>
+            <g transform={`translate(${FIELD_LENGTH / 2 - fuelWidth * 6} ${FIELD_WIDTH / 2 + inch})`}>
+              {
+                Array.from({length:12}).map((_, x)=>Array.from({length:15}).map((_,y)=><use href="#fuel" x={fuelWidth*x} y={fuelWidth*y}></use>))
+              }
+            </g>
+            {/* <rect id="neutralFuel" x={FIELD_LENGTH / 2 - fuelWidth * 6} y={FIELD_WIDTH / 2 + inch} width={fuelWidth * 12} height={fuelWidth * 15} fill="url(#neutralFuelGrid)"></rect> */}
             {/* start tape */}
-            <line x1={3.977926 + inch} x2={3.977926} y1={0} y2={FIELD_WIDTH} stroke="currentColor" strokeWidth={inch * 2}></line>
+            <line x1={3.977926 + inch} x2={3.977926+inch} y1={0} y2={FIELD_WIDTH} stroke="currentColor" strokeWidth={inch * 2}></line>
             <g> {/*depot*/}
               <rect x={0} y={5.431631} width={0.609} height={0.0762} fill="currentColor"></rect>
               <rect x={0} y={6.422231} width={0.609} height={0.0762} fill="currentColor"></rect>
               <rect x={0.609} y={5.431631} width={0.0762} height={1.0668} fill="currentColor"></rect>
-              <rect id="neutralFuel" x={0} y={5.431631 + 0.0762} width={fuelWidth * 4} height={fuelWidth * 6} fill="url(#depotFuelGrid)"></rect>
+              <g transform={`translate(0 ${5.431631 + 0.0762})`}>
+              {
+                Array.from({length:4}).map((_, x)=>Array.from({length:6}).map((_,y)=><use href="#fuel" x={fuelWidth*x} y={fuelWidth*y}></use>))
+              }
+            </g>
+              {/* <rect id="neutralFuel" x={0} y={5.431631 + 0.0762} width={fuelWidth * 4} height={fuelWidth * 6} filter="url(#depotFuelGrid)"></rect> */}
             </g>
             {/*hub*/}
             <g transform={`translate(${FIELD_LENGTH / 2} ${FIELD_WIDTH / 2})`}>
               <use href="#blueRampTrench"></use>
               <g transform="scale(1 -1)"><use href="#blueRampTrench"></use></g>
-              <rect x={-4.242150} y={-0.5969} width={4.242150 - 3.047591} height={0.5969 * 2} fill={darkCurrentColor}></rect>
+              <rect x={-4.242150} y={-0.5969} width={4.242150 - 3.047591} height={0.5969 * 2} fill={darkCurrentColor} filter="url(#dark)"></rect>
               <polygon points="-3.033074,0 -3.340112,-0.527908 -3.949688,-0.527908 -4.254476,0 -3.949688,0.527908 -3.340112,0.527908" stroke="gray" fill="transparent" strokeWidth={inch}></polygon>
               {/* a target matching the PointAt target point */}
               <circle r={0.2} stroke="gray" strokeWidth={0.02} fill="transparent" cx={centerBlueHub} cy={0}></circle>
@@ -143,7 +154,12 @@ export default class CustomFieldImage extends Component<Props, State> {
             {/* station */}
             <line x1={0} y1={0.259556} x2={-0.2} y2={0.259556} stroke="white" strokeWidth={inch}></line>
             <line x1={0} y1={1.072356} x2={-0.2} y2={1.072356} stroke="white" strokeWidth={inch}></line>
-            <rect x={-fuelWidth} y={0.285} width={fuelWidth} height={fuelWidth*5} fill="url(#chuteFuelGrid)"></rect>
+            <g transform={`translate(${-fuelWidth} 0.285)`}>
+              {
+                Array.from({length:5}).map((_, i)=><use href="#fuel" x="0" y={fuelWidth*i}></use>)
+              }
+            </g>
+            {/* <rect x={-fuelWidth} y={0.285} width={fuelWidth} height={fuelWidth*5} fill="url(#chuteFuelGrid)"></rect> */}
           </g>
         </defs>
         <g id="tape">
@@ -156,7 +172,7 @@ export default class CustomFieldImage extends Component<Props, State> {
           <use x={0} y={0} width={FIELD_LENGTH} height={FIELD_WIDTH} href="#blueSide" color="#9e2323ff"></use>
         </g>
         <rect id="wall" x={-inch} y={-inch} width={FIELD_LENGTH + inch * 2} height={FIELD_WIDTH + inch * 2} stroke="white" strokeWidth={inch * 2} fill="transparent"></rect>
-        </g> */}
+        </g>
       </>
     );
   }
