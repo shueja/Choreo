@@ -43,6 +43,7 @@ type State = {
   fieldMatrix: DOMMatrix;
 };
 
+export let getSVGContent = () => {return "" as string|undefined;};
 class FieldOverlayRoot extends Component<Props, State> {
   state = {
     xPan: 0,
@@ -58,7 +59,7 @@ class FieldOverlayRoot extends Component<Props, State> {
     super(props);
     this.svgRef = React.createRef<SVGSVGElement>();
     this.frameRef = React.createRef<SVGGElement>();
-
+    getSVGContent = ()=>this.svgRef.current?.outerHTML;
     this.zoomBehavior = d3
       .zoom<SVGGElement, undefined>()
       .scaleExtent([0.3, 12])

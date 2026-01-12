@@ -216,11 +216,11 @@ pub async fn open_project_dialog(app_handle: tauri::AppHandle) -> TauriResult<Op
 
 #[tauri::command]
 pub fn write_java_file(content: String, file_path: String) -> ChoreoResult<()> {
-    if !file_path.contains(".java") {
-        return Err(ChoreoError::Io(
-            "Attempted to write a non-Java file".to_string(),
-        ));
-    }
+    // if !file_path.contains(".java") {
+    //     return Err(ChoreoError::Io(
+    //         "Attempted to write a non-Java file".to_string(),
+    //     ));
+    // }
     fs::write(file_path, content.as_bytes())?;
     Ok(())
 }

@@ -1,3 +1,4 @@
+import { getSVGContent } from "../components/field/svg/FieldOverlayRoot";
 import {
   isValidIdentifier,
   NameIssue
@@ -44,6 +45,42 @@ interface ChoreoTraj {
   lastPose: Pose2d;
   nameError: NameIssue | undefined;
 }
+import fieldSVG from "../components/field/svg/fields/Field2026Patterns.svg?raw";
+import { Commands } from "../document/tauriCommands";
+import { doc } from "../document/DocumentManager";
+import { path } from "@tauri-apps/api";
+async function getTrajectorySVGs(trajectories: Trajectory[]) {
+    const codeGenPkg = doc.codegen.javaPkg;
+    if (!doc.codegen.root || !codeGenPkg) {
+      return;
+    }
+    const rootPath = await path.join(
+      await Commands.getDeployRoot(),
+      doc.codegen.root
+    );
+  const svgs = trajectories.map((t)=>{
+    let generatedPathString = "";
+      t.trajectory.samples.forEach((sample) => {
+        generatedPathString += `${sample.x},${sample.y} `;
+      });
+    const trajectory = `${fieldSVG.slice(0, -12)}
+          <polyline
+        points="${generatedPathString}"
+        stroke="green"
+        stroke-width="0.1"
+        fill="transparent"
+        
+      ></polyline>
+      </g></svg>`;
+    return ({
+    name: t.name + ".svg",
+    contents: trajectory
+  });});
+  await Promise.allSettled(svgs.map(svg=>
+    Commands.writeJavaFile(svg.contents, `${rootPath}/images/${svg.name}`).catch(e=>console.error(e))
+  ));
+}
+
 
 function getChoreoTrajList(trajectories: Trajectory[]) {
   const trajList: ChoreoTraj[] = [];
@@ -94,7 +131,12 @@ function getChoreoTrajList(trajectories: Trajectory[]) {
 }
 
 function printChoreoTraj(traj: ChoreoTraj): string {
-  return `${traj.nameError !== undefined ? `/**ERROR: ${traj.nameError.uiMessage}. ${traj.nameError.codegenMessage}*/\n\t` : ""}public static final ChoreoTraj ${traj.varName} = new ChoreoTraj(
+  return `${traj.nameError !== undefined ? `/**ERROR: ${traj.nameError.uiMessage}. ${traj.nameError.codegenMessage}*/\n\t` : `
+/** 
+ * <img src="images/${traj.varName}.svg" alt="${traj.varName}">
+ * 
+ * ${Date.now().toString()} ___________________________________________________________________
+ */`}public static final ChoreoTraj ${traj.varName} = new ChoreoTraj(
     "${traj.trajName}",
     ${traj.segment === undefined ? "OptionalInt.empty()" : `OptionalInt.of(${traj.segment})`},
     ${traj.totalTimeSecs},
@@ -131,6 +173,7 @@ export function genTrajDataFile(
 ): string {
   const trajList = getChoreoTrajList(trajectories);
   console.log(trajList);
+  getTrajectorySVGs(trajectories);
   try {
     const content: string = `
 package ${packageName};
