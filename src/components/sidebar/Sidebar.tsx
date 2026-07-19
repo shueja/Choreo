@@ -33,9 +33,10 @@ class Sidebar extends Component<Props, State> {
 
   render() {
     const { toggleMainMenu } = uiState;
-    const visibleConstraints = doc.pathlist.activePath.params.constraints.filter(
-      (constraint) => isConstraintKeySupportedByGeneratedTypes(constraint.data.type)
-    );
+    const visibleConstraints =
+      doc.pathlist.activePath.params.constraints.filter((constraint) =>
+        isConstraintKeySupportedByGeneratedTypes(constraint.data.type)
+      );
     return (
       <div className={styles.Container}>
         <div

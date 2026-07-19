@@ -1,3 +1,5 @@
+// Copyright (c) Choreo contributors
+
 #include <cassert>
 #include <string>
 
@@ -68,9 +70,8 @@ void TestApiRouteScaffoldResponse() {
 }
 
 void TestWpinetAdapter() {
-  auto request = BuildRequestFromWpinet(wpi::net::HTTP_PATCH,
-                                        "http://127.0.0.1:8080/api/v1/project",
-                                        {}, "[]");
+  auto request = BuildRequestFromWpinet(
+      wpi::net::HTTP_PATCH, "http://127.0.0.1:8080/api/v1/project", {}, "[]");
 
   assert(request.has_value());
   assert(request->method == HttpMethod::kPatch);

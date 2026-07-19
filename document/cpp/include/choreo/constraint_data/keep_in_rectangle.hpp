@@ -1,11 +1,14 @@
 // Copyright (c) Choreo contributors
 
 #pragma once
-#include "constraint_includes.hpp"
+
+#include <vector>
+
 #include "../geometry/region2e.hpp"
+#include "constraint_includes.hpp"
 
 namespace choreo::ConstraintData {
-struct KeepInRectangle : public Region2e{
+struct KeepInRectangle : public Region2e {
   KeepInRectangle() = default;
   KeepInRectangle(const KeepInRectangle&) = default;
   static KeepInRectangle fromJson(const wpi::util::json& json);
@@ -17,12 +20,14 @@ struct KeepInRectangle : public Region2e{
         bumpers, {x, y}, w / 2.0, h / 2.0};
   }
 #endif
-  static choreo::ConstraintScope scope() { return choreo::ConstraintScope::Both; }
+  static choreo::ConstraintScope scope() {
+    return choreo::ConstraintScope::Both;
+  }
   KeepInRectangle forEndpoints(const choreo::Waypoint& start,
-                             const choreo::Waypoint& end) const {
-    // For a keep-in-rectangle constraint, the endpoints don't affect the constraint
-    // itself, so we can just return *this. However, we need to return a new
-    // instance to satisfy the interface.
+                               const choreo::Waypoint& end) const {
+    // For a keep-in-rectangle constraint, the endpoints don't affect the
+    // constraint itself, so we can just return *this. However, we need to
+    // return a new instance to satisfy the interface.
     return *this;
   }
 };

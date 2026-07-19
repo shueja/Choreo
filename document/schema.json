@@ -530,7 +530,10 @@
       "properties": {
         "ax": { "type": "number", "description": "X acceleration (m/s^2)" },
         "ay": { "type": "number", "description": "Y acceleration (m/s^2)" },
-        "alpha": { "type": "number", "description": "Angular acceleration (rad/s^2)" }
+        "alpha": {
+          "type": "number",
+          "description": "Angular acceleration (rad/s^2)"
+        }
       },
       "required": ["ax", "ay", "alpha"],
       "additionalProperties": false
@@ -540,7 +543,10 @@
       "type": "object",
       "description": "wpi::math::HolonomicSample serialized as JSON.",
       "properties": {
-        "time": { "type": "number", "description": "Sample timestamp relative to trajectory start (s)" },
+        "time": {
+          "type": "number",
+          "description": "Sample timestamp relative to trajectory start (s)"
+        },
         "pose": { "$ref": "#/$defs/WpiPose2d" },
         "velocity": { "$ref": "#/$defs/WpiChassisVelocities" },
         "acceleration": { "$ref": "#/$defs/WpiChassisAccelerations" }
@@ -553,12 +559,21 @@
       "type": "object",
       "description": "wpi::math::DifferentialSample serialized as JSON.",
       "properties": {
-        "time": { "type": "number", "description": "Sample timestamp relative to trajectory start (s)" },
+        "time": {
+          "type": "number",
+          "description": "Sample timestamp relative to trajectory start (s)"
+        },
         "pose": { "$ref": "#/$defs/WpiPose2d" },
         "velocity": { "$ref": "#/$defs/WpiChassisVelocities" },
         "acceleration": { "$ref": "#/$defs/WpiChassisAccelerations" },
-        "leftVelocity": { "type": "number", "description": "Left wheel speed (m/s)" },
-        "rightVelocity": { "type": "number", "description": "Right wheel speed (m/s)" }
+        "leftVelocity": {
+          "type": "number",
+          "description": "Left wheel speed (m/s)"
+        },
+        "rightVelocity": {
+          "type": "number",
+          "description": "Right wheel speed (m/s)"
+        }
       },
       "required": [
         "time",
@@ -790,7 +805,15 @@
         "config": { "$ref": "#/$defs/RobotConfig" },
         "codegen": { "$ref": "#/$defs/CodeGenConfig" }
       },
-      "required": ["uuid", "name", "version", "type", "variables", "config", "codegen"],
+      "required": [
+        "uuid",
+        "name",
+        "version",
+        "type",
+        "variables",
+        "config",
+        "codegen"
+      ],
       "additionalProperties": false
     }
   }

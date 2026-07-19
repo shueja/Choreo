@@ -7,7 +7,11 @@ import {
   toGeneratedWaypoint,
   Waypoint
 } from "../schema/DocumentTypes";
-import { ConstraintKey, DataMap, isConstraintKeySupportedByGeneratedTypes } from "../ConstraintDefinitions";
+import {
+  ConstraintKey,
+  DataMap,
+  isConstraintKeySupportedByGeneratedTypes
+} from "../ConstraintDefinitions";
 import {
   ConstraintStore,
   IConstraintStore,

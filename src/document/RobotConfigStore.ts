@@ -260,7 +260,9 @@ export const RobotConfigStore = types
         self.cof.deserialize(config.cof);
         self.gearing.deserialize(config.gearing);
         self.radius.deserialize(config.radius);
-        self.differential_track_width.deserialize(config.differential_track_width);
+        self.differential_track_width.deserialize(
+          config.differential_track_width
+        );
         config.wheels.forEach((wheel, index) => {
           const current = self.wheels[index];
           if (current !== undefined) {
@@ -285,7 +287,10 @@ export const RobotConfigStore = types
         }
         const first = self.bumpers[0];
         const commands = self.bumpers
-          .map((point, idx) => `${idx === 0 ? "M" : "L"} ${point.x.value} ${point.y.value}`)
+          .map(
+            (point, idx) =>
+              `${idx === 0 ? "M" : "L"} ${point.x.value} ${point.y.value}`
+          )
           .join(" ");
         return `${commands} L ${first.x.value} ${first.y.value}`;
       },

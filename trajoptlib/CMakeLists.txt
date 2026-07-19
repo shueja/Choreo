@@ -4,7 +4,6 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-
 project(TrajoptLib LANGUAGES CXX)
 set(CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 23)
@@ -53,16 +52,16 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
     FetchContent_MakeAvailable(Catch2)
 endif()
 
-    set(EIGEN_BUILD_CMAKE_PACKAGE TRUE)
-    FetchContent_Declare(
-        Eigen3
-        GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-        # master on 2026-03-29
-        GIT_TAG b7f6aed1b9974fd56cce651b4ff059c3bfc67782
-        SYSTEM
-        OVERRIDE_FIND_PACKAGE
-    )
-    FetchContent_MakeAvailable(Eigen3)
+set(EIGEN_BUILD_CMAKE_PACKAGE TRUE)
+FetchContent_Declare(
+    Eigen3
+    GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+    # master on 2026-03-29
+    GIT_TAG b7f6aed1b9974fd56cce651b4ff059c3bfc67782
+    SYSTEM
+    OVERRIDE_FIND_PACKAGE
+)
+FetchContent_MakeAvailable(Eigen3)
 
 set(SLEIPNIR_USE_SYSTEM_EIGEN ON "Use system eigen")
 FetchContent_Declare(

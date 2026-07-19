@@ -1,7 +1,10 @@
+// Copyright (c) Choreo contributors
+
 #include <atomic>
 #include <chrono>
 #include <csignal>
 #include <iostream>
+#include <string>
 #include <thread>
 
 #include "choreo/state_server/api_server.hpp"
@@ -12,14 +15,17 @@ using namespace std::chrono_literals;
 
 std::atomic<bool> g_running = true;
 
-void HandleSignal(int) { g_running = false; }
+void HandleSignal(int) {
+  g_running = false;
+}
 
 }  // namespace choreo::state_server
 
 int main(int argc, char** argv) {
   if (argc < 2) {
     std::cerr << "Usage: state-server <workspace-dir>\n"
-              << "workspace-dir must contain exactly one .chor and zero or more .traj files\n";
+              << "workspace-dir must contain exactly one .chor and zero or "
+                 "more .traj files\n";
     return 2;
   }
 
@@ -37,8 +43,7 @@ int main(int argc, char** argv) {
   std::cout << "state-server listening\n"
             << "  HTTP: http://" << opts.bind_address << ":" << opts.http_port
             << "\n"
-            << "  Workspace: " << opts.workspace_dir.string()
-            << "\n"
+            << "  Workspace: " << opts.workspace_dir.string() << "\n"
             << "Press Ctrl+C to stop.\n";
 
   while (choreo::state_server::g_running.load()) {

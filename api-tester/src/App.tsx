@@ -135,7 +135,9 @@ export default function App() {
     }
   };
 
-  const runRequest = async (spec: RequestSpec): Promise<{ status: number; body: unknown }> => {
+  const runRequest = async (
+    spec: RequestSpec
+  ): Promise<{ status: number; body: unknown }> => {
     const headers: Record<string, string> = {
       "Content-Type": "application/json"
     };
@@ -154,9 +156,12 @@ export default function App() {
     const response = await fetch(fullUrl, {
       method: spec.method,
       headers,
-      body: spec.body === undefined || spec.method === "GET" || spec.method === "DELETE"
-        ? undefined
-        : JSON.stringify(spec.body)
+      body:
+        spec.body === undefined ||
+        spec.method === "GET" ||
+        spec.method === "DELETE"
+          ? undefined
+          : JSON.stringify(spec.body)
     });
 
     const elapsed = Math.round(performance.now() - started);
@@ -191,7 +196,9 @@ export default function App() {
     appendLog(ok ? "http" : "error", ok ? "HTTP PASS" : "HTTP FAIL", details);
 
     if (!ok) {
-      throw new Error(`Unexpected status for ${spec.method} ${spec.path}: ${response.status}`);
+      throw new Error(
+        `Unexpected status for ${spec.method} ${spec.path}: ${response.status}`
+      );
     }
 
     return { status: response.status, body };
@@ -204,9 +211,17 @@ export default function App() {
     appendLog("info", "Suite", "Starting full HTTP route coverage run");
 
     try {
-      await runRequest({ method: "GET", path: "/api/v1/health", expectedStatus: 200 });
+      await runRequest({
+        method: "GET",
+        path: "/api/v1/health",
+        expectedStatus: 200
+      });
 
-      await runRequest({ method: "GET", path: "/api/v1/project", expectedStatus: 200 });
+      await runRequest({
+        method: "GET",
+        path: "/api/v1/project",
+        expectedStatus: 200
+      });
       await runRequest({
         method: "PUT",
         path: "/api/v1/project",
@@ -222,25 +237,38 @@ export default function App() {
         expectedStatus: 200
       });
 
-      await runRequest({ method: "GET", path: "/api/v1/trajectories", expectedStatus: 200 });
+      await runRequest({
+        method: "GET",
+        path: "/api/v1/trajectories",
+        expectedStatus: 200
+      });
 
       // Make reruns deterministic when a previous run failed before cleanup.
-      const preexistingGet = await fetch(`${resolvedHttpBase}/api/v1/trajectories/${runtime.activeTrajectoryUuid}`);
+      const preexistingGet = await fetch(
+        `${resolvedHttpBase}/api/v1/trajectories/${runtime.activeTrajectoryUuid}`
+      );
       if (preexistingGet.status === 200) {
         const preexistingEtag = preexistingGet.headers.get("etag");
         const deleteHeaders: Record<string, string> = {};
         if (preexistingEtag) {
           deleteHeaders["If-Match"] = preexistingEtag;
         }
-        const preexistingDelete = await fetch(`${resolvedHttpBase}/api/v1/trajectories/${runtime.activeTrajectoryUuid}`, {
-          method: "DELETE",
-          headers: deleteHeaders
-        });
+        const preexistingDelete = await fetch(
+          `${resolvedHttpBase}/api/v1/trajectories/${runtime.activeTrajectoryUuid}`,
+          {
+            method: "DELETE",
+            headers: deleteHeaders
+          }
+        );
         if (preexistingDelete.status !== 204) {
-          throw new Error(`Unexpected status for pre-clean DELETE /api/v1/trajectories/${runtime.activeTrajectoryUuid}: ${preexistingDelete.status}`);
+          throw new Error(
+            `Unexpected status for pre-clean DELETE /api/v1/trajectories/${runtime.activeTrajectoryUuid}: ${preexistingDelete.status}`
+          );
         }
       } else if (preexistingGet.status !== 404) {
-        throw new Error(`Unexpected status for pre-clean GET /api/v1/trajectories/${runtime.activeTrajectoryUuid}: ${preexistingGet.status}`);
+        throw new Error(
+          `Unexpected status for pre-clean GET /api/v1/trajectories/${runtime.activeTrajectoryUuid}: ${preexistingGet.status}`
+        );
       }
 
       await runRequest({
@@ -253,10 +281,18 @@ export default function App() {
       const uuid = runtime.activeTrajectoryUuid;
 
       const refreshTrajectoryEtag = async () => {
-        await runRequest({ method: "GET", path: `/api/v1/trajectories/${uuid}`, expectedStatus: 200 });
+        await runRequest({
+          method: "GET",
+          path: `/api/v1/trajectories/${uuid}`,
+          expectedStatus: 200
+        });
       };
 
-      await runRequest({ method: "GET", path: `/api/v1/trajectories/${uuid}`, expectedStatus: 200 });
+      await runRequest({
+        method: "GET",
+        path: `/api/v1/trajectories/${uuid}`,
+        expectedStatus: 200
+      });
       await runRequest({
         method: "PUT",
         path: `/api/v1/trajectories/${uuid}`,
@@ -295,9 +331,25 @@ export default function App() {
       });
 
       const reorderedWaypoints = [
-        String((TRAJECTORY_FIXTURE.params as JsonRecord).waypoints && (TRAJECTORY_FIXTURE.params as JsonRecord).waypoints instanceof Array ? ((TRAJECTORY_FIXTURE.params as JsonRecord).waypoints as Array<JsonRecord>)[0].uuid : ""),
+        String(
+          (TRAJECTORY_FIXTURE.params as JsonRecord).waypoints &&
+            (TRAJECTORY_FIXTURE.params as JsonRecord).waypoints instanceof Array
+            ? (
+                (TRAJECTORY_FIXTURE.params as JsonRecord)
+                  .waypoints as Array<JsonRecord>
+              )[0].uuid
+            : ""
+        ),
         runtime.activeWaypointUuid,
-        String((TRAJECTORY_FIXTURE.params as JsonRecord).waypoints && (TRAJECTORY_FIXTURE.params as JsonRecord).waypoints instanceof Array ? ((TRAJECTORY_FIXTURE.params as JsonRecord).waypoints as Array<JsonRecord>)[1].uuid : "")
+        String(
+          (TRAJECTORY_FIXTURE.params as JsonRecord).waypoints &&
+            (TRAJECTORY_FIXTURE.params as JsonRecord).waypoints instanceof Array
+            ? (
+                (TRAJECTORY_FIXTURE.params as JsonRecord)
+                  .waypoints as Array<JsonRecord>
+              )[1].uuid
+            : ""
+        )
       ];
 
       await runRequest({
@@ -335,11 +387,18 @@ export default function App() {
         withTrajectoryEtag: true,
         body: {
           order: [
-            ...(((TRAJECTORY_FIXTURE.params as JsonRecord).constraints && (TRAJECTORY_FIXTURE.params as JsonRecord).constraints instanceof Array
-              ? ((TRAJECTORY_FIXTURE.params as JsonRecord).constraints as Array<JsonRecord>).map((c) => String(c.uuid ?? ""))
-              : [])),
+            ...((TRAJECTORY_FIXTURE.params as JsonRecord).constraints &&
+            (TRAJECTORY_FIXTURE.params as JsonRecord).constraints instanceof
+              Array
+              ? (
+                  (TRAJECTORY_FIXTURE.params as JsonRecord)
+                    .constraints as Array<JsonRecord>
+                ).map((c) => String(c.uuid ?? ""))
+              : []),
             runtime.activeConstraintUuid
-          ].filter((id, index, arr) => id.length > 0 && arr.indexOf(id) === index)
+          ].filter(
+            (id, index, arr) => id.length > 0 && arr.indexOf(id) === index
+          )
         },
         expectedStatus: 200
       });
@@ -371,9 +430,13 @@ export default function App() {
         withTrajectoryEtag: true,
         body: {
           order: [
-            ...((TRAJECTORY_FIXTURE.events as Array<JsonRecord>).map((event) => String(event.uuid ?? ""))),
+            ...(TRAJECTORY_FIXTURE.events as Array<JsonRecord>).map((event) =>
+              String(event.uuid ?? "")
+            ),
             runtime.activeMarkerUuid
-          ].filter((id, index, arr) => id.length > 0 && arr.indexOf(id) === index)
+          ].filter(
+            (id, index, arr) => id.length > 0 && arr.indexOf(id) === index
+          )
         },
         expectedStatus: 200
       });
@@ -392,7 +455,9 @@ export default function App() {
         body: {},
         expectedStatus: 202
       });
-      const operationId = Number((generateResult.body as JsonRecord)?.operationId ?? 0);
+      const operationId = Number(
+        (generateResult.body as JsonRecord)?.operationId ?? 0
+      );
       updateRuntime((prev) => ({ ...prev, operationId }));
 
       await runRequest({
@@ -408,8 +473,16 @@ export default function App() {
         expectedStatus: 202
       });
 
-      await runRequest({ method: "GET", path: "/api/v1/diagnostics", expectedStatus: 200 });
-      await runRequest({ method: "GET", path: "/api/v1/export", expectedStatus: 200 });
+      await runRequest({
+        method: "GET",
+        path: "/api/v1/diagnostics",
+        expectedStatus: 200
+      });
+      await runRequest({
+        method: "GET",
+        path: "/api/v1/export",
+        expectedStatus: 200
+      });
 
       const importResult = await runRequest({
         method: "POST",
@@ -421,7 +494,9 @@ export default function App() {
         },
         expectedStatus: 202
       });
-      const importOperationId = Number((importResult.body as JsonRecord)?.operationId ?? 0);
+      const importOperationId = Number(
+        (importResult.body as JsonRecord)?.operationId ?? 0
+      );
       updateRuntime((prev) => ({ ...prev, importOperationId }));
 
       const opToQuery = operationId || importOperationId;
@@ -462,22 +537,31 @@ export default function App() {
       const uuid = initialRuntimeState.activeTrajectoryUuid;
 
       // Ensure reruns are deterministic if a previous attempt left fixture state behind.
-      const preexistingGet = await fetch(`${resolvedHttpBase}/api/v1/trajectories/${uuid}`);
+      const preexistingGet = await fetch(
+        `${resolvedHttpBase}/api/v1/trajectories/${uuid}`
+      );
       if (preexistingGet.status === 200) {
         const preexistingEtag = preexistingGet.headers.get("etag");
         const deleteHeaders: Record<string, string> = {};
         if (preexistingEtag) {
           deleteHeaders["If-Match"] = preexistingEtag;
         }
-        const preexistingDelete = await fetch(`${resolvedHttpBase}/api/v1/trajectories/${uuid}`, {
-          method: "DELETE",
-          headers: deleteHeaders
-        });
+        const preexistingDelete = await fetch(
+          `${resolvedHttpBase}/api/v1/trajectories/${uuid}`,
+          {
+            method: "DELETE",
+            headers: deleteHeaders
+          }
+        );
         if (preexistingDelete.status !== 204) {
-          throw new Error(`Unexpected status for pre-clean DELETE /api/v1/trajectories/${uuid}: ${preexistingDelete.status}`);
+          throw new Error(
+            `Unexpected status for pre-clean DELETE /api/v1/trajectories/${uuid}: ${preexistingDelete.status}`
+          );
         }
       } else if (preexistingGet.status !== 404) {
-        throw new Error(`Unexpected status for pre-clean GET /api/v1/trajectories/${uuid}: ${preexistingGet.status}`);
+        throw new Error(
+          `Unexpected status for pre-clean GET /api/v1/trajectories/${uuid}: ${preexistingGet.status}`
+        );
       }
 
       await runRequest({
@@ -487,7 +571,11 @@ export default function App() {
         expectedStatus: 201
       });
 
-      await runRequest({ method: "GET", path: `/api/v1/trajectories/${uuid}`, expectedStatus: 200 });
+      await runRequest({
+        method: "GET",
+        path: `/api/v1/trajectories/${uuid}`,
+        expectedStatus: 200
+      });
 
       const generateResult = await runRequest({
         method: "POST",
@@ -497,7 +585,9 @@ export default function App() {
         expectedStatus: 202
       });
 
-      const operationId = Number((generateResult.body as JsonRecord)?.operationId ?? 0);
+      const operationId = Number(
+        (generateResult.body as JsonRecord)?.operationId ?? 0
+      );
       updateRuntime((prev) => ({ ...prev, operationId }));
 
       await runRequest({
@@ -515,7 +605,11 @@ export default function App() {
         expectedStatus: 202
       });
 
-      await runRequest({ method: "GET", path: `/api/v1/trajectories/${uuid}`, expectedStatus: 200 });
+      await runRequest({
+        method: "GET",
+        path: `/api/v1/trajectories/${uuid}`,
+        expectedStatus: 200
+      });
       await runRequest({
         method: "DELETE",
         path: `/api/v1/trajectories/${uuid}`,
@@ -534,9 +628,10 @@ export default function App() {
   const runSingleRoute = async () => {
     setRunning(true);
     try {
-      const parsedBody = routeMethod === "GET" || routeMethod === "DELETE"
-        ? undefined
-        : JSON.parse(routeBody || "{}");
+      const parsedBody =
+        routeMethod === "GET" || routeMethod === "DELETE"
+          ? undefined
+          : JSON.parse(routeBody || "{}");
 
       await runRequest({
         method: routeMethod,
@@ -567,7 +662,11 @@ export default function App() {
 
     ws.onclose = (event) => {
       setWsConnected(false);
-      appendLog("info", "WS Closed", `code=${event.code} reason=${event.reason || "none"}`);
+      appendLog(
+        "info",
+        "WS Closed",
+        `code=${event.code} reason=${event.reason || "none"}`
+      );
     };
 
     ws.onerror = () => {
@@ -595,7 +694,10 @@ export default function App() {
     <div className="app">
       <header className="appHeader">
         <h1>Choreo API Tester</h1>
-        <p>Hardcoded fixtures + full HTTP route coverage + /progress subscriber logging</p>
+        <p>
+          Hardcoded fixtures + full HTTP route coverage + /progress subscriber
+          logging
+        </p>
       </header>
 
       <main className="layout">
@@ -625,16 +727,27 @@ export default function App() {
           <section className="panel">
             <h2>HTTP Routes</h2>
             <div className="row">
-              <button disabled={running} onClick={runFullHttpSuite}>Run Full HTTP Coverage</button>
-              <button disabled={running} onClick={runGenerationRoutine}>Run Generation Routine</button>
-              <button disabled={running} onClick={() => setLogs([])}>Clear Logs</button>
+              <button disabled={running} onClick={runFullHttpSuite}>
+                Run Full HTTP Coverage
+              </button>
+              <button disabled={running} onClick={runGenerationRoutine}>
+                Run Generation Routine
+              </button>
+              <button disabled={running} onClick={() => setLogs([])}>
+                Clear Logs
+              </button>
             </div>
             <div className="singleRoute">
               <h3>Single Route Runner</h3>
               <div className="grid3">
                 <label>
                   Method
-                  <select value={routeMethod} onChange={(e) => setRouteMethod(e.target.value as RequestSpec["method"])}>
+                  <select
+                    value={routeMethod}
+                    onChange={(e) =>
+                      setRouteMethod(e.target.value as RequestSpec["method"])
+                    }
+                  >
                     <option>GET</option>
                     <option>POST</option>
                     <option>PUT</option>
@@ -644,13 +757,22 @@ export default function App() {
                 </label>
                 <label className="wide">
                   Path
-                  <input value={routePath} onChange={(e) => setRoutePath(e.target.value)} />
+                  <input
+                    value={routePath}
+                    onChange={(e) => setRoutePath(e.target.value)}
+                  />
                 </label>
-                <button disabled={running} onClick={runSingleRoute}>Run Route</button>
+                <button disabled={running} onClick={runSingleRoute}>
+                  Run Route
+                </button>
               </div>
               <label>
                 JSON Body
-                <textarea value={routeBody} onChange={(e) => setRouteBody(e.target.value)} rows={3} />
+                <textarea
+                  value={routeBody}
+                  onChange={(e) => setRouteBody(e.target.value)}
+                  rows={3}
+                />
               </label>
             </div>
           </section>
@@ -658,8 +780,12 @@ export default function App() {
           <section className="panel">
             <h2>WebSocket /progress Subscriber</h2>
             <div className="row">
-              <button onClick={connectWs} disabled={wsConnected}>Connect</button>
-              <button onClick={disconnectWs} disabled={!wsConnected}>Disconnect</button>
+              <button onClick={connectWs} disabled={wsConnected}>
+                Connect
+              </button>
+              <button onClick={disconnectWs} disabled={!wsConnected}>
+                Disconnect
+              </button>
               <span className={wsConnected ? "badge on" : "badge off"}>
                 {wsConnected ? "Connected" : "Disconnected"}
               </span>

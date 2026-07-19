@@ -11,7 +11,7 @@ function parseArgs(argv) {
     host: "127.0.0.1",
     httpPort: 5810,
     wsPort: 5811,
-    timeoutMs: 5000,
+    timeoutMs: 5000
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -60,7 +60,9 @@ function parseArgs(argv) {
 }
 
 function printUsageAndExit(code) {
-  console.log("Usage: node state-server/scripts/state-server-endpoint-checks.mjs [options]");
+  console.log(
+    "Usage: node state-server/scripts/state-server-endpoint-checks.mjs [options]"
+  );
   console.log("");
   console.log("Options:");
   console.log("  --scope smoke|full   Endpoint coverage scope (default: full)");
@@ -92,22 +94,26 @@ function createRunner() {
     warn(name, details) {
       this.warnings.push({ name, details });
       console.warn(`WARN ${name}: ${details}`);
-    },
+    }
   };
 }
 
 async function jsonRequest(baseUrl, method, endpointPath, options = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 5000);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    options.timeoutMs ?? 5000
+  );
   try {
     const response = await fetch(`${baseUrl}${endpointPath}`, {
       method,
       headers: {
         "Content-Type": "application/json",
-        ...(options.headers ?? {}),
+        ...(options.headers ?? {})
       },
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: controller.signal,
+      body:
+        options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: controller.signal
     });
 
     const text = await response.text();
@@ -125,7 +131,7 @@ async function jsonRequest(baseUrl, method, endpointPath, options = {}) {
       status: response.status,
       headers: response.headers,
       body,
-      rawText: text,
+      rawText: text
     };
   } finally {
     clearTimeout(timeout);
@@ -162,7 +168,10 @@ function assertCondition(runner, checkName, condition, details, repro) {
 function randomUuidLike() {
   const hex = "0123456789abcdef";
   const pick = (count) =>
-    Array.from({ length: count }, () => hex[Math.floor(Math.random() * hex.length)]).join("");
+    Array.from(
+      { length: count },
+      () => hex[Math.floor(Math.random() * hex.length)]
+    ).join("");
   return `${pick(8)}-${pick(4)}-4${pick(3)}-8${pick(3)}-${pick(12)}`;
 }
 
@@ -220,7 +229,11 @@ function waitForWsEvent(target, eventName, timeoutMs) {
 
     function onError(event) {
       cleanup();
-      reject(new Error(`WebSocket error while waiting for ${eventName}: ${String(event.type)}`));
+      reject(
+        new Error(
+          `WebSocket error while waiting for ${eventName}: ${String(event.type)}`
+        )
+      );
     }
 
     target.addEventListener("open", onOpen);
@@ -260,7 +273,10 @@ function waitForWsCloseOrError(target, timeoutMs) {
 
 async function runWsChecks(args, runner) {
   if (!wsAvailable()) {
-    runner.warn("WS availability", "Global WebSocket API is not available in this Node runtime");
+    runner.warn(
+      "WS availability",
+      "Global WebSocket API is not available in this Node runtime"
+    );
     return;
   }
 
@@ -275,11 +291,20 @@ async function runWsChecks(args, runner) {
 
     const badProducer = new WebSocket(`${wsBase}/progress/not-a-number`);
     try {
-      const badResult = await waitForWsCloseOrError(badProducer, args.timeoutMs);
+      const badResult = await waitForWsCloseOrError(
+        badProducer,
+        args.timeoutMs
+      );
       if (badResult.kind === "close" && Number(badResult.event.code) === 1008) {
-        runner.pass("WS /progress/{operationId} invalid id", "closed with policy code 1008");
+        runner.pass(
+          "WS /progress/{operationId} invalid id",
+          "closed with policy code 1008"
+        );
       } else if (badResult.kind === "error") {
-        runner.pass("WS /progress/{operationId} invalid id", "connection was rejected with websocket error");
+        runner.pass(
+          "WS /progress/{operationId} invalid id",
+          "connection was rejected with websocket error"
+        );
       } else {
         runner.fail(
           "WS /progress/{operationId} invalid id",
@@ -302,8 +327,14 @@ async function runWsChecks(args, runner) {
     producer = new WebSocket(`${wsBase}/progress/${operationId}`);
     await waitForWsEvent(producer, "open", args.timeoutMs);
 
-    const messagePromise = waitForWsEvent(subscriber, "message", args.timeoutMs);
-    producer.send(JSON.stringify({ event: "running", source: "endpoint-check-script" }));
+    const messagePromise = waitForWsEvent(
+      subscriber,
+      "message",
+      args.timeoutMs
+    );
+    producer.send(
+      JSON.stringify({ event: "running", source: "endpoint-check-script" })
+    );
     const event = await messagePromise;
     let payload;
     try {
@@ -318,7 +349,8 @@ async function runWsChecks(args, runner) {
     }
 
     const opMatches = payload && payload.operationId === operationId;
-    const frameLooksRight = payload && payload.frame && payload.frame.event === "running";
+    const frameLooksRight =
+      payload && payload.frame && payload.frame.event === "running";
     assertCondition(
       runner,
       "WS wrapped payload shape",
@@ -346,7 +378,9 @@ async function runHttpChecks(args, runner) {
   const baseUrl = `http://${args.host}:${args.httpPort}`;
   const reproBase = `node state-server/scripts/state-server-endpoint-checks.mjs --scope ${args.scope} ${args.includeWs ? "--ws" : "--no-ws"}`;
 
-  const health = await jsonRequest(baseUrl, "GET", "/api/v1/health", { timeoutMs: args.timeoutMs });
+  const health = await jsonRequest(baseUrl, "GET", "/api/v1/health", {
+    timeoutMs: args.timeoutMs
+  });
   if (requireStatus(runner, "GET /api/v1/health", health, 200, reproBase)) {
     const body = health.body;
     assertCondition(
@@ -358,7 +392,9 @@ async function runHttpChecks(args, runner) {
     );
   }
 
-  const project = await jsonRequest(baseUrl, "GET", "/api/v1/project", { timeoutMs: args.timeoutMs });
+  const project = await jsonRequest(baseUrl, "GET", "/api/v1/project", {
+    timeoutMs: args.timeoutMs
+  });
   let projectEtag = null;
   if (requireStatus(runner, "GET /api/v1/project", project, 200, reproBase)) {
     projectEtag = project.headers.get("etag");
@@ -371,24 +407,59 @@ async function runHttpChecks(args, runner) {
     );
   }
 
-  const putWithoutIfMatch = await jsonRequest(baseUrl, "PUT", "/api/v1/project", {
-    timeoutMs: args.timeoutMs,
-    body: project.body,
-  });
-  requireStatus(runner, "PUT /api/v1/project missing If-Match", putWithoutIfMatch, 428, reproBase);
+  const putWithoutIfMatch = await jsonRequest(
+    baseUrl,
+    "PUT",
+    "/api/v1/project",
+    {
+      timeoutMs: args.timeoutMs,
+      body: project.body
+    }
+  );
+  requireStatus(
+    runner,
+    "PUT /api/v1/project missing If-Match",
+    putWithoutIfMatch,
+    428,
+    reproBase
+  );
 
-  const putWithStaleIfMatch = await jsonRequest(baseUrl, "PUT", "/api/v1/project", {
-    timeoutMs: args.timeoutMs,
-    headers: { "If-Match": "\"project-0\"" },
-    body: project.body,
-  });
-  requireStatus(runner, "PUT /api/v1/project stale If-Match", putWithStaleIfMatch, 409, reproBase);
+  const putWithStaleIfMatch = await jsonRequest(
+    baseUrl,
+    "PUT",
+    "/api/v1/project",
+    {
+      timeoutMs: args.timeoutMs,
+      headers: { "If-Match": '"project-0"' },
+      body: project.body
+    }
+  );
+  requireStatus(
+    runner,
+    "PUT /api/v1/project stale If-Match",
+    putWithStaleIfMatch,
+    409,
+    reproBase
+  );
 
-  const listTrajectories = await jsonRequest(baseUrl, "GET", "/api/v1/trajectories", {
-    timeoutMs: args.timeoutMs,
-  });
+  const listTrajectories = await jsonRequest(
+    baseUrl,
+    "GET",
+    "/api/v1/trajectories",
+    {
+      timeoutMs: args.timeoutMs
+    }
+  );
   let templateTrajectory = null;
-  if (requireStatus(runner, "GET /api/v1/trajectories", listTrajectories, 200, reproBase)) {
+  if (
+    requireStatus(
+      runner,
+      "GET /api/v1/trajectories",
+      listTrajectories,
+      200,
+      reproBase
+    )
+  ) {
     const items = listTrajectories.body?.items;
     assertCondition(
       runner,
@@ -398,14 +469,22 @@ async function runHttpChecks(args, runner) {
       reproBase
     );
 
-    if (Array.isArray(items) && items.length > 0 && typeof items[0]?.uuid === "string") {
+    if (
+      Array.isArray(items) &&
+      items.length > 0 &&
+      typeof items[0]?.uuid === "string"
+    ) {
       const seedTrajectory = await jsonRequest(
         baseUrl,
         "GET",
         `/api/v1/trajectories/${items[0].uuid}`,
         { timeoutMs: args.timeoutMs }
       );
-      if (seedTrajectory.status === 200 && seedTrajectory.body && typeof seedTrajectory.body === "object") {
+      if (
+        seedTrajectory.status === 200 &&
+        seedTrajectory.body &&
+        typeof seedTrajectory.body === "object"
+      ) {
         templateTrajectory = seedTrajectory.body;
       }
     }
@@ -418,12 +497,23 @@ async function runHttpChecks(args, runner) {
   fixture.uuid = newUuid;
   fixture.name = `Endpoint Check ${newUuid.slice(0, 8)}`;
 
-  const createTrajectory = await jsonRequest(baseUrl, "POST", "/api/v1/trajectories", {
-    timeoutMs: args.timeoutMs,
-    body: fixture,
-  });
+  const createTrajectory = await jsonRequest(
+    baseUrl,
+    "POST",
+    "/api/v1/trajectories",
+    {
+      timeoutMs: args.timeoutMs,
+      body: fixture
+    }
+  );
   let trajectoryEtag = null;
-  const createdOk = requireStatus(runner, "POST /api/v1/trajectories", createTrajectory, 201, reproBase);
+  const createdOk = requireStatus(
+    runner,
+    "POST /api/v1/trajectories",
+    createTrajectory,
+    201,
+    reproBase
+  );
   if (createdOk) {
     trajectoryEtag = createTrajectory.headers.get("etag");
     assertCondition(
@@ -434,23 +524,50 @@ async function runHttpChecks(args, runner) {
       reproBase
     );
   } else {
-    runner.warn("Trajectory-dependent checks", "Skipping trajectory mutation/generation checks because create failed");
+    runner.warn(
+      "Trajectory-dependent checks",
+      "Skipping trajectory mutation/generation checks because create failed"
+    );
   }
 
   if (!createdOk) {
     if (args.scope === "full") {
-      const diagnostics = await jsonRequest(baseUrl, "GET", "/api/v1/diagnostics", {
-        timeoutMs: args.timeoutMs,
-      });
-      requireStatus(runner, "GET /api/v1/diagnostics", diagnostics, 200, reproBase);
+      const diagnostics = await jsonRequest(
+        baseUrl,
+        "GET",
+        "/api/v1/diagnostics",
+        {
+          timeoutMs: args.timeoutMs
+        }
+      );
+      requireStatus(
+        runner,
+        "GET /api/v1/diagnostics",
+        diagnostics,
+        200,
+        reproBase
+      );
     }
     return;
   }
 
-  const getTrajectory = await jsonRequest(baseUrl, "GET", `/api/v1/trajectories/${newUuid}`, {
-    timeoutMs: args.timeoutMs,
-  });
-  if (requireStatus(runner, "GET /api/v1/trajectories/{uuid}", getTrajectory, 200, reproBase)) {
+  const getTrajectory = await jsonRequest(
+    baseUrl,
+    "GET",
+    `/api/v1/trajectories/${newUuid}`,
+    {
+      timeoutMs: args.timeoutMs
+    }
+  );
+  if (
+    requireStatus(
+      runner,
+      "GET /api/v1/trajectories/{uuid}",
+      getTrajectory,
+      200,
+      reproBase
+    )
+  ) {
     trajectoryEtag = getTrajectory.headers.get("etag") || trajectoryEtag;
     assertCondition(
       runner,
@@ -461,10 +578,15 @@ async function runHttpChecks(args, runner) {
     );
   }
 
-  const patchWithoutIfMatch = await jsonRequest(baseUrl, "PATCH", `/api/v1/trajectories/${newUuid}`, {
-    timeoutMs: args.timeoutMs,
-    body: { name: "Should Fail Without If-Match" },
-  });
+  const patchWithoutIfMatch = await jsonRequest(
+    baseUrl,
+    "PATCH",
+    `/api/v1/trajectories/${newUuid}`,
+    {
+      timeoutMs: args.timeoutMs,
+      body: { name: "Should Fail Without If-Match" }
+    }
+  );
   requireStatus(
     runner,
     "PATCH /api/v1/trajectories/{uuid} missing If-Match",
@@ -473,11 +595,16 @@ async function runHttpChecks(args, runner) {
     reproBase
   );
 
-  const patchWithStaleIfMatch = await jsonRequest(baseUrl, "PATCH", `/api/v1/trajectories/${newUuid}`, {
-    timeoutMs: args.timeoutMs,
-    headers: { "If-Match": "\"traj-stale\"" },
-    body: { name: "Should Fail With Stale If-Match" },
-  });
+  const patchWithStaleIfMatch = await jsonRequest(
+    baseUrl,
+    "PATCH",
+    `/api/v1/trajectories/${newUuid}`,
+    {
+      timeoutMs: args.timeoutMs,
+      headers: { "If-Match": '"traj-stale"' },
+      body: { name: "Should Fail With Stale If-Match" }
+    }
+  );
   requireStatus(
     runner,
     "PATCH /api/v1/trajectories/{uuid} stale If-Match",
@@ -507,7 +634,7 @@ async function runHttpChecks(args, runner) {
       `/api/v1/trajectories/${newUuid}/generation-state`,
       {
         timeoutMs: args.timeoutMs,
-        headers: { "If-Match": trajectoryEtag },
+        headers: { "If-Match": trajectoryEtag }
       }
     );
     requireStatus(
@@ -518,14 +645,27 @@ async function runHttpChecks(args, runner) {
       reproBase
     );
 
-    const generate = await jsonRequest(baseUrl, "POST", `/api/v1/trajectories/${newUuid}/generate`, {
-      timeoutMs: args.timeoutMs,
-      headers: { "If-Match": trajectoryEtag },
-      body: {},
-    });
+    const generate = await jsonRequest(
+      baseUrl,
+      "POST",
+      `/api/v1/trajectories/${newUuid}/generate`,
+      {
+        timeoutMs: args.timeoutMs,
+        headers: { "If-Match": trajectoryEtag },
+        body: {}
+      }
+    );
 
     let operationId = null;
-    if (requireStatus(runner, "POST /api/v1/trajectories/{uuid}/generate", generate, 202, reproBase)) {
+    if (
+      requireStatus(
+        runner,
+        "POST /api/v1/trajectories/{uuid}/generate",
+        generate,
+        202,
+        reproBase
+      )
+    ) {
       operationId = generate.body?.operationId;
       assertCondition(
         runner,
@@ -537,10 +677,21 @@ async function runHttpChecks(args, runner) {
     }
 
     if (Number.isInteger(operationId)) {
-      const getOperation = await jsonRequest(baseUrl, "GET", `/api/v1/operations/${operationId}`, {
-        timeoutMs: args.timeoutMs,
-      });
-      requireStatus(runner, "GET /api/v1/operations/{operationId}", getOperation, 200, reproBase);
+      const getOperation = await jsonRequest(
+        baseUrl,
+        "GET",
+        `/api/v1/operations/${operationId}`,
+        {
+          timeoutMs: args.timeoutMs
+        }
+      );
+      requireStatus(
+        runner,
+        "GET /api/v1/operations/{operationId}",
+        getOperation,
+        200,
+        reproBase
+      );
 
       await sleep(1500); // Wait for a short period before attempting to cancel the operation
       const cancelOperation = await jsonRequest(
@@ -548,7 +699,7 @@ async function runHttpChecks(args, runner) {
         "POST",
         `/api/v1/operations/${operationId}/cancel`,
         {
-          timeoutMs: args.timeoutMs,
+          timeoutMs: args.timeoutMs
         }
       );
       requireStatus(
@@ -581,17 +732,30 @@ async function runHttpChecks(args, runner) {
   }
 
   if (args.scope === "full") {
-    const diagnostics = await jsonRequest(baseUrl, "GET", "/api/v1/diagnostics", {
-      timeoutMs: args.timeoutMs,
-    });
-    requireStatus(runner, "GET /api/v1/diagnostics", diagnostics, 200, reproBase);
+    const diagnostics = await jsonRequest(
+      baseUrl,
+      "GET",
+      "/api/v1/diagnostics",
+      {
+        timeoutMs: args.timeoutMs
+      }
+    );
+    requireStatus(
+      runner,
+      "GET /api/v1/diagnostics",
+      diagnostics,
+      200,
+      reproBase
+    );
 
     const exportRes = await jsonRequest(baseUrl, "GET", "/api/v1/export", {
-      timeoutMs: args.timeoutMs,
+      timeoutMs: args.timeoutMs
     });
 
     let exportBundle = null;
-    if (requireStatus(runner, "GET /api/v1/export", exportRes, 200, reproBase)) {
+    if (
+      requireStatus(runner, "GET /api/v1/export", exportRes, 200, reproBase)
+    ) {
       exportBundle = exportRes.body;
       assertCondition(
         runner,
@@ -608,29 +772,56 @@ async function runHttpChecks(args, runner) {
         body: {
           mode: "merge",
           bundle: exportBundle,
-          idempotencyKey: `endpoint-check-${Date.now()}`,
-        },
+          idempotencyKey: `endpoint-check-${Date.now()}`
+        }
       });
       requireStatus(runner, "POST /api/v1/import", importRes, 202, reproBase);
     }
   }
 
-  const latestTrajectory = await jsonRequest(baseUrl, "GET", `/api/v1/trajectories/${newUuid}`, {
-    timeoutMs: args.timeoutMs,
-  });
+  const latestTrajectory = await jsonRequest(
+    baseUrl,
+    "GET",
+    `/api/v1/trajectories/${newUuid}`,
+    {
+      timeoutMs: args.timeoutMs
+    }
+  );
   const latestEtag = latestTrajectory.headers.get("etag") || trajectoryEtag;
 
   const deleteHeaders = latestEtag ? { "If-Match": latestEtag } : {};
-  const deleteTrajectory = await jsonRequest(baseUrl, "DELETE", `/api/v1/trajectories/${newUuid}`, {
-    timeoutMs: args.timeoutMs,
-    headers: deleteHeaders,
-  });
-  requireStatus(runner, "DELETE /api/v1/trajectories/{uuid}", deleteTrajectory, 204, reproBase);
+  const deleteTrajectory = await jsonRequest(
+    baseUrl,
+    "DELETE",
+    `/api/v1/trajectories/${newUuid}`,
+    {
+      timeoutMs: args.timeoutMs,
+      headers: deleteHeaders
+    }
+  );
+  requireStatus(
+    runner,
+    "DELETE /api/v1/trajectories/{uuid}",
+    deleteTrajectory,
+    204,
+    reproBase
+  );
 
-  const getDeleted = await jsonRequest(baseUrl, "GET", `/api/v1/trajectories/${newUuid}`, {
-    timeoutMs: args.timeoutMs,
-  });
-  requireStatus(runner, "GET deleted /api/v1/trajectories/{uuid}", getDeleted, 404, reproBase);
+  const getDeleted = await jsonRequest(
+    baseUrl,
+    "GET",
+    `/api/v1/trajectories/${newUuid}`,
+    {
+      timeoutMs: args.timeoutMs
+    }
+  );
+  requireStatus(
+    runner,
+    "GET deleted /api/v1/trajectories/{uuid}",
+    getDeleted,
+    404,
+    reproBase
+  );
 }
 
 async function main() {
@@ -638,7 +829,9 @@ async function main() {
   const runner = createRunner();
 
   console.log("State-server endpoint checks");
-  console.log(`scope=${args.scope} ws=${args.includeWs} http=${args.host}:${args.httpPort} ws=${args.host}:${args.wsPort}`);
+  console.log(
+    `scope=${args.scope} ws=${args.includeWs} http=${args.host}:${args.httpPort} ws=${args.host}:${args.wsPort}`
+  );
 
   try {
     await runHttpChecks(args, runner);
@@ -646,11 +839,17 @@ async function main() {
       await runWsChecks(args, runner);
     }
   } catch (err) {
-    runner.fail("Unexpected run error", String(err), "Inspect server logs and rerun script");
+    runner.fail(
+      "Unexpected run error",
+      String(err),
+      "Inspect server logs and rerun script"
+    );
   }
 
   console.log("");
-  console.log(`Summary: pass=${runner.passed.length} fail=${runner.failed.length} warn=${runner.warnings.length}`);
+  console.log(
+    `Summary: pass=${runner.passed.length} fail=${runner.failed.length} warn=${runner.warnings.length}`
+  );
 
   if (runner.failed.length > 0) {
     process.exit(1);

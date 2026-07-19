@@ -1,6 +1,10 @@
+// Copyright (c) Choreo contributors
+
 #include "choreo/rest_router/api_routes.hpp"
 
+#include <string>
 #include <string_view>
+#include <utility>
 
 #include <wpi/util/json.hpp>
 
@@ -26,11 +30,12 @@ void RegisterNotImplemented(Router& router, HttpMethod method,
                             std::string_view pattern) {
   std::string owned_pattern{pattern};
   std::string owned_endpoint{pattern};
-  router.Register(
-      method, std::move(owned_pattern),
-      [endpoint = std::move(owned_endpoint)](const Request&, const RouteParams&) {
-        return JsonResponse(501, "Route scaffolded but not implemented", endpoint);
-      });
+  router.Register(method, std::move(owned_pattern),
+                  [endpoint = std::move(owned_endpoint)](const Request&,
+                                                         const RouteParams&) {
+                    return JsonResponse(
+                        501, "Route scaffolded but not implemented", endpoint);
+                  });
 }
 
 }  // namespace
@@ -44,8 +49,10 @@ void RegisterApiV1Routes(Router& router) {
 
   RegisterNotImplemented(router, HttpMethod::kGet, "/api/v1/trajectories");
   RegisterNotImplemented(router, HttpMethod::kPost, "/api/v1/trajectories");
-  RegisterNotImplemented(router, HttpMethod::kGet, "/api/v1/trajectories/{uuid}");
-  RegisterNotImplemented(router, HttpMethod::kPut, "/api/v1/trajectories/{uuid}");
+  RegisterNotImplemented(router, HttpMethod::kGet,
+                         "/api/v1/trajectories/{uuid}");
+  RegisterNotImplemented(router, HttpMethod::kPut,
+                         "/api/v1/trajectories/{uuid}");
   RegisterNotImplemented(router, HttpMethod::kPatch,
                          "/api/v1/trajectories/{uuid}");
   RegisterNotImplemented(router, HttpMethod::kDelete,
@@ -55,10 +62,12 @@ void RegisterApiV1Routes(Router& router) {
 
   RegisterNotImplemented(router, HttpMethod::kPost,
                          "/api/v1/trajectories/{uuid}/waypoints");
-  RegisterNotImplemented(router, HttpMethod::kPatch,
-                         "/api/v1/trajectories/{uuid}/waypoints/{waypointUuid}");
-  RegisterNotImplemented(router, HttpMethod::kDelete,
-                         "/api/v1/trajectories/{uuid}/waypoints/{waypointUuid}");
+  RegisterNotImplemented(
+      router, HttpMethod::kPatch,
+      "/api/v1/trajectories/{uuid}/waypoints/{waypointUuid}");
+  RegisterNotImplemented(
+      router, HttpMethod::kDelete,
+      "/api/v1/trajectories/{uuid}/waypoints/{waypointUuid}");
   RegisterNotImplemented(router, HttpMethod::kPost,
                          "/api/v1/trajectories/{uuid}/waypoints/reorder");
 

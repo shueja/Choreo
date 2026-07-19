@@ -14,8 +14,8 @@
 #include "choreo/parameters.hpp"
 #include "choreo/project.hpp"
 #include "choreo/trajectory/output.hpp"
-#include "trajectory/swerve_sample.hpp"
 #include "trajectory/differential_sample.hpp"
+#include "trajectory/swerve_sample.hpp"
 
 namespace choreo {
 
@@ -29,15 +29,15 @@ struct TrajectoryFile {
   std::optional<RobotConfig> config;
   std::optional<Parameters> snapshot;
   Parameters params;
-  std::optional<std::variant<Trajectory<SwerveDriveType>, Trajectory<DifferentialDriveType>>> trajectory;
+  std::optional<std::variant<Trajectory<SwerveDriveType>,
+                             Trajectory<DifferentialDriveType>>>
+      trajectory;
   std::vector<EventMarker> events;
 
   inline bool must_be_generated(const ProjectFile& projectFile) const {
-    return !snapshot.has_value() ||
-     !snapshot->equivalent(params) ||
-      !trajectory.has_value() ||
-       !config.has_value() ||
-       !config->equivalent(projectFile.config);
+    return !snapshot.has_value() || !snapshot->equivalent(params) ||
+           !trajectory.has_value() || !config.has_value() ||
+           !config->equivalent(projectFile.config);
   }
 };
 
@@ -49,18 +49,16 @@ inline void to_json(wpi::util::json& json, const TrajectoryFile& trajFile) {
                         : wpi::util::json();
   wpi::util::json trajectory_json;
   if (trajFile.trajectory) {
-    std::visit([&](auto&& arg){
-      trajectory_json = wpi::util::json(arg);
-    }, *trajFile.trajectory);
+    std::visit([&](auto&& arg) { trajectory_json = wpi::util::json(arg); },
+               *trajFile.trajectory);
   } else {
     trajectory_json = wpi::util::json();
   }
-  json = wpi::util::json::object("name", trajFile.name, "version",
-                                 trajFile.version, "uuid", trajFile.uuid,
-                                 "config", config_json,
-                                 "snapshot", snapshot_json, "params",
-                                 trajFile.params, "trajectory", trajectory_json,
-                                 "events", trajFile.events);
+  json = wpi::util::json::object(
+      "name", trajFile.name, "version", trajFile.version, "uuid", trajFile.uuid,
+      "config", config_json, "snapshot", snapshot_json, "params",
+      trajFile.params, "trajectory", trajectory_json, "events",
+      trajFile.events);
 }
 inline void from_json(const wpi::util::json& json, TrajectoryFile& trajFile) {
   trajFile.uuid = json.at("uuid").get_string();
@@ -83,11 +81,14 @@ inline void from_json(const wpi::util::json& json, TrajectoryFile& trajFile) {
     if (!trajectory_json.is_null()) {
       std::string s = trajectory_json.at("sample_type").get_string();
       if (s == SwerveDriveType::tag) {
-        trajFile.trajectory = Trajectory<SwerveDriveType>::from_json(trajectory_json);
+        trajFile.trajectory =
+            Trajectory<SwerveDriveType>::from_json(trajectory_json);
       } else if (s == DifferentialDriveType::tag) {
-        trajFile.trajectory = Trajectory<DifferentialDriveType>::from_json(trajectory_json);
+        trajFile.trajectory =
+            Trajectory<DifferentialDriveType>::from_json(trajectory_json);
       } else {
-        throw std::invalid_argument("Parsing TrajectoryFile with unknown drive type" + s);
+        throw std::invalid_argument(
+            "Parsing TrajectoryFile with unknown drive type" + s);
       }
     } else {
       trajFile.trajectory = std::nullopt;

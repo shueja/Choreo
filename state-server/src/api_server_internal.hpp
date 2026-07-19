@@ -1,3 +1,5 @@
+// Copyright (c) Choreo contributors
+
 #pragma once
 
 #include <cctype>
@@ -9,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <wpi/util/json.hpp>
@@ -25,7 +28,8 @@ inline std::string ToLower(std::string_view text) {
   std::string out;
   out.reserve(text.size());
   for (char c : text) {
-    out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    out.push_back(
+        static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
   }
   return out;
 }
@@ -96,7 +100,8 @@ inline Response Conflict(std::string_view code, std::string_view message) {
 
 inline Response ConflictStale(std::string_view current_revision) {
   auto response = choreo::rest_router::MakeJsonErrorResponse(
-      409, "stale_revision", "If-Match did not match current resource revision");
+      409, "stale_revision",
+      "If-Match did not match current resource revision");
   response.headers["ETag"] = QuotedEtag(current_revision);
   return response;
 }

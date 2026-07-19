@@ -30,13 +30,14 @@
 #include <trajopt/differential_trajectory_generator.hpp>
 #endif
 #include <wpi/math/trajectory/DifferentialSample.hpp>
+
+#include "../drive_type.hpp"
 #include "sample_concept.hpp"
 #include "wpi/math/kinematics/ChassisAccelerations.hpp"
 #include "wpi/math/kinematics/ChassisVelocities.hpp"
-#include "../drive_type.hpp"
 #include "wpi/math/trajectory/DifferentialTrajectory.hpp"
 namespace choreo {
-struct DifferentialDriveType{
+struct DifferentialDriveType {
   DifferentialDriveType() = default;
   DifferentialDriveType(const DifferentialDriveType&) = default;
   using WPILibSample = wpi::math::DifferentialSample;
@@ -49,27 +50,36 @@ struct DifferentialDriveType{
 #ifdef CHOREO_WITH_TRAJOPT
   constexpr static WPILibSample fromTrajopt(const TrajoptSample& sample) {
     using namespace wpi::units::literals;
-    auto pose = wpi::math::Pose2d{wpi::units::meter_t(sample.x), wpi::units::meter_t(sample.y), wpi::units::radian_t(sample.heading)};
-    auto velocity_in_heading = wpi::units::meters_per_second_t((sample.velocity_l + sample.velocity_r) / 2.0);
-    wpi::math::ChassisVelocities robot_relative_velocities{velocity_in_heading, 0.0_mps, wpi::units::radians_per_second_t(sample.angular_velocity)};
-    auto field_relative_velocities = robot_relative_velocities.ToFieldRelative(pose.Rotation());
-    auto  acceleration_in_heading = wpi::units::meters_per_second_squared_t((sample.acceleration_l + sample.acceleration_r) / 2.0);
-    wpi::math::ChassisAccelerations robot_relative_accelerations{acceleration_in_heading, wpi::units::meters_per_second_squared_t(0.0), wpi::units::radians_per_second_squared_t(sample.angular_acceleration)};
-    auto field_relative_accelerations = robot_relative_accelerations.ToFieldRelative(pose.Rotation());
+    auto pose = wpi::math::Pose2d{wpi::units::meter_t(sample.x),
+                                  wpi::units::meter_t(sample.y),
+                                  wpi::units::radian_t(sample.heading)};
+    auto velocity_in_heading = wpi::units::meters_per_second_t(
+        (sample.velocity_l + sample.velocity_r) / 2.0);
+    wpi::math::ChassisVelocities robot_relative_velocities{
+        velocity_in_heading, 0.0_mps,
+        wpi::units::radians_per_second_t(sample.angular_velocity)};
+    auto field_relative_velocities =
+        robot_relative_velocities.ToFieldRelative(pose.Rotation());
+    auto acceleration_in_heading = wpi::units::meters_per_second_squared_t(
+        (sample.acceleration_l + sample.acceleration_r) / 2.0);
+    wpi::math::ChassisAccelerations robot_relative_accelerations{
+        acceleration_in_heading, wpi::units::meters_per_second_squared_t(0.0),
+        wpi::units::radians_per_second_squared_t(sample.angular_acceleration)};
+    auto field_relative_accelerations =
+        robot_relative_accelerations.ToFieldRelative(pose.Rotation());
     auto timestamp = wpi::units::second_t(sample.timestamp);
-    
+
     auto leftSpeed = wpi::units::meters_per_second_t(sample.velocity_l);
     auto rightSpeed = wpi::units::meters_per_second_t(sample.velocity_r);
-    return WPILibSample{
-      timestamp,
-      pose,
-      field_relative_velocities,
-      field_relative_accelerations,
-      leftSpeed,
-      rightSpeed
-    };
+    return WPILibSample{timestamp,
+                        pose,
+                        field_relative_velocities,
+                        field_relative_accelerations,
+                        leftSpeed,
+                        rightSpeed};
   }
 #endif
 };
-static_assert(DriveTypeLike<DifferentialDriveType>, "DifferentialDriveType must satisfy DriveTypeLike");
+static_assert(DriveTypeLike<DifferentialDriveType>,
+              "DifferentialDriveType must satisfy DriveTypeLike");
 }  // namespace choreo

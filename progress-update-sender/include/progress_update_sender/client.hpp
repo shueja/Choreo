@@ -1,8 +1,11 @@
+// Copyright (c) Choreo contributors
+
 #pragma once
 
 #include <memory>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <wpi/math/trajectory/struct/DifferentialSampleStruct.hpp>
@@ -39,7 +42,8 @@ class Client {
 
   using WebSocketHandle = std::shared_ptr<wpi::net::WebSocket>;
 
-  [[nodiscard]] WebSocketHandle socket() const;
+  [[nodiscard]]
+  WebSocketHandle socket() const;
 
   /// @brief Opens a WebSocket connection to the specified URL.
   /// @param url The URL to connect to.
@@ -64,7 +68,8 @@ class Client {
 
 template <SampleLike Sample>
   requires wpi::util::StructSerializable<Sample>
-void Client::sendIncompleteTrajectory(const std::vector<Sample>& samples) const {
+void Client::sendIncompleteTrajectory(
+    const std::vector<Sample>& samples) const {
   std::string driveType = "Swerve";
   if constexpr (requires(const Sample& sample) {
                   sample.leftVelocity;
@@ -75,19 +80,21 @@ void Client::sendIncompleteTrajectory(const std::vector<Sample>& samples) const 
 
   std::string encodedSamples;
   wpi::util::StructArrayBuffer<Sample> structArrayBuffer;
-  structArrayBuffer.Write(samples, [&encodedSamples](std::span<const uint8_t> data) {
-    wpi::util::Base64Encode(data, &encodedSamples);
-  });
+  structArrayBuffer.Write(samples,
+                          [&encodedSamples](std::span<const uint8_t> data) {
+                            wpi::util::Base64Encode(data, &encodedSamples);
+                          });
 
   auto message = wpi::util::json::object();
   message["version"] = 1;
   message["event"] = "incompleteTrajectory";
   message["driveType"] = driveType;
   message["sampleCount"] = samples.size();
-  message["sampleStructType"] = std::string(wpi::util::GetStructTypeString<Sample>());
+  message["sampleStructType"] =
+      std::string(wpi::util::GetStructTypeString<Sample>());
   message["sampleStructSize"] = wpi::util::GetStructSize<Sample>();
   message["samplesBase64"] = std::move(encodedSamples);
   send(std::move(message));
 }
 
-}  // namespace progress_update_sender
+}  // namespace choreo::progress_update_sender

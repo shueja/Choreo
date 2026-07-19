@@ -33,8 +33,11 @@ endif()
 
 include(../cmake/CompilerFlags.cmake)
 
-file(GLOB_RECURSE state_server_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+file(
+    GLOB_RECURSE state_server_SOURCES
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+)
 
 add_executable(state-server ${state_server_SOURCES})
 
@@ -51,10 +54,5 @@ target_include_directories(
 
 target_link_libraries(
     state-server
-    PRIVATE
-    choreo_history_engine
-        rest_router
-        choreo_document
-        wpinet
-        wpiutil
+    PRIVATE choreo_history_engine rest_router choreo_document wpinet wpiutil
 )

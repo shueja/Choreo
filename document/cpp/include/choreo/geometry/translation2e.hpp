@@ -6,8 +6,8 @@
 #include <wpi/units/length.hpp>
 #include <wpi/util/json.hpp>
 
-#include "../variables/dimension.hpp"
 #include "../expr.hpp"
+#include "../variables/dimension.hpp"
 #include "type_traits"
 #ifdef CHOREO_WITH_TRAJOPT
 #include <trajopt/geometry/translation2.hpp>

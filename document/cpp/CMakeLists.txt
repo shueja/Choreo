@@ -18,7 +18,7 @@ endif()
 # FetchContent_Declare(jartjson GIT_REPOSITORY "https://github.com/jart/json.cpp" GIT_TAG "ccb9195e6abe9eb060e338a04f43e8d2e67b45ea")
 # FetchContent_MakeAvailable(jartjson)
 
-include (../../cmake/FetchWPILib.cmake)
+include(../../cmake/FetchWPILib.cmake)
 fetch_wpilib()
 
 include(../../cmake/CompilerFlags.cmake)

@@ -2,6 +2,7 @@
 
 #pragma once
 #include <string>
+
 #include <wpi/math/geometry/Pose2d.hpp>
 
 #include "expr.hpp"
@@ -26,7 +27,8 @@ struct Waypoint {
 
   bool equivalent(const Waypoint& other) const {
     return x.equivalent(other.x) && y.equivalent(other.y) &&
-           heading.equivalent(other.heading) && (!override_intervals || (intervals == other.intervals)) &&
+           heading.equivalent(other.heading) &&
+           (!override_intervals || (intervals == other.intervals)) &&
            split == other.split && fix_translation == other.fix_translation &&
            fix_heading == other.fix_heading &&
            override_intervals == other.override_intervals;
@@ -45,11 +47,11 @@ struct Waypoint {
 
 inline void to_json(wpi::util::json& json, const Waypoint& waypoint) {
   json = wpi::util::json::object(
-      "uuid", waypoint.uuid, "x", waypoint.x, "y", waypoint.y,
-      "heading", waypoint.heading,
-      "intervals", waypoint.intervals, "split", waypoint.split,
-      "fix_translation", waypoint.fix_translation, "fix_heading",
-      waypoint.fix_heading, "override_intervals", waypoint.override_intervals);
+      "uuid", waypoint.uuid, "x", waypoint.x, "y", waypoint.y, "heading",
+      waypoint.heading, "intervals", waypoint.intervals, "split",
+      waypoint.split, "fix_translation", waypoint.fix_translation,
+      "fix_heading", waypoint.fix_heading, "override_intervals",
+      waypoint.override_intervals);
 }
 
 inline void from_json(const wpi::util::json& json, Waypoint& waypoint) {

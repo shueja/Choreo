@@ -1,3 +1,5 @@
+// Copyright (c) Choreo contributors
+
 #pragma once
 
 #include <stdexcept>
@@ -9,9 +11,9 @@ namespace choreo::state_server {
 
 /// Enumeration of possible operation completion statuses
 enum class CompletionStatus {
-  kSuccess,   ///< Operation completed successfully
-  kCancelled, ///< Operation was cancelled by user
-  kFailed     ///< Operation failed with an error
+  kSuccess,    ///< Operation completed successfully
+  kCancelled,  ///< Operation was cancelled by user
+  kFailed      ///< Operation failed with an error
 };
 
 // JSON serialization functions for CompletionStatus

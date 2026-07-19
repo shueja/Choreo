@@ -43,7 +43,11 @@ export type WaypointID =
  * This interface was referenced by `ChoreoDocumentSchema`'s JSON-Schema
  * via the `definition` "ConstraintVariant".
  */
-export type ConstraintVariant = MaxVelocity | MaxAngularVelocity | KeepInCircle | HeadingConstraint;
+export type ConstraintVariant =
+  | MaxVelocity
+  | MaxAngularVelocity
+  | KeepInCircle
+  | HeadingConstraint;
 /**
  * All supported JSON progress update messages emitted by the C++ progress-update-sender.
  *

@@ -26,6 +26,7 @@ class TRAJOPT_DLLEXPORT PathBuilder {
   using DrivetrainType = Drivetrain;
   using SolutionType = Solution;
   using SampleType = typename Solution::TrajectoryType::SampleType;
+
  public:
   /// Set the Drivetrain object
   ///

@@ -24,29 +24,24 @@ class TRAJOPT_DLLEXPORT KeepInCircleConstraint {
  public:
   /// Constructs a KeepInCircleConstraint.
   ///
-  /// @param bumpers Any robot-relative KeepOutRegions to stay inside the circle.
+  /// @param bumpers Any robot-relative KeepOutRegions to stay inside the
+  /// circle.
   /// @param field_point Field point.
   /// @param min_distance Minimum distance between robot line and field point.
   ///     Must be nonnegative.
   explicit KeepInCircleConstraint(std::vector<trajopt::KeepOutRegion> bumpers,
-                                   Translation2d field_point,
-                                   double min_distance) {
+                                  Translation2d field_point,
+                                  double min_distance) {
     assert(min_distance >= 0.0);
-    for (size_t bumper = 0; bumper < bumpers.size();
-       bumper++) {
-    for (size_t i = 0; i < bumpers.at(bumper).points.size();
-         i++) {
-      constraints.push_back(trajopt::PointPointMaxConstraint{
-                     bumpers.at(bumper).points.at(i),
-                     field_point,
-                     min_distance});
+    for (size_t bumper = 0; bumper < bumpers.size(); bumper++) {
+      for (size_t i = 0; i < bumpers.at(bumper).points.size(); i++) {
+        constraints.push_back(trajopt::PointPointMaxConstraint{
+            bumpers.at(bumper).points.at(i), field_point, min_distance});
+      }
     }
+    constraints.push_back(trajopt::PointPointMaxConstraint{
+        {0.0, 0.0}, field_point, min_distance});
   }
-  constraints.push_back(
-      trajopt::PointPointMaxConstraint{
-                 {0.0, 0.0}, field_point, min_distance});
-  }
-  
 
   /// Applies this constraint to the given problem.
   ///
@@ -63,9 +58,9 @@ class TRAJOPT_DLLEXPORT KeepInCircleConstraint {
       [[maybe_unused]] const Translation2v<double>& linear_acceleration,
       [[maybe_unused]] const slp::Variable<double>& angular_acceleration) {
     for (auto constraint : constraints) {
-            constraint.apply(problem, pose, linear_velocity, angular_velocity,
-                    linear_acceleration, angular_acceleration);
-            }
+      constraint.apply(problem, pose, linear_velocity, angular_velocity,
+                       linear_acceleration, angular_acceleration);
+    }
   }
 
  private:

@@ -37,11 +37,10 @@ struct Parameters {
     if (!waypointsEqual) {
       return false;
     }
-    return std::ranges::equal(
-        constraints, other.constraints,
-        [](const Constraint& lhs, const Constraint& rhs) {
-          return lhs.equivalent(rhs);
-        });
+    return std::ranges::equal(constraints, other.constraints,
+                              [](const Constraint& lhs, const Constraint& rhs) {
+                                return lhs.equivalent(rhs);
+                              });
   }
 };
 inline void to_json(wpi::util::json& json, const Parameters& params) {

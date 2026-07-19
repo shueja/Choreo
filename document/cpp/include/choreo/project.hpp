@@ -6,11 +6,11 @@
 #include <string>
 #include <vector>
 
+#include "choreo/codegen/codegen_config.hpp"
 #include "choreo/drive_type.hpp"
 #include "choreo/expr.hpp"
 #include "choreo/robot_config.hpp"
 #include "choreo/variables/variables.hpp"
-#include "choreo/codegen/codegen_config.hpp"
 
 namespace choreo {
 
@@ -29,9 +29,9 @@ struct ProjectFile {
 
 inline void to_json(wpi::util::json& json, const ProjectFile& project) {
   json = wpi::util::json::object(
-      "uuid", project.uuid, "name", project.name, "version",
-      project.version, "type", project.type, "variables", project.variables,
-      "config", project.config, "codegen", project.codegen);
+      "uuid", project.uuid, "name", project.name, "version", project.version,
+      "type", project.type, "variables", project.variables, "config",
+      project.config, "codegen", project.codegen);
 }
 
 inline void from_json(const wpi::util::json& json, ProjectFile& project) {

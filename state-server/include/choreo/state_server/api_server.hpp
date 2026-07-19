@@ -1,3 +1,5 @@
+// Copyright (c) Choreo contributors
+
 #pragma once
 
 #include <chrono>
@@ -20,12 +22,11 @@
 
 #include "choreo/rest_router/router.hpp"
 #include "choreo/state_server/completion_status.hpp"
-#include "history_engine.hpp"
 #include "choreo/state_server/operation_id.hpp"
-#include "choreo/state_server/operation_state.hpp"
 #include "choreo/state_server/operation_record.hpp"
+#include "choreo/state_server/operation_state.hpp"
 #include "choreo/state_server/server_options.hpp"
-
+#include "history_engine.hpp"
 
 namespace choreo::state_server {
 
@@ -74,8 +75,11 @@ class ApiServer {
       const std::shared_ptr<wpi::net::WebSocket>& ws);
 
  private:
-  std::expected<std::string, rest_router::Response> CheckRouteTrajectoryUUID( const rest_router::Request& request, const rest_router::RouteParams& params, std::string key = "uuid");
-  std::expected<OperationId, rest_router::Response> CheckRouteOperationId(const rest_router::RouteParams& params, std::string key = "operationId");
+  std::expected<std::string, rest_router::Response> CheckRouteTrajectoryUUID(
+      const rest_router::Request& request,
+      const rest_router::RouteParams& params, std::string key = "uuid");
+  std::expected<OperationId, rest_router::Response> CheckRouteOperationId(
+      const rest_router::RouteParams& params, std::string key = "operationId");
   /// Represents an active client connection to the server
   struct ConnectionHandle {
     /// TCP socket for reading/writing data
@@ -93,8 +97,8 @@ class ApiServer {
   /// Registers REST routes for generation request and status operations
   void RegisterGenerationRoutes();
 
-  /// Loads initial project and trajectories from the configured workspace directory.
-  /// Requires exactly one .chor file and zero or more .traj files.
+  /// Loads initial project and trajectories from the configured workspace
+  /// directory. Requires exactly one .chor file and zero or more .traj files.
   bool LoadInitialStateFromWorkspace();
 
   /// Accepts an incoming client connection on the main HTTP port
@@ -142,21 +146,25 @@ class ApiServer {
   /// @return String representation of trajectory revision number
   std::string TrajectoryRevisionToken(const std::string& uuid) const;
 
-    [[nodiscard]] std::string ProjectScopeKey() const;
-    [[nodiscard]] std::string TrajectoryScopeKey(std::string_view uuid) const;
+  [[nodiscard]]
+  std::string ProjectScopeKey() const;
+  [[nodiscard]]
+  std::string TrajectoryScopeKey(std::string_view uuid) const;
 
-    [[nodiscard]] std::optional<wpi::util::json> CaptureScopeSnapshot(
+  [[nodiscard]]
+  std::optional<wpi::util::json> CaptureScopeSnapshot(
       std::string_view scope_key) const;
-    bool ApplyScopeSnapshot(std::string_view scope_key,
-                const wpi::util::json& snapshot,
-                std::string& error_message);
-    bool BumpScopeRevision(std::string_view scope_key);
-    [[nodiscard]] std::optional<std::string> CurrentScopeRevisionToken(
+  bool ApplyScopeSnapshot(std::string_view scope_key,
+                          const wpi::util::json& snapshot,
+                          std::string& error_message);
+  bool BumpScopeRevision(std::string_view scope_key);
+  [[nodiscard]]
+  std::optional<std::string> CurrentScopeRevisionToken(
       std::string_view scope_key) const;
-    HistoryEngine& EnsureHistoryEngine(std::string_view scope_key);
+  HistoryEngine& EnsureHistoryEngine(std::string_view scope_key);
 
-    std::optional<rest_router::Response> HandleUndo(std::string_view scope_key);
-    std::optional<rest_router::Response> HandleRedo(std::string_view scope_key);
+  std::optional<rest_router::Response> HandleUndo(std::string_view scope_key);
+  std::optional<rest_router::Response> HandleRedo(std::string_view scope_key);
 
   /// Server configuration (bind address and port settings)
   ServerOptions m_options;
@@ -204,12 +212,12 @@ class ApiServer {
   std::unordered_map<uint64_t, std::shared_ptr<wpi::net::uv::Process>>
       m_running_generation_processes;
 
-    /// Active generator stdout pipes (operation ID -> Pipe handle)
-    std::unordered_map<uint64_t, std::shared_ptr<wpi::net::uv::Pipe>>
+  /// Active generator stdout pipes (operation ID -> Pipe handle)
+  std::unordered_map<uint64_t, std::shared_ptr<wpi::net::uv::Pipe>>
       m_running_generation_stdout_pipes;
 
-    /// Active generator stderr pipes (operation ID -> Pipe handle)
-    std::unordered_map<uint64_t, std::shared_ptr<wpi::net::uv::Pipe>>
+  /// Active generator stderr pipes (operation ID -> Pipe handle)
+  std::unordered_map<uint64_t, std::shared_ptr<wpi::net::uv::Pipe>>
       m_running_generation_stderr_pipes;
 
   /// Incremental revision counter for project-wide changes

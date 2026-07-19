@@ -1,6 +1,4 @@
-// Copyright (c) FIRST and other WPILib contributors.
-// Open Source Software; you can modify and/or share it under the terms of
-// the WPILib BSD license file in the root directory of this project.
+// Copyright (c) Choreo contributors
 
 #pragma once
 
@@ -10,10 +8,10 @@
 
 #include "wpi/math/geometry/Rotation2d.hpp"
 #include "wpi/units/area.hpp"
+#include "wpi/units/force.hpp"
 #include "wpi/units/length.hpp"
 #include "wpi/units/math.hpp"
 #include "wpi/util/SymbolExports.hpp"
-#include "wpi/units/force.hpp"
 #include "wpi/util/json.hpp"
 
 namespace choreo {
@@ -49,7 +47,8 @@ class ForceVector2d final {
    * @param distance The distance from the origin to the end of the translation.
    * @param angle The angle between the x-axis and the translation vector.
    */
-  constexpr ForceVector2d(wpi::units::newton_t magnitude, const wpi::math::Rotation2d& angle)
+  constexpr ForceVector2d(wpi::units::newton_t magnitude,
+                          const wpi::math::Rotation2d& angle)
       : m_x{magnitude * angle.Cos()}, m_y{magnitude * angle.Sin()} {}
 
   /**
@@ -198,29 +197,27 @@ class ForceVector2d final {
    */
   constexpr bool operator==(const ForceVector2d& other) const {
     using namespace wpi::units::literals;
-    return wpi::units::math::abs(m_x - other.m_x) < wpi::units::newton_t{1e-9} &&
+    return wpi::units::math::abs(m_x - other.m_x) <
+               wpi::units::newton_t{1e-9} &&
            wpi::units::math::abs(m_y - other.m_y) < wpi::units::newton_t{1e-9};
   }
-
-
 
  private:
   wpi::units::newton_t m_x = wpi::units::newton_t{0.0};
   wpi::units::newton_t m_y = wpi::units::newton_t{0.0};
 };
 
-
 inline void to_json(wpi::util::json& json, const ForceVector2d& state) {
-  json = wpi::util::json::object("x", state.X().value(), "y", state.Y().value());
+  json =
+      wpi::util::json::object("x", state.X().value(), "y", state.Y().value());
 }
-
 
 inline void from_json(const wpi::util::json& json, ForceVector2d& state) {
   state = ForceVector2d{wpi::units::newton_t{json.at("x").get_number()},
                         wpi::units::newton_t{json.at("y").get_number()}};
 }
 
-}  // namespace wpi::math
+}  // namespace choreo
 
 // #include "wpi/math/geometry/proto/ForceVector2dProto.hpp"
 // #include "wpi/math/geometry/struct/ForceVector2dStruct.hpp"

@@ -34,7 +34,7 @@ struct MaxVelocity {
 
 #ifdef CHOREO_WITH_TRAJOPT
   trajopt::Constraint toTrajoptConstraint(
-    const std::vector<trajopt::KeepOutRegion>& bumpers) const {
+      const std::vector<trajopt::KeepOutRegion>& bumpers) const {
     return trajopt::LinearVelocityMaxMagnitudeConstraint{max};
   }
 #endif
@@ -44,7 +44,7 @@ struct MaxVelocity {
   }
   static std::string_view type_string() { return "MaxVelocity"; }
   MaxVelocity forEndpoints(const choreo::Waypoint& start,
-                             const choreo::Waypoint& end) const {
+                           const choreo::Waypoint& end) const {
     // For a max-velocity constraint, the endpoints don't affect the constraint
     // itself, so we can just return *this. However, we need to return a new
     // instance to satisfy the interface.

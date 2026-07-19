@@ -144,14 +144,29 @@ export const PathListStore = types
               path.deserialize(contents);
             } else {
               path.setName(usedName);
-              path.params.addConstraint("KeepInCircle", false, "first", "last", {
-                x: { exp: `${FieldDimensions.FIELD_LENGTH / 2} m`, val: FieldDimensions.FIELD_LENGTH / 2 },
-                y: { exp: `${FieldDimensions.FIELD_WIDTH / 2} m`, val: FieldDimensions.FIELD_WIDTH / 2 },
-                r: {
-                  exp: `${Math.max(FieldDimensions.FIELD_LENGTH, FieldDimensions.FIELD_WIDTH)} m`,
-                  val: Math.max(FieldDimensions.FIELD_LENGTH, FieldDimensions.FIELD_WIDTH)
+              path.params.addConstraint(
+                "KeepInCircle",
+                false,
+                "first",
+                "last",
+                {
+                  x: {
+                    exp: `${FieldDimensions.FIELD_LENGTH / 2} m`,
+                    val: FieldDimensions.FIELD_LENGTH / 2
+                  },
+                  y: {
+                    exp: `${FieldDimensions.FIELD_WIDTH / 2} m`,
+                    val: FieldDimensions.FIELD_WIDTH / 2
+                  },
+                  r: {
+                    exp: `${Math.max(FieldDimensions.FIELD_LENGTH, FieldDimensions.FIELD_WIDTH)} m`,
+                    val: Math.max(
+                      FieldDimensions.FIELD_LENGTH,
+                      FieldDimensions.FIELD_WIDTH
+                    )
+                  }
                 }
-              });
+              );
             }
 
             if (self.paths.size === 1 || select) {

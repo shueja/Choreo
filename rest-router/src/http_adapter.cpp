@@ -1,4 +1,9 @@
+// Copyright (c) Choreo contributors
+
 #include "choreo/rest_router/http_adapter.hpp"
+
+#include <string>
+#include <utility>
 
 #include <wpi/net/UrlParser.hpp>
 #include <wpi/util/json.hpp>
@@ -22,8 +27,8 @@ std::optional<HttpMethod> ToRouterMethod(wpi::net::http_method wpinet_method) {
   }
 }
 
-std::optional<std::string> ExtractPathFromUrl(wpi::net::http_method wpinet_method,
-                                              std::string_view url) {
+std::optional<std::string> ExtractPathFromUrl(
+    wpi::net::http_method wpinet_method, std::string_view url) {
   wpi::net::UrlParser parser{url, wpinet_method == wpi::net::HTTP_CONNECT};
   if (!parser.IsValid()) {
     return std::nullopt;
@@ -36,10 +41,9 @@ std::optional<std::string> ExtractPathFromUrl(wpi::net::http_method wpinet_metho
   return std::string{parser.GetPath()};
 }
 
-std::optional<Request> BuildRequestFromWpinet(wpi::net::http_method wpinet_method,
-                                              std::string_view url,
-                                              HeaderMap headers,
-                                              std::string body) {
+std::optional<Request> BuildRequestFromWpinet(
+    wpi::net::http_method wpinet_method, std::string_view url,
+    HeaderMap headers, std::string body) {
   auto method = ToRouterMethod(wpinet_method);
   if (!method.has_value()) {
     return std::nullopt;

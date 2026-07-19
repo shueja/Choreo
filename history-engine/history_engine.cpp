@@ -1,6 +1,11 @@
+// Copyright (c) Choreo contributors
+
 #include "history_engine.hpp"
 
 #include <charconv>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -88,8 +93,7 @@ bool ParseArrayIndex(std::string_view token, size_t& index) {
   return true;
 }
 
-void AppendReplaceOp(wpi::util::json& patch,
-                     const std::string& path,
+void AppendReplaceOp(wpi::util::json& patch, const std::string& path,
                      const wpi::util::json& value) {
   auto op = wpi::util::json::object();
   op["op"] = "replace";
@@ -98,8 +102,7 @@ void AppendReplaceOp(wpi::util::json& patch,
   patch.get_array().push_back(std::move(op));
 }
 
-void AppendAddOp(wpi::util::json& patch,
-                 const std::string& path,
+void AppendAddOp(wpi::util::json& patch, const std::string& path,
                  const wpi::util::json& value) {
   auto op = wpi::util::json::object();
   op["op"] = "add";
@@ -116,8 +119,7 @@ void AppendRemoveOp(wpi::util::json& patch, const std::string& path) {
 }
 
 void BuildJsonPatchRecursive(const wpi::util::json& from,
-                             const wpi::util::json& to,
-                             const std::string& path,
+                             const wpi::util::json& to, const std::string& path,
                              wpi::util::json& patch) {
   if (from.type() != to.type()) {
     AppendReplaceOp(patch, path, to);
@@ -183,8 +185,7 @@ wpi::util::json BuildJsonPatch(const wpi::util::json& from,
 namespace choreo::state_server {
 
 HistoryEntry MakeHistoryEntryFromSnapshots(
-    std::string reason,
-    const wpi::util::json& before,
+    std::string reason, const wpi::util::json& before,
     const wpi::util::json& after,
     std::chrono::system_clock::time_point recorded_at) {
   // Undo reverses after -> before, redo replays before -> after.
@@ -206,7 +207,8 @@ void HistoryEngine::Record(HistoryEntry entry) {
     return;
   }
 
-  if (entry.undo_patch.get_array().empty() && entry.redo_patch.get_array().empty()) {
+  if (entry.undo_patch.get_array().empty() &&
+      entry.redo_patch.get_array().empty()) {
     return;
   }
 
@@ -265,8 +267,7 @@ void HistoryEngine::Clear() {
   m_stacks.redo.clear();
 }
 
-bool ApplyJsonPatch(wpi::util::json& target,
-                    const wpi::util::json& patch,
+bool ApplyJsonPatch(wpi::util::json& target, const wpi::util::json& patch,
                     std::string& error_message) {
   if (!patch.is_array()) {
     error_message = "history patch must be an RFC6902 JSON Patch array";
@@ -329,7 +330,8 @@ bool ApplyJsonPatch(wpi::util::json& target,
 
       if (current->is_array()) {
         size_t index = 0;
-        if (!ParseArrayIndex(token, index) || index >= current->get_array().size()) {
+        if (!ParseArrayIndex(token, index) ||
+            index >= current->get_array().size()) {
           error_message = "history patch path has invalid array index";
           return false;
         }

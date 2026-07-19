@@ -22,8 +22,9 @@ struct EventMarkerData {
   std::optional<dimensions::Time::baseUnit> targetTimestamp;
   Expr<dimensions::Time> offset;
 
-  void updateTimestamp(const std::vector<Waypoint>& waypoints,
-                       const std::vector<wpi::units::second_t>& waypoint_timestamps) {
+  void updateTimestamp(
+      const std::vector<Waypoint>& waypoints,
+      const std::vector<wpi::units::second_t>& waypoint_timestamps) {
     if (!target.has_value()) {
       return;
     }

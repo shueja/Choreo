@@ -1,3 +1,5 @@
+// Copyright (c) Choreo contributors
+
 #pragma once
 
 #include <cstdint>
@@ -6,11 +8,10 @@
 
 namespace choreo::state_server {
 
-    
 static std::atomic<uint64_t> next_id{0};
 using OperationId = uint64_t;
 inline OperationId generateNextOperationId() {
-    return next_id.fetch_add(1);
+  return next_id.fetch_add(1);
 }
 // JSON serialization functions for OperationId
 inline void to_json(wpi::util::json& json, const OperationId& id) {
@@ -22,4 +23,3 @@ inline void from_json(const wpi::util::json& json, OperationId& id) {
 }
 
 }  // namespace choreo::state_server
-

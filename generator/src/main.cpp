@@ -1,16 +1,17 @@
 // Copyright (c) Choreo contributors
 
+#include <filesystem>
+#include <fstream>
+#include <functional>
 #include <iterator>
 #include <numbers>
-#include <filesystem>
-#include <functional>
-#include <fstream>
 #include <optional>
 #include <print>
 #include <ranges>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -27,6 +28,7 @@
 #include <choreo/variables/variables.hpp>
 #include <choreo/waypoint.hpp>
 #include <generator.hpp>
+#include <progress_update_sender/client.hpp>
 #include <sleipnir/optimization/solver/exit_status.hpp>
 #include <trajopt/swerve_trajectory_generator.hpp>
 #include <wpi/math/geometry/Pose2d.hpp>
@@ -35,12 +37,12 @@
 #include "choreo/drive_type.hpp"
 #include "choreo/trajectory.hpp"
 #include "cli_parser.hpp"
-#include <progress_update_sender/client.hpp>
 #include "segment.hpp"
 #include "split_to_segments.hpp"
 
 ///
-/// @brief Validates the input trajectory and project files for trajectory generation.
+/// @brief Validates the input trajectory and project files for trajectory
+/// generation.
 /// @param project The project file.
 /// @param trajectory The trajectory file.
 /// @throws std::runtime_error if the input trajectory is invalid.
@@ -72,8 +74,7 @@ void validate_generation_input(const choreo::ProjectFile& project,
   if (trajectory.trajectory.has_value()) {
     const bool sample_type_matches_project =
         (project.type == choreo::DriveType::Swerve &&
-         std::holds_alternative<
-             choreo::Trajectory<choreo::SwerveDriveType>>(
+         std::holds_alternative<choreo::Trajectory<choreo::SwerveDriveType>>(
              *trajectory.trajectory)) ||
         (project.type == choreo::DriveType::Differential &&
          std::holds_alternative<
@@ -87,17 +88,18 @@ void validate_generation_input(const choreo::ProjectFile& project,
   }
 }
 
-
 /// @brief Generates a trajectory file using the specified trajectory generator.
 /// @tparam Generator The trajectory generator type.
 /// @param chor The project file.
 /// @param originalTrajectory The original trajectory file.
-/// @return The generated trajectory file, ready to be written to file, sent to a client, etc.
+/// @return The generated trajectory file, ready to be written to file, sent to
+/// a client, etc.
 template <choreo::ChoreoTrajectoryGenerator Generator>
-choreo::TrajectoryFile generate(const choreo::ProjectFile& chor,
-                                const choreo::TrajectoryFile& originalTrajectory,
-                                const choreo::progress_update_sender::Client* sender = nullptr) {
-                                  //Intentionally make two copies of the trajectory file
+choreo::TrajectoryFile generate(
+    const choreo::ProjectFile& chor,
+    const choreo::TrajectoryFile& originalTrajectory,
+    const choreo::progress_update_sender::Client* sender = nullptr) {
+  // Intentionally make two copies of the trajectory file
   auto traj_unscratch = choreo::TrajectoryFile{originalTrajectory};
   using Sample = typename Generator::Sample;
   std::function<void(const std::vector<Sample>&)> progress_callback;
@@ -107,9 +109,10 @@ choreo::TrajectoryFile generate(const choreo::ProjectFile& chor,
     };
   }
 
-  Generator generator(choreo::ProjectFile{chor}, choreo::TrajectoryFile{traj_unscratch},
+  Generator generator(choreo::ProjectFile{chor},
+                      choreo::TrajectoryFile{traj_unscratch},
                       std::move(progress_callback));
-  
+
   auto samplesExp = generator.generate();
   if (!samplesExp) {
     throw std::runtime_error("Trajectory generation failed");
@@ -121,50 +124,60 @@ choreo::TrajectoryFile generate(const choreo::ProjectFile& chor,
   std::vector<wpi::units::second_t> waypoint_timestamps;
   waypoint_timestamps.reserve(segments.size());
   size_t timestamp_index = 0;
-  for (const auto& segment: segments) {
+  for (const auto& segment : segments) {
     if (timestamp_index >= samples.size()) {
-      throw std::runtime_error("Segment sample index " +
-                               std::to_string(timestamp_index) +
-                               " out of range for " +
-                               std::to_string(samples.size()) +
-                               " samples");
+      throw std::runtime_error(
+          "Segment sample index " + std::to_string(timestamp_index) +
+          " out of range for " + std::to_string(samples.size()) + " samples");
     }
     auto intervals = segment.start.intervals;
     waypoint_timestamps.push_back(samples[timestamp_index].time);
-    std::println("Timestamp for interval {}: {}", timestamp_index, waypoint_timestamps.back());
+    std::println("Timestamp for interval {}: {}", timestamp_index,
+                 waypoint_timestamps.back());
     timestamp_index += intervals;
   }
 
-    using DriveType = typename decltype(generator)::DriveType;
-    auto wpilibTrajectory = typename DriveType::WPILibTrajectory{samples};
-    auto output = choreo::Trajectory<DriveType>(waypoint_timestamps, wpilibTrajectory, {});
-    traj_unscratch.trajectory = output;
-    traj_unscratch.snapshot = originalTrajectory.params;
-    traj_unscratch.config = chor.config;
-    
-    // Should be a no-op because this doesn't otherwise change.
-    traj_unscratch.events = originalTrajectory.events;
-    for (auto& event : traj_unscratch.events) {
-      //Update the timestamp for the event based on the waypoint timestamps and offset
-      // Assuming the event has a timestamp offset, update it based on the waypoint timestamps
-      event.from.updateTimestamp(originalTrajectory.params.waypoints,
-                 waypoint_timestamps);
-    }
+  using DriveType = typename decltype(generator)::DriveType;
+  auto wpilibTrajectory = typename DriveType::WPILibTrajectory{samples};
+  auto output =
+      choreo::Trajectory<DriveType>(waypoint_timestamps, wpilibTrajectory, {});
+  traj_unscratch.trajectory = output;
+  traj_unscratch.snapshot = originalTrajectory.params;
+  traj_unscratch.config = chor.config;
 
-    std::println("Was trajectory outdated? {}", originalTrajectory.must_be_generated(chor));
-    std::println("original dt params: {}", originalTrajectory.params.target_dt.val.value());
-    std::println("original dt snapshot: {}", originalTrajectory.snapshot->target_dt.val.value());
-    std::println("new dt snapshot: {}", traj_unscratch.snapshot->target_dt.val.value());
-    std::println("new dt: {}", traj_unscratch.params.target_dt.val.value());
+  // Should be a no-op because this doesn't otherwise change.
+  traj_unscratch.events = originalTrajectory.events;
+  for (auto& event : traj_unscratch.events) {
+    // Update the timestamp for the event based on the waypoint timestamps and
+    // offset
+    //  Assuming the event has a timestamp offset, update it based on the
+    //  waypoint timestamps
+    event.from.updateTimestamp(originalTrajectory.params.waypoints,
+                               waypoint_timestamps);
+  }
 
-    std::println("Is trajectory still outdated? {}", traj_unscratch.must_be_generated(chor));
+  std::println("Was trajectory outdated? {}",
+               originalTrajectory.must_be_generated(chor));
+  std::println("original dt params: {}",
+               originalTrajectory.params.target_dt.val.value());
+  std::println("original dt snapshot: {}",
+               originalTrajectory.snapshot->target_dt.val.value());
+  std::println("new dt snapshot: {}",
+               traj_unscratch.snapshot->target_dt.val.value());
+  std::println("new dt: {}", traj_unscratch.params.target_dt.val.value());
+
+  std::println("Is trajectory still outdated? {}",
+               traj_unscratch.must_be_generated(chor));
   return traj_unscratch;
 }
 
-/// @brief Reads the project and trajectory files from the specified paths and generates a new trajectory file.
-/// @param args The command line arguments containing the paths to the project and trajectory files.
+/// @brief Reads the project and trajectory files from the specified paths and
+/// generates a new trajectory file.
+/// @param args The command line arguments containing the paths to the project
+/// and trajectory files.
 /// @return The generated trajectory file.
-/// @throws std::runtime_error if the input files are invalid or generation fails.
+/// @throws std::runtime_error if the input files are invalid or generation
+/// fails.
 choreo::TrajectoryFile read_and_generate(
     const CliArgs& args,
     const choreo::progress_update_sender::Client* sender = nullptr) {
@@ -190,68 +203,68 @@ choreo::TrajectoryFile read_and_generate(
       wpi::util::json::parse_or_throw(std::string_view{traj_contents}));
 
   validate_generation_input(chor, traj);
-  
+
   // This copy will not be modified unless generation is successful.
   auto driveType = chor.type;
   switch (driveType) {
-    case choreo::DriveType::Swerve: 
-    return generate<
-  choreo::TrajectoryGenerator<choreo::SwerveDriveType, trajopt::SwerveSolution,
-                              trajopt::SwerveDrivetrain,
-                              trajopt::SwerveTrajectoryGenerator, trajopt::SwerveTrajectory>>(chor, traj, sender);
-    case choreo::DriveType::Differential: 
-    return generate<
-  choreo::TrajectoryGenerator<choreo::DifferentialDriveType, trajopt::DifferentialSolution,
-                              trajopt::DifferentialDrivetrain,
-                              trajopt::DifferentialTrajectoryGenerator, trajopt::DifferentialTrajectory>>(chor, traj, sender);
+    case choreo::DriveType::Swerve:
+      return generate<choreo::TrajectoryGenerator<
+          choreo::SwerveDriveType, trajopt::SwerveSolution,
+          trajopt::SwerveDrivetrain, trajopt::SwerveTrajectoryGenerator,
+          trajopt::SwerveTrajectory>>(chor, traj, sender);
+    case choreo::DriveType::Differential:
+      return generate<choreo::TrajectoryGenerator<
+          choreo::DifferentialDriveType, trajopt::DifferentialSolution,
+          trajopt::DifferentialDrivetrain,
+          trajopt::DifferentialTrajectoryGenerator,
+          trajopt::DifferentialTrajectory>>(chor, traj, sender);
     default:
       throw std::runtime_error("Unsupported drive type");
   }
 }
 
 int main(int argc, char** argv) {
-    std::println("Choreo Generator CLI");
+  std::println("Choreo Generator CLI");
 
-    
-    try {
-      CliArgs args = parse_arguments(argc, argv);
-      std::optional<choreo::progress_update_sender::Client> progress_sender;
+  try {
+    CliArgs args = parse_arguments(argc, argv);
+    std::optional<choreo::progress_update_sender::Client> progress_sender;
 
-      if (!args.progress_url.empty()) {
-        progress_sender.emplace();
-        progress_sender->open(args.progress_url);
-        progress_sender->sendDiagnosticText("generator: progress sender initialized");
-      }
-
-      if (!args.error_message.empty()) {
-        std::println(stderr, "Error: {}", args.error_message);
-        if (progress_sender.has_value()) {
-          progress_sender->sendError(args.error_message);
-        }
-        return 1;
-      }
-      const choreo::TrajectoryFile traj =
-          read_and_generate(args,
-                            progress_sender.has_value() ? &*progress_sender : nullptr);
-
-      // at this point the traj is fully edited. Send it where it needs to go.
-      const auto serialized_traj = wpi::util::json(traj).to_string();
-
-      if (!args.output_path.empty()) {
-        std::ofstream output_file(args.output_path);
-        output_file << wpi::util::json(traj).to_string_pretty();
-      }
-
-      if (progress_sender.has_value()) {
-        progress_sender->sendCompleteTrajectory(serialized_traj);
-      }
-      std::println("Trajectory generation complete");
-      return 0;
-    } catch (const std::exception& e) {
-      std::println(stderr, "Generator runtime error: {}", e.what());
-      return 2;
-    } catch (...) {
-      std::println(stderr, "Generator runtime error: unknown exception");
-      return 3;
+    if (!args.progress_url.empty()) {
+      progress_sender.emplace();
+      progress_sender->open(args.progress_url);
+      progress_sender->sendDiagnosticText(
+          "generator: progress sender initialized");
     }
+
+    if (!args.error_message.empty()) {
+      std::println(stderr, "Error: {}", args.error_message);
+      if (progress_sender.has_value()) {
+        progress_sender->sendError(args.error_message);
+      }
+      return 1;
+    }
+    const choreo::TrajectoryFile traj = read_and_generate(
+        args, progress_sender.has_value() ? &*progress_sender : nullptr);
+
+    // at this point the traj is fully edited. Send it where it needs to go.
+    const auto serialized_traj = wpi::util::json(traj).to_string();
+
+    if (!args.output_path.empty()) {
+      std::ofstream output_file(args.output_path);
+      output_file << wpi::util::json(traj).to_string_pretty();
+    }
+
+    if (progress_sender.has_value()) {
+      progress_sender->sendCompleteTrajectory(serialized_traj);
+    }
+    std::println("Trajectory generation complete");
+    return 0;
+  } catch (const std::exception& e) {
+    std::println(stderr, "Generator runtime error: {}", e.what());
+    return 2;
+  } catch (...) {
+    std::println(stderr, "Generator runtime error: unknown exception");
+    return 3;
+  }
 }

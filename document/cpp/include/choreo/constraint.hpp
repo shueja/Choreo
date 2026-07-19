@@ -19,7 +19,9 @@ struct WaypointUUID {
   WaypointUUID(const WaypointUUID&) = default;
   std::string uuid;
 
-  bool equivalent(const WaypointUUID& other) const { return uuid == other.uuid; }
+  bool equivalent(const WaypointUUID& other) const {
+    return uuid == other.uuid;
+  }
 };
 struct FirstWaypoint {
   FirstWaypoint() = default;
@@ -66,9 +68,10 @@ inline std::optional<size_t> getWaypointIndex(
       [&waypoints](auto&& arg) -> std::optional<size_t> {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, WaypointUUID>) {
-          auto iter = std::find_if(
-              waypoints.begin(), waypoints.end(),
-              [&](const Waypoint& waypoint) { return waypoint.uuid == arg.uuid; });
+          auto iter = std::find_if(waypoints.begin(), waypoints.end(),
+                                   [&](const Waypoint& waypoint) {
+                                     return waypoint.uuid == arg.uuid;
+                                   });
           if (iter == waypoints.end()) {
             return std::nullopt;
           }
@@ -140,7 +143,8 @@ struct Constraint {
 
   bool equivalent(const Constraint& other) const {
     if (!enabled && !other.enabled) {
-      return true; // Both constraints are disabled, so they are equivalently irrelevant.
+      return true;  // Both constraints are disabled, so they are equivalently
+                    // irrelevant.
     }
     if (!choreo::equivalent(from, other.from) || enabled != other.enabled ||
         !choreo::equivalent(data, other.data)) {

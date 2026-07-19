@@ -1,8 +1,12 @@
+// Copyright (c) Choreo contributors
+
 #include <charconv>
 #include <chrono>
 #include <cstdio>
 #include <iostream>
 #include <memory>
+#include <string>
+#include <utility>
 
 #include <wpi/net/HttpWebSocketServerConnection.hpp>
 #include <wpi/net/UrlParser.hpp>
@@ -43,7 +47,8 @@ class ProgressRelayConnection
     }
 
     const auto path = parser.GetPath();
-    // /progress is subscriber egress; /progress/{operationId} is producer ingress.
+    // /progress is subscriber egress; /progress/{operationId} is producer
+    // ingress.
     return path == "/progress" || path.starts_with("/progress/");
   }
 
@@ -132,9 +137,9 @@ void ApiServer::HandleGeneratorProgressEvent(uint64_t operation_id,
           parsed.at("payload").at("message").is_string()) {
         error_message = parsed.at("payload").at("message").get_string();
       }
-        std::cout << "generation operation " << operation_id
-              << " marked failed from progress event: " << error_message
-              << "\n";
+      std::cout << "generation operation " << operation_id
+                << " marked failed from progress event: " << error_message
+                << "\n";
       op_it->second.markFailed(std::move(error_message));
       return;
     }

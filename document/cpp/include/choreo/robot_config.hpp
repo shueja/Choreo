@@ -95,20 +95,19 @@ struct RobotConfig {
         !motor.equivalent(other.motor)) {
       return false;
     }
-    const bool wheelsEqual =
-        std::ranges::equal(wheels, other.wheels,
-                           [](const Translation2e& lhs,
-                              const Translation2e& rhs) {
-                             return lhs.equivalent(rhs);
-                           });
+    const bool wheelsEqual = std::ranges::equal(
+        wheels, other.wheels,
+        [](const Translation2e& lhs, const Translation2e& rhs) {
+          return lhs.equivalent(rhs);
+        });
     if (!wheelsEqual) {
       return false;
     }
-    return std::ranges::equal(bumpers, other.bumpers,
-                              [](const Translation2e& lhs,
-                                 const Translation2e& rhs) {
-                                return lhs.equivalent(rhs);
-                              });
+    return std::ranges::equal(
+        bumpers, other.bumpers,
+        [](const Translation2e& lhs, const Translation2e& rhs) {
+          return lhs.equivalent(rhs);
+        });
   }
 
   wpi::units::newton_meter_t wheel_max_torque() {
@@ -190,12 +189,14 @@ inline void from_json(const wpi::util::json& json, RobotConfig& config) {
         "RobotConfig wheels array must have exactly 4 elements");
   }
 
-  std::transform(whs.begin(), whs.end(), config.wheels.begin(),
-                 [](auto modJson) { return modJson.template get<Translation2e>(); });
+  std::transform(
+      whs.begin(), whs.end(), config.wheels.begin(),
+      [](auto modJson) { return modJson.template get<Translation2e>(); });
   config.bumpers.clear();
   auto bmps = json.at("bumpers").get_array();
-  std::transform(bmps.begin(), bmps.end(), std::back_inserter(config.bumpers),
-                 [](auto modJson) { return modJson.template get<Translation2e>(); });
+  std::transform(
+      bmps.begin(), bmps.end(), std::back_inserter(config.bumpers),
+      [](auto modJson) { return modJson.template get<Translation2e>(); });
   config.motor = json.at("motor").get<MotorConfig>();
 }
 

@@ -37,7 +37,7 @@ struct Segment {
               // treated as part of the previous segment for optimization
               // purposes.
   wpi::units::second_t estimate_segment_time(const Segment& next,
-                              const RobotConfig& config) const;
+                                             const RobotConfig& config) const;
   /// Returns the number of intervals that should be used for this segment in
   /// the optimization problem, based on the estimated time and the target_dt,
   /// or the override_intervals if that is set. If neither is available, returns
@@ -57,14 +57,14 @@ struct Segment {
         static_cast<double>((estimated_time.value() / target_dt).value()))));
   }
 
-  std::optional<size_t> interval_count(wpi::units::second_t target_dt, const Segment& next,
-                              const RobotConfig& config) const {
-    auto estimated_time = estimate_segment_time( next, config);
+  std::optional<size_t> interval_count(wpi::units::second_t target_dt,
+                                       const Segment& next,
+                                       const RobotConfig& config) const {
+    auto estimated_time = estimate_segment_time(next, config);
     if (start.override_intervals) {
       return std::optional<size_t>(start.intervals);
 
     } else {
-
       if (estimated_time >
           target_dt * 1000) {  // Arbitrary threshold of 1000 intervals, which
                                // is likely more than enough for any reasonable
@@ -76,8 +76,7 @@ struct Segment {
             "that the time estimation is inaccurate or that the constraints on "
             "this segment are very difficult to satisfy, and could lead to a "
             "very long optimization time or an inability to find a solution.",
-            start.x.val.value(), start.y.val.value(),
-            estimated_time.value(),
+            start.x.val.value(), start.y.val.value(), estimated_time.value(),
             static_cast<size_t>(std::ceil(
                 static_cast<double>(estimated_time.value() / target_dt))),
             target_dt.value());
@@ -85,12 +84,12 @@ struct Segment {
       return std::optional<size_t>(static_cast<size_t>(
           std::ceil((estimated_time.value() / target_dt).value())));
     }
-    return std::optional<size_t>(static_cast<size_t>(std::ceil(
-                     static_cast<double>(estimated_time.value() / target_dt))));
+    return std::optional<size_t>(static_cast<size_t>(
+        std::ceil(static_cast<double>(estimated_time.value() / target_dt))));
   }
 
-  void update_start_intervals(wpi::units::second_t target_dt , const Segment& next,
-                              const RobotConfig& config) {
+  void update_start_intervals(wpi::units::second_t target_dt,
+                              const Segment& next, const RobotConfig& config) {
     auto count = interval_count(target_dt, next, config);
     if (count.has_value()) {
       start.intervals = count.value();

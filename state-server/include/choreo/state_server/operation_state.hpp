@@ -1,3 +1,5 @@
+// Copyright (c) Choreo contributors
+
 #pragma once
 
 #include <stdexcept>
@@ -9,12 +11,12 @@ namespace choreo::state_server {
 
 /// Enumeration of possible operation states
 enum class OperationState {
-  kCreated,      ///< Operation has been created but not yet queued
-  kRunning,      ///< Generator process actively executing
-  kCompleted,    ///< Operation finished successfully
-  kFailed,       ///< Operation encountered an error
-  kCancelled,    ///< Operation was cancelled by user
-  kQueued        ///< Operation is queued and waiting to be executed
+  kCreated,    ///< Operation has been created but not yet queued
+  kRunning,    ///< Generator process actively executing
+  kCompleted,  ///< Operation finished successfully
+  kFailed,     ///< Operation encountered an error
+  kCancelled,  ///< Operation was cancelled by user
+  kQueued      ///< Operation is queued and waiting to be executed
 };
 
 // JSON serialization functions for OperationState

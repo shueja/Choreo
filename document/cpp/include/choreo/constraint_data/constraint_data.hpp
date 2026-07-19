@@ -26,36 +26,25 @@ namespace choreo::ConstraintData {
 template <typename T>
 concept ConstraintLike =
 #ifdef CHOREO_WITH_TRAJOPT
-    requires(T self, const choreo::Waypoint& start,
-             const choreo::Waypoint& end,
+    requires(T self, const choreo::Waypoint& start, const choreo::Waypoint& end,
              const std::vector<trajopt::KeepOutRegion>& bumpers) {
       {
         self.toTrajoptConstraint(bumpers)
       } -> std::same_as<trajopt::Constraint>;
-      // forEndpoints is only called when there are two distinct endpoints, so end is not optional
-      {
-        self.forEndpoints(start, end)
-      } -> std::same_as<T>;
-      {
-        self.scope()
-      } -> std::same_as<choreo::ConstraintScope>;
-      {
-        T::type_string()
-      } -> std::same_as<std::string_view>;
+      // forEndpoints is only called when there are two distinct endpoints, so
+      // end is not optional
+      { self.forEndpoints(start, end) } -> std::same_as<T>;
+      { self.scope() } -> std::same_as<choreo::ConstraintScope>;
+      { T::type_string() } -> std::same_as<std::string_view>;
     };
 #else
     requires(T self, const choreo::Waypoint& start,
              const choreo::Waypoint& end) {
-      // forEndpoints is only called when there are two distinct endpoints, so end is not optional
-      {
-        self.forEndpoints(start, end)
-      } -> std::same_as<T>;
-      {
-        self.scope()
-      } -> std::same_as<choreo::ConstraintScope>;
-      {
-        T::type_string()
-      } -> std::same_as<std::string_view>;
+      // forEndpoints is only called when there are two distinct endpoints, so
+      // end is not optional
+      { self.forEndpoints(start, end) } -> std::same_as<T>;
+      { self.scope() } -> std::same_as<choreo::ConstraintScope>;
+      { T::type_string() } -> std::same_as<std::string_view>;
     };
 #endif
 using ConstraintVariant = std::variant<
@@ -124,7 +113,8 @@ inline void from_json(const wpi::util::json& json, ConstraintVariant& c) {
   }
 }
 
-inline bool equivalent(const ConstraintVariant& lhs, const ConstraintVariant& rhs) {
+inline bool equivalent(const ConstraintVariant& lhs,
+                       const ConstraintVariant& rhs) {
   return std::visit(
       [](const auto& left, const auto& right) {
         using L = std::decay_t<decltype(left)>;

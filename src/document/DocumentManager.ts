@@ -163,12 +163,24 @@ function getConstructors(vars: () => IVariables): EnvConstructors {
           y: vars().createExpression(corner.y, "Length")
         })),
         motor: {
-          free_speed: vars().createExpression(config.motor.free_speed, "AngVel"),
-          stall_torque: vars().createExpression(config.motor.stall_torque, "Torque"),
+          free_speed: vars().createExpression(
+            config.motor.free_speed,
+            "AngVel"
+          ),
+          stall_torque: vars().createExpression(
+            config.motor.stall_torque,
+            "Torque"
+          ),
           kT: vars().createExpression(config.motor.kT, "KT"),
           kV: vars().createExpression(config.motor.kV, "KV"),
-          supply_limit: vars().createExpression(config.motor.supply_limit, "Current"),
-          stator_limit: vars().createExpression(config.motor.stator_limit, "Current")
+          supply_limit: vars().createExpression(
+            config.motor.supply_limit,
+            "Current"
+          ),
+          stator_limit: vars().createExpression(
+            config.motor.stator_limit,
+            "Current"
+          )
         },
         identifier: crypto.randomUUID()
       });

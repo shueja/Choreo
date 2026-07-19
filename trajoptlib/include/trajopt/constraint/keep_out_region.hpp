@@ -1,3 +1,5 @@
+// Copyright (c) TrajoptLib contributors
+
 #pragma once
 
 #include <vector>
@@ -18,4 +20,4 @@ struct TRAJOPT_DLLEXPORT KeepOutRegion {
   /// The list of points that make up this keep-out region.
   std::vector<Translation2d> points;
 };
-}// namespace trajopt
+}  // namespace trajopt

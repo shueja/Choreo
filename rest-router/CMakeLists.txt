@@ -33,7 +33,8 @@ target_link_libraries(rest_router PUBLIC wpiutil wpinet)
 
 if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
     enable_testing()
-    add_executable(rest_router_smoke_test
+    add_executable(
+        rest_router_smoke_test
         "${CMAKE_CURRENT_SOURCE_DIR}/test/rest_router_smoke_test.cpp"
     )
     suppress_clangcl_unused_command_line_argument(rest_router_smoke_test)

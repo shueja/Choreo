@@ -97,7 +97,10 @@ export const ChoreoTrajectoryStore = types
   }))
   .actions((self) => ({
     deserialize(ser: Output) {
-      self.config = ser.config === null || ser.config === undefined ? null : deepCopy(ser.config);
+      self.config =
+        ser.config === null || ser.config === undefined
+          ? null
+          : deepCopy(ser.config);
       self.sampleType = ser.sampleType;
       self.waypoints = deepCopy(ser.waypoints);
       self.splits = deepCopy(ser.splits);

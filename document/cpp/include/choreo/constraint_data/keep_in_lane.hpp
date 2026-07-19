@@ -26,15 +26,14 @@ struct KeepInLane {
   Expr<dimensions::Length> tolerance = 0_m;
 
 #ifdef CHOREO_WITH_TRAJOPT
-  trajopt::Constraint toTrajoptConstraint(
-) const {
-    return trajopt::LaneConstraint{{x1.unit(), y1.unit()}, {x2.unit(), y2.unit()},
-                                   tolerance.value()};
+  trajopt::Constraint toTrajoptConstraint() const {
+    return trajopt::LaneConstraint{
+        {x1.unit(), y1.unit()}, {x2.unit(), y2.unit()}, tolerance.value()};
   }
 #endif
 
   KeepInLane forEndpoints(const choreo::Waypoint& start,
-                             const choreo::Waypoint& end) const {
+                          const choreo::Waypoint& end) const {
     KeepInLane c = *this;
     if (useStartPoint) {
       c.x1 = start.x;
@@ -47,7 +46,9 @@ struct KeepInLane {
     return c;
   }
 
-   choreo::ConstraintScope scope() const { return choreo::ConstraintScope::Both; }
+  choreo::ConstraintScope scope() const {
+    return choreo::ConstraintScope::Both;
+  }
 };
 inline void to_json(wpi::util::json& json, const KeepInLane& c) {
   json =

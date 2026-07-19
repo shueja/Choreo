@@ -1,3 +1,5 @@
+// Copyright (c) Choreo contributors
+
 #pragma once
 
 #include <atomic>
@@ -5,6 +7,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include <wpi/util/json.hpp>
 
@@ -13,8 +16,10 @@
 namespace choreo::state_server {
 
 /// Converts a system_clock::time_point to an ISO 8601 datetime string
-inline std::string timePointToJson(const std::chrono::system_clock::time_point& tp) {
-    // The std::formatter for std::chrono::system_clock::time_point is already the ISO 8601 format
+inline std::string timePointToJson(
+    const std::chrono::system_clock::time_point& tp) {
+  // The std::formatter for std::chrono::system_clock::time_point is already the
+  // ISO 8601 format
   return std::format("{}", tp);
 }
 
@@ -22,16 +27,16 @@ inline std::string timePointToJson(const std::chrono::system_clock::time_point& 
 // system_clock::time_point
 inline std::chrono::system_clock::time_point jsonToTimePoint(
     const std::string& iso_str) {
-// Source - https://stackoverflow.com/a/38839725
-// Posted by Howard Hinnant, modified by community. See post 'Timeline' for change history
-// Retrieved 2026-07-18, License - CC BY-SA 4.0
-    std::istringstream is{iso_str};
-    std::string save;
-    is >> save;
-    std::istringstream in{save};
-    std::chrono::sys_time<std::chrono::milliseconds> tp;
-    in >> std::chrono::parse("%FT%TZ", tp);
-    return tp;
+  // Source - https://stackoverflow.com/a/38839725
+  // Posted by Howard Hinnant, modified by community. See post 'Timeline' for
+  // change history Retrieved 2026-07-18, License - CC BY-SA 4.0
+  std::istringstream is{iso_str};
+  std::string save;
+  is >> save;
+  std::istringstream in{save};
+  std::chrono::sys_time<std::chrono::milliseconds> tp;
+  in >> std::chrono::parse("%FT%TZ", tp);
+  return tp;
 }
 
 struct OperationTimestamps {
@@ -41,31 +46,35 @@ struct OperationTimestamps {
   std::optional<std::chrono::system_clock::time_point> completed_at;
 };
 
-inline void to_json(wpi::util::json& json, const OperationTimestamps timestamps) {
-    json["submitted_at"] = timePointToJson(timestamps.submitted_at);
-    if (timestamps.started_at.has_value()) {
-        json["started_at"] = timePointToJson(timestamps.started_at.value());
-    }
-    if (timestamps.updated_at.has_value()) {
-        json["updated_at"] = timePointToJson(timestamps.updated_at.value());
-    }
-    if (timestamps.completed_at.has_value()) {
-        json["completed_at"] = timePointToJson(timestamps.completed_at.value());
-    }
+inline void to_json(wpi::util::json& json,
+                    const OperationTimestamps timestamps) {
+  json["submitted_at"] = timePointToJson(timestamps.submitted_at);
+  if (timestamps.started_at.has_value()) {
+    json["started_at"] = timePointToJson(timestamps.started_at.value());
+  }
+  if (timestamps.updated_at.has_value()) {
+    json["updated_at"] = timePointToJson(timestamps.updated_at.value());
+  }
+  if (timestamps.completed_at.has_value()) {
+    json["completed_at"] = timePointToJson(timestamps.completed_at.value());
+  }
 }
 
 // from_json for operation timestamps
-inline void from_json(const wpi::util::json& json, OperationTimestamps& timestamps) {
-    timestamps.submitted_at = jsonToTimePoint(json.at("submitted_at").get_string());
-    if (json.contains("started_at")) {
-        timestamps.started_at = jsonToTimePoint(json.at("started_at").get_string());
-    }
-    if (json.contains("updated_at")) {
-        timestamps.updated_at = jsonToTimePoint(json.at("updated_at").get_string());
-    }
-    if (json.contains("completed_at")) {
-        timestamps.completed_at = jsonToTimePoint(json.at("completed_at").get_string());
-    }
+inline void from_json(const wpi::util::json& json,
+                      OperationTimestamps& timestamps) {
+  timestamps.submitted_at =
+      jsonToTimePoint(json.at("submitted_at").get_string());
+  if (json.contains("started_at")) {
+    timestamps.started_at = jsonToTimePoint(json.at("started_at").get_string());
+  }
+  if (json.contains("updated_at")) {
+    timestamps.updated_at = jsonToTimePoint(json.at("updated_at").get_string());
+  }
+  if (json.contains("completed_at")) {
+    timestamps.completed_at =
+        jsonToTimePoint(json.at("completed_at").get_string());
+  }
 }
 /// Represents a recorded generation operation with current state and metadata
 struct OperationRecord {
@@ -88,7 +97,8 @@ struct OperationRecord {
   /// Initializes the operation in the created-but-not-queued state.
   explicit OperationRecord(std::string trajectory_uuid)
       : trajectory_uuid(std::move(trajectory_uuid)),
-        timestamps{std::chrono::system_clock::now(), std::nullopt, std::nullopt, std::nullopt},
+        timestamps{std::chrono::system_clock::now(), std::nullopt, std::nullopt,
+                   std::nullopt},
         error_message(std::nullopt),
         result_revision(std::nullopt),
         last_progress_event(std::nullopt),
@@ -142,8 +152,6 @@ struct OperationRecord {
   /// Checks if the operation is running
   inline bool isRunning() const { return state == OperationState::kRunning; }
 };
-
-
 
 // JSON serialization functions for OperationRecord
 inline void to_json(wpi::util::json& json, const OperationRecord& record) {

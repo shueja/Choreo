@@ -67,19 +67,21 @@ export const navbarIndexToConstraintKey: {
   let constraintsOffset = Object.keys(NavbarData).length;
   Object.entries(SupportedConstraintDefinitions).forEach(
     ([key, data], _index) => {
-    NavbarData[key] = {
-      index: constraintsOffset,
-      name: data.name,
-      icon: data.icon
-    };
-    navbarIndexToConstraintDefinition[constraintsOffset] = data;
-    navbarIndexToConstraintKey[constraintsOffset] = key as ConstraintKey;
-    constraintsIndices.push(constraintsOffset);
-    constraintsOffset++;
+      NavbarData[key] = {
+        index: constraintsOffset,
+        name: data.name,
+        icon: data.icon
+      };
+      navbarIndexToConstraintDefinition[constraintsOffset] = data;
+      navbarIndexToConstraintKey[constraintsOffset] = key as ConstraintKey;
+      constraintsIndices.push(constraintsOffset);
+      constraintsOffset++;
     }
   );
 }
-const constraintNavbarCount = Object.keys(SupportedConstraintDefinitions).length;
+const constraintNavbarCount = Object.keys(
+  SupportedConstraintDefinitions
+).length;
 
 const eventMarkerCount = 1;
 NavbarData.EventMarker = {

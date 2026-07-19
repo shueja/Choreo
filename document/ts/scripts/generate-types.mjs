@@ -173,7 +173,9 @@ function dedupeNumberedAliasInterfaces(typeText) {
   const interfaces = new Map();
 
   for (let i = 0; i < lines.length; i += 1) {
-    const match = /^export interface ([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*$/.exec(lines[i]);
+    const match = /^export interface ([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*$/.exec(
+      lines[i]
+    );
     if (!match) {
       continue;
     }
@@ -208,7 +210,9 @@ function dedupeNumberedAliasInterfaces(typeText) {
       continue;
     }
 
-    if (normalizeInterfaceBody(data.body) === normalizeInterfaceBody(base.body)) {
+    if (
+      normalizeInterfaceBody(data.body) === normalizeInterfaceBody(base.body)
+    ) {
       aliasToBase.set(name, baseName);
     }
   }
@@ -226,11 +230,16 @@ function dedupeNumberedAliasInterfaces(typeText) {
   const outputLines = output.split("\n");
   const keptLines = [];
   for (let i = 0; i < outputLines.length; i += 1) {
-    const match = /^export interface ([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*$/.exec(outputLines[i]);
+    const match = /^export interface ([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*$/.exec(
+      outputLines[i]
+    );
     if (match && aliasToBase.has(match[1])) {
       // Remove immediate preceding JSDoc for alias declaration.
       let removeCommentStart = keptLines.length;
-      if (keptLines.length > 0 && keptLines[keptLines.length - 1].trim() === "*/") {
+      if (
+        keptLines.length > 0 &&
+        keptLines[keptLines.length - 1].trim() === "*/"
+      ) {
         let j = keptLines.length - 1;
         while (j >= 0 && !keptLines[j].includes("/**")) {
           j -= 1;

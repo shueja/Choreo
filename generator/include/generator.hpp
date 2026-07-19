@@ -1,3 +1,5 @@
+// Copyright (c) Choreo contributors
+
 #pragma once
 #include <expected>
 #include <functional>
@@ -18,36 +20,34 @@
 
 namespace choreo {
 template <typename ChoreoDriveType, typename TrajoptSolutionType,
-          typename TrajoptDrivetrainType, typename GeneratorType, typename TrajectoryType>
+          typename TrajoptDrivetrainType, typename GeneratorType,
+          typename TrajectoryType>
 class TrajectoryGenerator {
-
-
  public:
-   using DriveType = ChoreoDriveType;
+  using DriveType = ChoreoDriveType;
   using Sample = ChoreoDriveType::WPILibSample;
-  using Builder = trajopt::PathBuilder<TrajoptDrivetrainType, TrajoptSolutionType>;
+  using Builder =
+      trajopt::PathBuilder<TrajoptDrivetrainType, TrajoptSolutionType>;
   // Owns projectFile and trajectoryFile;
-  TrajectoryGenerator(choreo::ProjectFile projectFile,
-                      choreo::TrajectoryFile trajectoryFile,
-                      std::function<void(const std::vector<Sample>&)> progress_callback = {})
+  TrajectoryGenerator(
+      choreo::ProjectFile projectFile, choreo::TrajectoryFile trajectoryFile,
+      std::function<void(const std::vector<Sample>&)> progress_callback = {})
       : projectFile(std::move(projectFile)),
         trajectoryFile(std::move(trajectoryFile)),
         progress_callback(std::move(progress_callback)) {
     // This is still one segment per Choreo waypoint.
-    segments = 
-        convert_to_segments(this->trajectoryFile.params);
+    segments = convert_to_segments(this->trajectoryFile.params);
 
     for (size_t i = 0; i + 1 < segments.size(); ++i) {
-      segments[i].update_start_intervals(this->trajectoryFile.params.target_dt.unit(),
-                                         segments[i + 1],
-                                         this->projectFile.config);
+      segments[i].update_start_intervals(
+          this->trajectoryFile.params.target_dt.unit(), segments[i + 1],
+          this->projectFile.config);
     }
     if constexpr (std::is_same_v<TrajoptDrivetrainType,
                                  trajopt::SwerveDrivetrain>) {
       generator.set_drivetrain(this->projectFile.config.to_swerve_drivetrain());
-    } else if constexpr (
-        std::is_same_v<TrajoptDrivetrainType,
-                       trajopt::DifferentialDrivetrain>) {
+    } else if constexpr (std::is_same_v<TrajoptDrivetrainType,
+                                        trajopt::DifferentialDrivetrain>) {
       generator.set_drivetrain(
           this->projectFile.config.to_differential_drivetrain());
     }
@@ -59,8 +59,9 @@ class TrajectoryGenerator {
   std::vector<Segment> get_segments() const { return segments; }
   // TODO: temporary, eventually generate returns a modified TrajectoryFile
   std::expected<std::vector<Sample>, slp::ExitStatus> generate() {
-    return generate_internal(); }
-  
+    return generate_internal();
+  }
+
  private:
   choreo::ProjectFile projectFile;
   choreo::TrajectoryFile trajectoryFile;
@@ -118,8 +119,8 @@ class TrajectoryGenerator {
           intervals.push_back(wpt.intervals);
         }
         if (!only_waypoint_segments.empty()) {
-          generator.sgmt_initial_guess_points(
-              only_waypoint_segments.size() - 1, initial_guess_points);
+          generator.sgmt_initial_guess_points(only_waypoint_segments.size() - 1,
+                                              initial_guess_points);
         }
         initial_guess_points.clear();
         if (wpt.fix_translation && wpt.fix_heading) {
@@ -138,19 +139,17 @@ class TrajectoryGenerator {
         intervals.back() += wpt.intervals;
         initial_guess_points.push_back(wpt.toTrajoptPose2d());
       }
-      
     }
     std::println("Intervals: {}", intervals);
     generator.set_control_interval_counts(std::move(intervals));
   }
 
-  std::expected<std::vector<Sample>, slp::ExitStatus>
-  generate_internal() {
+  std::expected<std::vector<Sample>, slp::ExitStatus> generate_internal() {
     if (progress_callback) {
-      generator.add_callback([this](const TrajoptSolutionType& partial_solution,
-                                    int64_t) {
-        progress_callback(to_samples(partial_solution));
-      });
+      generator.add_callback(
+          [this](const TrajoptSolutionType& partial_solution, int64_t) {
+            progress_callback(to_samples(partial_solution));
+          });
     }
 
     GeneratorType traj_generator{generator};

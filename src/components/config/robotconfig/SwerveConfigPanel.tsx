@@ -16,7 +16,6 @@ class SwerveConfigPanel extends Component<Props, State> {
     const backRight = config.wheels[2];
     const frontRight = config.wheels[3];
     return (
-
       // front: X positive, back: X negative
       // left: Y positive, right: Y negative
       <ExpressionInputList rowGap={this.props.rowGap}>

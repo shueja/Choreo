@@ -15,7 +15,8 @@
 #include <wpi/util/json.hpp>
 namespace choreo {
 
-inline TrajectoryFile defaultNewTrajectory(std::string name = "New Trajectory") {
+inline TrajectoryFile defaultNewTrajectory(
+    std::string name = "New Trajectory") {
   return TrajectoryFile{.name = name,
                         .version = 4,
                         .snapshot = std::nullopt,
@@ -30,8 +31,10 @@ inline RobotConfig default_frc_swerve() {
                      .radius = 2_in,
                      .cof = 1.5,
                      .differential_track_width = 22_in,
-                     .wheels = {{{+11_in, +11_in}, {-11_in},
-                                {-11_in, 11_in}, {-11_in, -11_in}}},
+                     .wheels = {{{+11_in, +11_in},
+                                 {-11_in},
+                                 {-11_in, 11_in},
+                                 {-11_in, -11_in}}},
                      .bumpers = {{+15_in, +15_in},
                                  {+15_in, -15_in},
                                  {-15_in, -15_in},

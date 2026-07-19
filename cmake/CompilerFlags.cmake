@@ -16,9 +16,11 @@ endmacro()
 
 macro(suppress_clangcl_unused_command_line_argument target)
     if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        target_compile_options(${target} PRIVATE
-            "/clang:-Wno-unused-command-line-argument"
-            "/clang:-Qunused-arguments"
+        target_compile_options(
+            ${target}
+            PRIVATE
+                "/clang:-Wno-unused-command-line-argument"
+                "/clang:-Qunused-arguments"
         )
     endif()
 endmacro()

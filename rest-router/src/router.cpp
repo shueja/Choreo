@@ -1,4 +1,10 @@
+// Copyright (c) Choreo contributors
+
 #include "choreo/rest_router/router.hpp"
+
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace choreo::rest_router {
 

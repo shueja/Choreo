@@ -42,10 +42,10 @@ struct MaxAngularVelocity {
   }
   static std::string_view type_string() { return "MaxAngularVelocity"; }
   MaxAngularVelocity forEndpoints(const choreo::Waypoint& start,
-                             const choreo::Waypoint& end) const {
-    // For a max-angular-velocity constraint, the endpoints don't affect the constraint
-    // itself, so we can just return *this. However, we need to return a new
-    // instance to satisfy the interface.
+                                  const choreo::Waypoint& end) const {
+    // For a max-angular-velocity constraint, the endpoints don't affect the
+    // constraint itself, so we can just return *this. However, we need to
+    // return a new instance to satisfy the interface.
     return *this;
   }
 };

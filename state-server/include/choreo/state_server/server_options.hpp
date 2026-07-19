@@ -1,3 +1,5 @@
+// Copyright (c) Choreo contributors
+
 #pragma once
 
 #include <cstdint>
@@ -22,7 +24,8 @@ struct ServerOptions {
   /// - /progress: subscriber egress for wrapped rebroadcast frames
   uint16_t internal_progress_port = 5811;
 
-  /// Directory containing one project (.chor) and zero or more trajectories (.traj)
+  /// Directory containing one project (.chor) and zero or more trajectories
+  /// (.traj)
   std::filesystem::path workspace_dir;
 };
 

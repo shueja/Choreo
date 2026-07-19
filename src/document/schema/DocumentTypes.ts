@@ -238,11 +238,15 @@ export interface CustomFieldData {
   fieldJSONRelativePath: string | undefined;
 }
 
-export function toGeneratedRobotConfig(config: RobotConfig): GeneratedRobotConfig {
+export function toGeneratedRobotConfig(
+  config: RobotConfig
+): GeneratedRobotConfig {
   return deepCopy(config);
 }
 
-export function fromGeneratedRobotConfig(config: GeneratedRobotConfig): RobotConfig {
+export function fromGeneratedRobotConfig(
+  config: GeneratedRobotConfig
+): RobotConfig {
   return deepCopy(config);
 }
 
@@ -270,9 +274,7 @@ export function fromGeneratedDifferentialSample(
   return deepCopy(sample);
 }
 
-export function toGeneratedTrajectory(
-  output: Output
-): GeneratedTrajectory {
+export function toGeneratedTrajectory(output: Output): GeneratedTrajectory {
   if (output.sampleType === "Differential") {
     return {
       sample_type: "Differential",

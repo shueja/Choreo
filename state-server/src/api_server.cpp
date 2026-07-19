@@ -1,12 +1,16 @@
+// Copyright (c) Choreo contributors
+
 #include "choreo/state_server/api_server.hpp"
 
 #include <array>
 #include <cstdio>
-#include <fstream>
 #include <format>
+#include <fstream>
 #include <memory>
 #include <random>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include <wpi/util/json.hpp>
 
@@ -17,7 +21,8 @@ namespace choreo::state_server {
 
 namespace {
 
-class ServerHttpConnection final : public choreo::rest_router::HttpRouterConnection {
+class ServerHttpConnection final
+    : public choreo::rest_router::HttpRouterConnection {
  public:
   ServerHttpConnection(std::shared_ptr<wpi::net::uv::Stream> stream,
                        const choreo::rest_router::Router& router)
@@ -56,8 +61,8 @@ bool ApiServer::Start() {
 
     m_progress_server = wpi::net::uv::Tcp::Create(loop);
     if (!m_progress_server) {
-      std::fprintf(stderr,
-                   "state-server: failed to create progress relay TCP server\n");
+      std::fprintf(
+          stderr, "state-server: failed to create progress relay TCP server\n");
       ok = false;
       return;
     }
@@ -76,16 +81,18 @@ bool ApiServer::Start() {
 bool ApiServer::LoadInitialStateFromWorkspace() {
   if (m_options.workspace_dir.empty()) {
     std::fprintf(stderr,
-                 "state-server: workspace directory is required (must contain one .chor)\n");
+                 "state-server: workspace directory is required (must contain "
+                 "one .chor)\n");
     return false;
   }
 
   std::error_code ec;
   if (!std::filesystem::exists(m_options.workspace_dir, ec) ||
       !std::filesystem::is_directory(m_options.workspace_dir, ec)) {
-    std::fprintf(stderr,
-                 "state-server: workspace directory not found or not a directory: %s\n",
-                 m_options.workspace_dir.string().c_str());
+    std::fprintf(
+        stderr,
+        "state-server: workspace directory not found or not a directory: %s\n",
+        m_options.workspace_dir.string().c_str());
     return false;
   }
 
@@ -107,7 +114,8 @@ bool ApiServer::LoadInitialStateFromWorkspace() {
 
   if (project_files.size() != 1) {
     std::fprintf(stderr,
-                 "state-server: workspace must contain exactly one .chor file, found %zu\n",
+                 "state-server: workspace must contain exactly one .chor file, "
+                 "found %zu\n",
                  project_files.size());
     return false;
   }
@@ -185,7 +193,8 @@ void ApiServer::AcceptClient() {
     return;
   }
 
-  client->error.connect([ptr = client.get()](wpi::net::uv::Error) { ptr->Close(); });
+  client->error.connect(
+      [ptr = client.get()](wpi::net::uv::Error) { ptr->Close(); });
 
   auto handler = std::make_shared<ServerHttpConnection>(client, m_router);
   client->SetData(handler);
@@ -204,9 +213,9 @@ std::string ApiServer::GenerateUuid() {
   std::uniform_int_distribution<uint32_t> dis(0, 15);
 
   const auto hex = [&]() -> char {
-    static constexpr std::array<char, 16> chars{
-        '0', '1', '2', '3', '4', '5', '6', '7',
-        '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    static constexpr std::array<char, 16> chars{'0', '1', '2', '3', '4', '5',
+                                                '6', '7', '8', '9', 'a', 'b',
+                                                'c', 'd', 'e', 'f'};
     return chars[dis(gen)];
   };
 
@@ -343,8 +352,7 @@ std::optional<std::string> ApiServer::CurrentScopeRevisionToken(
 
 HistoryEngine& ApiServer::EnsureHistoryEngine(std::string_view scope_key) {
   const std::string key(scope_key);
-  const auto [it, inserted] =
-      m_history_by_scope.try_emplace(key, key, 50);
+  const auto [it, inserted] = m_history_by_scope.try_emplace(key, key, 50);
   (void)inserted;
   return it->second;
 }

@@ -8,15 +8,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 set(CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 23)
-if (MSVC)
-    message(STATUS "Building with MSVC") 
+if(MSVC)
+    message(STATUS "Building with MSVC")
 endif()
-
-
 
 # FetchContent_Declare(jartjson GIT_REPOSITORY "https://github.com/jart/json.cpp" GIT_TAG "ccb9195e6abe9eb060e338a04f43e8d2e67b45ea")
 # FetchContent_MakeAvailable(jartjson)
-
 
 FetchContent_Declare(
     TCLAP
@@ -34,7 +31,7 @@ endif()
 
 include(../cmake/CompilerFlags.cmake)
 
-include (../cmake/FetchWPILib.cmake)
+include(../cmake/FetchWPILib.cmake)
 fetch_wpilib()
 if(NOT TARGET choreo_document)
     add_subdirectory(
@@ -76,14 +73,21 @@ target_compile_definitions(generator PRIVATE CHOREO_WITH_TRAJOPT)
 # Public include dir for this executable (optional)
 target_include_directories(
     generator
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
-    # Add TCLAP include directory
-    ${tclap_SOURCE_DIR}/include
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        # Add TCLAP include directory
+        ${tclap_SOURCE_DIR}/include
 )
 
 target_link_libraries(
     generator
-    PRIVATE TrajoptLib wpimath wpiutil choreo_document choreo_renderer choreo_progress_update_sender
+    PRIVATE
+        TrajoptLib
+        wpimath
+        wpiutil
+        choreo_document
+        choreo_renderer
+        choreo_progress_update_sender
 )
 
 # Optional: install rule

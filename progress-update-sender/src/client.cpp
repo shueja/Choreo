@@ -1,14 +1,18 @@
+// Copyright (c) Choreo contributors
+
 #include "progress_update_sender/client.hpp"
 
 #include <chrono>
-#include <cstdint>
 #include <condition_variable>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "wpi/net/EventLoopRunner.hpp"
 #include "wpi/net/uv/Buffer.hpp"
@@ -42,9 +46,8 @@ std::optional<ParsedUrl> parse_ws_url(std::string_view url) {
 
   auto slash = rest.find('/');
   const auto authority = rest.substr(0, slash);
-  std::string uri = slash == std::string_view::npos
-                        ? "/"
-                        : std::string(rest.substr(slash));
+  std::string uri =
+      slash == std::string_view::npos ? "/" : std::string(rest.substr(slash));
 
   if (authority.empty()) {
     return std::nullopt;
@@ -99,8 +102,9 @@ std::optional<ParsedUrl> parse_ws_url(std::string_view url) {
   parsed.host = std::move(host);
   parsed.uri = std::move(uri);
   parsed.port = port;
-  parsed.host_header =
-      parsed.port == 80 ? parsed.host : parsed.host + ":" + std::to_string(parsed.port);
+  parsed.host_header = parsed.port == 80
+                           ? parsed.host
+                           : parsed.host + ":" + std::to_string(parsed.port);
   return parsed;
 }
 
@@ -231,9 +235,11 @@ void Client::open(const std::string& url) {
   std::scoped_lock lock(m_impl->mutex);
   m_impl->websocket.reset();
   if (!signaled) {
-    std::fprintf(stderr, "progress_update_sender: connection attempt timed out\n");
+    std::fprintf(stderr,
+                 "progress_update_sender: connection attempt timed out\n");
   } else {
-    std::fprintf(stderr, "progress_update_sender: connection attempt failed: %s\n",
+    std::fprintf(stderr,
+                 "progress_update_sender: connection attempt failed: %s\n",
                  state->failure_reason.c_str());
   }
 }
@@ -277,29 +283,29 @@ void Client::send(wpi::util::json json) const {
 
   bool queued = false;
   auto payload_copy = std::make_shared<std::string>(payload);
-  m_impl->loop_runner.ExecSync(
-      [this, &queued, payload_copy](wpi::net::uv::Loop&) {
-        auto ws = socket();
-        if (!ws || !ws->IsOpen()) {
-          return;
-        }
+  m_impl->loop_runner.ExecSync([this, &queued,
+                                payload_copy](wpi::net::uv::Loop&) {
+    auto ws = socket();
+    if (!ws || !ws->IsOpen()) {
+      return;
+    }
 
-        auto buffer = wpi::net::uv::Buffer(*payload_copy);
-        ws->SendText({buffer},
-                     [this, payload_copy](std::span<wpi::net::uv::Buffer>,
-                                          wpi::net::uv::Error err) {
-                       if (!err) {
-                         return;
-                       }
-                       std::scoped_lock lock(m_impl->mutex);
-                       m_impl->websocket.reset();
-                     });
-        queued = true;
-      });
+    auto buffer = wpi::net::uv::Buffer(*payload_copy);
+    ws->SendText({buffer}, [this, payload_copy](std::span<wpi::net::uv::Buffer>,
+                                                wpi::net::uv::Error err) {
+      if (!err) {
+        return;
+      }
+      std::scoped_lock lock(m_impl->mutex);
+      m_impl->websocket.reset();
+    });
+    queued = true;
+  });
 
   if (!queued) {
-    std::fprintf(stderr,
-                 "progress_update_sender: send dropped because socket is not open\n");
+    std::fprintf(
+        stderr,
+        "progress_update_sender: send dropped because socket is not open\n");
   }
 }
 

@@ -15,10 +15,10 @@
 #include <wpi/util/json.hpp>
 
 #include "../expr.hpp"
+#include "../geometry/region2e.hpp"
 #include "../variables/dimension.hpp"
 #include "../waypoint.hpp"
 #include "constraint_scope.hpp"
-#include "../geometry/region2e.hpp"
 
 namespace choreo {
 namespace ConstraintData {
@@ -43,10 +43,10 @@ struct KeepInCircle : public Region2e {
 #endif
 
   KeepInCircle forEndpoints(const choreo::Waypoint& start,
-                             const choreo::Waypoint& end) const {
-    // For a keep-in-circle constraint, the endpoints don't affect the constraint
-    // itself, so we can just return *this. However, we need to return a new
-    // instance to satisfy the interface.
+                            const choreo::Waypoint& end) const {
+    // For a keep-in-circle constraint, the endpoints don't affect the
+    // constraint itself, so we can just return *this. However, we need to
+    // return a new instance to satisfy the interface.
     return *this;
   }
 

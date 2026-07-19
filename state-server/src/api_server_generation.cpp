@@ -1,3 +1,5 @@
+// Copyright (c) Choreo contributors
+
 #include <charconv>
 #include <csignal>
 #include <cstdio>
@@ -6,14 +8,16 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 #include <wpi/util/json.hpp>
 
 #include "api_server_internal.hpp"
 #include "choreo/rest_router/router.hpp"
 #include "choreo/state_server/api_server.hpp"
-
 
 namespace choreo::state_server {
 
@@ -38,7 +42,7 @@ std::optional<OperationId> ParseOperationId(std::string_view value) {
 
 }  // namespace
 std::expected<std::string, Response> ApiServer::CheckRouteTrajectoryUUID(
-  const Request& request, const RouteParams& params, std::string key) {
+    const Request& request, const RouteParams& params, std::string key) {
   const auto trajectory_uuid = FindRouteParam(params, key);
   if (!trajectory_uuid.has_value()) {
     return std::unexpected(BadRoute("Missing trajectory UUID parameter"));
@@ -50,16 +54,15 @@ std::expected<std::string, Response> ApiServer::CheckRouteTrajectoryUUID(
   }
   // Extract and validate the current revision of the trajectory, check if
   // the request is against the current revision.
-  const auto current_revision =
-      TrajectoryRevisionToken(trajectory_uuid_value);
-  if (auto error =
-          ValidateIfMatchPrecondition(request, current_revision)) {
+  const auto current_revision = TrajectoryRevisionToken(trajectory_uuid_value);
+  if (auto error = ValidateIfMatchPrecondition(request, current_revision)) {
     return std::unexpected(*error);
   }
   return trajectory_uuid_value;
 }
-std::expected<OperationId, rest_router::Response> ApiServer::CheckRouteOperationId(
-    const rest_router::RouteParams& params, std::string key) {
+std::expected<OperationId, rest_router::Response>
+ApiServer::CheckRouteOperationId(const rest_router::RouteParams& params,
+                                 std::string key) {
   const auto operation_id = FindRouteParam(params, key);
   if (!operation_id.has_value()) {
     return std::unexpected(BadRoute("Missing operationId parameter"));
@@ -86,9 +89,8 @@ void ApiServer::RegisterGenerationRoutes() {
         if (!trajectory_uuid_result.has_value()) {
           return trajectory_uuid_result.error();
         }
-        const std::string& trajectory_uuid_value = trajectory_uuid_result.value();
-
-
+        const std::string& trajectory_uuid_value =
+            trajectory_uuid_result.value();
 
         // Parse and validate the request body for generation options.
         try {
@@ -126,14 +128,15 @@ void ApiServer::RegisterGenerationRoutes() {
   m_router.Register(
       HttpMethod::kGet, "/api/v1/trajectories/{uuid}/generation-state",
       [this](const Request& request, const RouteParams& params) -> Response {
-auto trajectory_uuid_result = CheckRouteTrajectoryUUID(request, params);
+        auto trajectory_uuid_result = CheckRouteTrajectoryUUID(request, params);
         if (!trajectory_uuid_result.has_value()) {
-          std::cout << "generation-state rejected: "
-                    << request.path << " status="
-                    << trajectory_uuid_result.error().status << "\n";
+          std::cout << "generation-state rejected: " << request.path
+                    << " status=" << trajectory_uuid_result.error().status
+                    << "\n";
           return trajectory_uuid_result.error();
         }
-        const std::string& trajectory_uuid_value = trajectory_uuid_result.value();
+        const std::string& trajectory_uuid_value =
+            trajectory_uuid_result.value();
 
         wpi::util::json body = wpi::util::json::object();
         body["trajectoryUuid"] = trajectory_uuid_value;
@@ -157,16 +160,16 @@ auto trajectory_uuid_result = CheckRouteTrajectoryUUID(request, params);
           }
         }
 
-            std::cout << "generation-state: trajectory=" << trajectory_uuid_value
-                << " latestOperationId="
-                << (body["latestOperationId"].is_null()
-                  ? std::string("null")
-                  : body["latestOperationId"].to_string())
-                << " lastCompletionStatus="
-                << (body["lastCompletionStatus"].is_null()
-                  ? std::string("null")
-                  : body["lastCompletionStatus"].to_string())
-                << "\n";
+        std::cout << "generation-state: trajectory=" << trajectory_uuid_value
+                  << " latestOperationId="
+                  << (body["latestOperationId"].is_null()
+                          ? std::string("null")
+                          : body["latestOperationId"].to_string())
+                  << " lastCompletionStatus="
+                  << (body["lastCompletionStatus"].is_null()
+                          ? std::string("null")
+                          : body["lastCompletionStatus"].to_string())
+                  << "\n";
 
         return JsonResponse(200, body);
       });
@@ -174,35 +177,36 @@ auto trajectory_uuid_result = CheckRouteTrajectoryUUID(request, params);
   // Route: Cancel all active generation work.
   // Preconditions: none.
   // Body: none. Response: 202 with { operationId, state, cancelledCount }.
-  m_router.Register(HttpMethod::kPost, "/api/v1/generate/cancel-all",
-                    [this](const Request&, const RouteParams&) -> Response {
-                      int cancelled_count = 0;
-                      std::optional<OperationId> response_operation_id;
-                      for (auto& [operation_id, op] : m_operations) {
-                        if (op.state == OperationState::kQueued ||
-                            op.state == OperationState::kRunning) {
-                          if (auto proc_it =
-                                  m_running_generation_processes.find(operation_id);
-                              proc_it != m_running_generation_processes.end() &&
-                              proc_it->second) {
-                            proc_it->second->Kill(SIGTERM);
-                          }
-                          op.markCancelled();
-                          ++cancelled_count;
-                          response_operation_id = operation_id;
-                        }
-                      }
+  m_router.Register(
+      HttpMethod::kPost, "/api/v1/generate/cancel-all",
+      [this](const Request&, const RouteParams&) -> Response {
+        int cancelled_count = 0;
+        std::optional<OperationId> response_operation_id;
+        for (auto& [operation_id, op] : m_operations) {
+          if (op.state == OperationState::kQueued ||
+              op.state == OperationState::kRunning) {
+            if (auto proc_it =
+                    m_running_generation_processes.find(operation_id);
+                proc_it != m_running_generation_processes.end() &&
+                proc_it->second) {
+              proc_it->second->Kill(SIGTERM);
+            }
+            op.markCancelled();
+            ++cancelled_count;
+            response_operation_id = operation_id;
+          }
+        }
 
-                      wpi::util::json body = wpi::util::json::object();
-                      if (response_operation_id.has_value()) {
-                        body["operationId"] = *response_operation_id;
-                      } else {
-                        body["operationId"] = nullptr;
-                      }
-                      body["state"] = "completed";
-                      body["cancelledCount"] = cancelled_count;
-                      return JsonResponse(202, body);
-                    });
+        wpi::util::json body = wpi::util::json::object();
+        if (response_operation_id.has_value()) {
+          body["operationId"] = *response_operation_id;
+        } else {
+          body["operationId"] = nullptr;
+        }
+        body["state"] = "completed";
+        body["cancelledCount"] = cancelled_count;
+        return JsonResponse(202, body);
+      });
 
   // Route: Fetch detailed operation state.
   // Preconditions: operationId must exist.
@@ -339,8 +343,7 @@ void ApiServer::LaunchGenerationProcess(uint64_t operation_id,
   std::thread([this, operation_id, trajectory_uuid, project_snapshot,
                trajectory_snapshot]() {
     const auto work_dir = std::filesystem::temp_directory_path() /
-                          "choreo-state-server" /
-                          std::to_string(operation_id);
+                          "choreo-state-server" / std::to_string(operation_id);
     std::error_code fs_err;
     std::filesystem::create_directories(work_dir, fs_err);
 
@@ -396,28 +399,29 @@ void ApiServer::LaunchGenerationProcess(uint64_t operation_id,
         return;
       }
 
-      stdout_pipe->data.connect([operation_id](wpi::net::uv::Buffer& buf,
-                                               size_t size) {
-        if (size == 0) {
-          return;
-        }
-        std::cout << "[generator stdout op=" << operation_id << "] ";
-        std::cout.write(buf.base, size);
-        std::cout.flush();
-      });
-      stderr_pipe->data.connect([operation_id](wpi::net::uv::Buffer& buf,
-                                               size_t size) {
-        if (size == 0) {
-          return;
-        }
-        std::cerr << "[generator stderr op=" << operation_id << "] ";
-        std::cerr.write(buf.base, size);
-        std::cerr.flush();
-      });
+      stdout_pipe->data.connect(
+          [operation_id](wpi::net::uv::Buffer& buf, size_t size) {
+            if (size == 0) {
+              return;
+            }
+            std::cout << "[generator stdout op=" << operation_id << "] ";
+            std::cout.write(buf.base, size);
+            std::cout.flush();
+          });
+      stderr_pipe->data.connect(
+          [operation_id](wpi::net::uv::Buffer& buf, size_t size) {
+            if (size == 0) {
+              return;
+            }
+            std::cerr << "[generator stderr op=" << operation_id << "] ";
+            std::cerr.write(buf.base, size);
+            std::cerr.flush();
+          });
       stdout_pipe->StartRead();
       stderr_pipe->StartRead();
 
-      std::cout << "Spawning generator process with progress URL: " << progress_url << "\n";
+      std::cout << "Spawning generator process with progress URL: "
+                << progress_url << "\n";
       auto proc = wpi::net::uv::Process::Spawn(
           loop, generator_exe.string(),
           wpi::net::uv::Process::Option("generator"),
@@ -502,8 +506,7 @@ void ApiServer::LaunchGenerationProcess(uint64_t operation_id,
           std::cout << "generation operation " << operation_id
                     << " completed from output file revision="
                     << TrajectoryRevisionToken(trajectory_uuid)
-                    << " status=" << status << " signal=" << signal
-                    << "\n";
+                    << " status=" << status << " signal=" << signal << "\n";
           PersistStateSnapshot();
         } else if (status != 0 &&
                    op->second.state != OperationState::kCompleted) {

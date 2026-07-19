@@ -1,6 +1,10 @@
+// Copyright (c) Choreo contributors
+
 #include "choreo/rest_router/http_server_connection.hpp"
 
 #include <iostream>
+#include <memory>
+#include <string>
 #include <utility>
 
 #include "choreo/rest_router/http_adapter.hpp"
@@ -40,13 +44,13 @@ void LogResponse(std::string_view method, std::string_view path, int status,
 HttpRouterConnection::HttpRouterConnection(
     std::shared_ptr<wpi::net::uv::Stream> stream, const Router& router)
     : HttpServerConnection{std::move(stream)}, m_router(router) {
-  m_request.header.connect([this](std::string_view name, std::string_view value) {
-    m_headers[std::string(name)] = std::string(value);
-  });
+  m_request.header.connect(
+      [this](std::string_view name, std::string_view value) {
+        m_headers[std::string(name)] = std::string(value);
+      });
 
-  m_request.body.connect([this](std::string_view data, bool) {
-    m_body.append(data);
-  });
+  m_request.body.connect(
+      [this](std::string_view data, bool) { m_body.append(data); });
 }
 
 void HttpRouterConnection::ProcessRequest() {
@@ -58,8 +62,9 @@ void HttpRouterConnection::ProcessRequest() {
     return;
   }
 
-  auto request = BuildRequestFromWpinet(m_request.GetMethod(), m_request.GetUrl(),
-                                        std::move(m_headers), std::move(m_body));
+  auto request =
+      BuildRequestFromWpinet(m_request.GetMethod(), m_request.GetUrl(),
+                             std::move(m_headers), std::move(m_body));
   if (!request.has_value()) {
     LogResponse(MethodToString(*method), m_request.GetUrl(), 400,
                 "invalid_request_url");
