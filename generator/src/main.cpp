@@ -18,10 +18,10 @@
 #include <choreo/constraint.hpp>
 #include <choreo/constraint_data/constraint_data.hpp>
 #include <choreo/expr.hpp>
-#include <choreo/gradient.hpp>
+//#include <choreo/gradient.hpp>
 #include <choreo/parameters.hpp>
 #include <choreo/project.hpp>
-#include <choreo/renderer.hpp>
+//#include <choreo/renderer.hpp>
 #include <choreo/robot_config.hpp>
 #include <choreo/trajectory/swerve_sample.hpp>
 #include <choreo/variables/variable.hpp>

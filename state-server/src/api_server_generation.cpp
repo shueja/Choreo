@@ -43,9 +43,10 @@ std::optional<OperationId> ParseOperationId(std::string_view value) {
 }  // namespace
 std::expected<std::string, Response> ApiServer::CheckRouteTrajectoryUUID(
     const Request& request, const RouteParams& params, std::string key) {
-  const auto trajectory_uuid = FindRouteParam(params, key);
+  const auto trajectory_uuid =
+      RequireRouteParam(params, key, "Missing trajectory UUID parameter");
   if (!trajectory_uuid.has_value()) {
-    return std::unexpected(BadRoute("Missing trajectory UUID parameter"));
+    return std::unexpected(trajectory_uuid.error());
   }
   const auto& trajectory_uuid_value = trajectory_uuid->get();
 
@@ -63,9 +64,10 @@ std::expected<std::string, Response> ApiServer::CheckRouteTrajectoryUUID(
 std::expected<OperationId, rest_router::Response>
 ApiServer::CheckRouteOperationId(const rest_router::RouteParams& params,
                                  std::string key) {
-  const auto operation_id = FindRouteParam(params, key);
+  const auto operation_id =
+      RequireRouteParam(params, key, "Missing operationId parameter");
   if (!operation_id.has_value()) {
-    return std::unexpected(BadRoute("Missing operationId parameter"));
+    return std::unexpected(operation_id.error());
   }
 
   const auto operation_id_value = ParseOperationId(operation_id->get());
@@ -77,6 +79,32 @@ ApiServer::CheckRouteOperationId(const rest_router::RouteParams& params,
 }
 
 void ApiServer::RegisterGenerationRoutes() {
+  const auto with_existing_operation =
+      [this](const RouteParams& params, auto&& on_success) -> Response {
+    auto operation_id_result = CheckRouteOperationId(params);
+    if (!operation_id_result.has_value()) {
+      return operation_id_result.error();
+    }
+    const auto operation_id_value = *operation_id_result;
+
+    auto operation = FindMappedValue(m_operations, operation_id_value);
+    if (!operation.has_value()) {
+      return NotFound("Operation not found");
+    }
+
+    return on_success(operation_id_value, operation->get());
+  };
+
+  const auto cancel_operation =
+      [this](OperationId operation_id, OperationRecord& operation) {
+        operation.markCancelled();
+        if (auto proc_it = m_running_generation_processes.find(operation_id);
+            proc_it != m_running_generation_processes.end() &&
+            proc_it->second) {
+          proc_it->second->Kill(SIGTERM);
+        }
+      };
+
   // Route: Start asynchronous trajectory generation.
   // Preconditions: trajectory must exist and If-Match must match its current
   // ETag. Body: optional JSON object for generation options. Response: 202 with
@@ -179,19 +207,13 @@ void ApiServer::RegisterGenerationRoutes() {
   // Body: none. Response: 202 with { operationId, state, cancelledCount }.
   m_router.Register(
       HttpMethod::kPost, "/api/v1/generate/cancel-all",
-      [this](const Request&, const RouteParams&) -> Response {
+      [this, &cancel_operation](const Request&, const RouteParams&) -> Response {
         int cancelled_count = 0;
         std::optional<OperationId> response_operation_id;
         for (auto& [operation_id, op] : m_operations) {
           if (op.state == OperationState::kQueued ||
               op.state == OperationState::kRunning) {
-            if (auto proc_it =
-                    m_running_generation_processes.find(operation_id);
-                proc_it != m_running_generation_processes.end() &&
-                proc_it->second) {
-              proc_it->second->Kill(SIGTERM);
-            }
-            op.markCancelled();
+            cancel_operation(operation_id, op);
             ++cancelled_count;
             response_operation_id = operation_id;
           }
@@ -215,23 +237,12 @@ void ApiServer::RegisterGenerationRoutes() {
   // relayed progress frame.
   m_router.Register(
       HttpMethod::kGet, "/api/v1/operations/{operationId}",
-      [this](const Request&, const RouteParams& params) -> Response {
-        auto operation_id_result = CheckRouteOperationId(params);
-        if (!operation_id_result.has_value()) {
-          return operation_id_result.error();
-        }
-        const auto operation_id_value = *operation_id_result;
-
-        const auto operation =
-            FindMappedValue(m_operations, operation_id_value);
-        if (!operation.has_value()) {
-          return NotFound("Operation not found");
-        }
-        const auto& operation_value = operation->get();
-
-        wpi::util::json body = operation_value;
-
-        return JsonResponse(200, body);
+      [&, this](const Request&, const RouteParams& params) -> Response {
+        return with_existing_operation(
+            params, [](OperationId, const OperationRecord& operation_value) {
+              wpi::util::json body = operation_value;
+              return JsonResponse(200, body);
+            });
       });
 
   // Route: Cancel a specific operation.
@@ -240,36 +251,24 @@ void ApiServer::RegisterGenerationRoutes() {
   // Response: 202 with { operationId, state } after cancellation is requested.
   m_router.Register(
       HttpMethod::kPost, "/api/v1/operations/{operationId}/cancel",
-      [this](const Request&, const RouteParams& params) -> Response {
-        auto operation_id_result = CheckRouteOperationId(params);
-        if (!operation_id_result.has_value()) {
-          return operation_id_result.error();
-        }
-        const auto operation_id_value = *operation_id_result;
+      [this, &with_existing_operation,
+       &cancel_operation](const Request&, const RouteParams& params)
+          -> Response {
+        return with_existing_operation(
+            params, [this, &cancel_operation](OperationId operation_id_value,
+                                              OperationRecord& operation_value) {
+              if (operation_value.isDone()) {
+                return Conflict("operation_terminal",
+                                "Operation already reached a terminal state");
+              }
 
-        auto operation = FindMappedValue(m_operations, operation_id_value);
-        if (!operation.has_value()) {
-          return NotFound("Operation not found");
-        }
-        auto& operation_value = operation->get();
+              cancel_operation(operation_id_value, operation_value);
 
-        if (operation_value.isDone()) {
-          return Conflict("operation_terminal",
-                          "Operation already reached a terminal state");
-        }
-
-        operation_value.markCancelled();
-        if (auto proc_it =
-                m_running_generation_processes.find(operation_id_value);
-            proc_it != m_running_generation_processes.end() &&
-            proc_it->second) {
-          proc_it->second->Kill(SIGTERM);
-        }
-
-        wpi::util::json body = wpi::util::json::object();
-        body["operationId"] = operation_id_value;
-        body["state"] = operation_value.state;
-        return JsonResponse(202, body);
+              wpi::util::json body = wpi::util::json::object();
+              body["operationId"] = operation_id_value;
+              body["state"] = operation_value.state;
+              return JsonResponse(202, body);
+            });
       });
 
   // Route: Fetch lightweight server diagnostics.

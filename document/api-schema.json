@@ -6,6 +6,71 @@
   "$defs": {
     "UUID": { "$ref": "schema.json#/$defs/UUID" },
     "ProjectFile": { "$ref": "schema.json#/$defs/ProjectFile" },
+    "DriveType": { "$ref": "schema.json#/$defs/DriveType" },
+    "RobotConfig": { "$ref": "schema.json#/$defs/RobotConfig" },
+    "CodeGenConfig": { "$ref": "schema.json#/$defs/CodeGenConfig" },
+    "ExpressionVariableEntry": {
+      "$ref": "schema.json#/$defs/ExpressionVariableEntry"
+    },
+    "TranslationVariableEntry": {
+      "$ref": "schema.json#/$defs/TranslationVariableEntry"
+    },
+    "PoseVariableEntry": { "$ref": "schema.json#/$defs/PoseVariableEntry" },
+    "RegionVariableEntry": {
+      "$ref": "schema.json#/$defs/RegionVariableEntry"
+    },
+    "ExpressionVariableResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/ExpressionVariableEntry" },
+        {
+          "type": "object",
+          "properties": {
+            "uuid": { "$ref": "#/$defs/UUID" }
+          },
+          "required": ["uuid"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TranslationVariableResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/TranslationVariableEntry" },
+        {
+          "type": "object",
+          "properties": {
+            "uuid": { "$ref": "#/$defs/UUID" }
+          },
+          "required": ["uuid"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "PoseVariableResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/PoseVariableEntry" },
+        {
+          "type": "object",
+          "properties": {
+            "uuid": { "$ref": "#/$defs/UUID" }
+          },
+          "required": ["uuid"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "RegionVariableResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/RegionVariableEntry" },
+        {
+          "type": "object",
+          "properties": {
+            "uuid": { "$ref": "#/$defs/UUID" }
+          },
+          "required": ["uuid"],
+          "additionalProperties": false
+        }
+      ]
+    },
     "TrajectoryFile": { "$ref": "schema.json#/$defs/TrajectoryFile" },
     "Waypoint": { "$ref": "schema.json#/$defs/Waypoint" },
     "Constraint": { "$ref": "schema.json#/$defs/Constraint" },
@@ -444,9 +509,33 @@
       "request": { "$ref": "#/$defs/ProjectFile" },
       "response200": { "$ref": "#/$defs/ProjectFile" }
     },
-    "PATCH /api/v1/project": {
-      "request": { "$ref": "#/$defs/PatchRequest" },
-      "response200": { "$ref": "#/$defs/ProjectFile" }
+    "PUT /api/v1/project/config": {
+      "request": { "$ref": "#/$defs/RobotConfig" },
+      "response200": { "$ref": "#/$defs/RobotConfig" }
+    },
+    "PUT /api/v1/project/type": {
+      "request": { "$ref": "#/$defs/DriveType" },
+      "response200": { "$ref": "#/$defs/DriveType" }
+    },
+    "PUT /api/v1/project/codegen": {
+      "request": { "$ref": "#/$defs/CodeGenConfig" },
+      "response200": { "$ref": "#/$defs/CodeGenConfig" }
+    },
+    "PUT /api/v1/project/variables/expressions/{variableUuid}": {
+      "request": { "$ref": "#/$defs/ExpressionVariableEntry" },
+      "response200": { "$ref": "#/$defs/ExpressionVariableResponse" }
+    },
+    "PUT /api/v1/project/variables/translations/{variableUuid}": {
+      "request": { "$ref": "#/$defs/TranslationVariableEntry" },
+      "response200": { "$ref": "#/$defs/TranslationVariableResponse" }
+    },
+    "PUT /api/v1/project/variables/poses/{variableUuid}": {
+      "request": { "$ref": "#/$defs/PoseVariableEntry" },
+      "response200": { "$ref": "#/$defs/PoseVariableResponse" }
+    },
+    "PUT /api/v1/project/variables/regions/{variableUuid}": {
+      "request": { "$ref": "#/$defs/RegionVariableEntry" },
+      "response200": { "$ref": "#/$defs/RegionVariableResponse" }
     },
     "POST /api/v1/project/undo": {
       "response200": { "$ref": "#/$defs/ProjectFile" }
@@ -475,10 +564,6 @@
       "request": { "$ref": "#/$defs/TrajectoryFile" },
       "response200": { "$ref": "#/$defs/TrajectoryFile" }
     },
-    "PATCH /api/v1/trajectories/{uuid}": {
-      "request": { "$ref": "#/$defs/PatchRequest" },
-      "response200": { "$ref": "#/$defs/TrajectoryFile" }
-    },
     "DELETE /api/v1/trajectories/{uuid}": {
       "response204": { "$ref": "#/$defs/TrajectoryDeleteResponse" }
     },
@@ -489,10 +574,6 @@
     "POST /api/v1/trajectories/{uuid}/waypoints": {
       "request": { "$ref": "#/$defs/AddWaypointRequest" },
       "response201": { "$ref": "#/$defs/TrajectoryFile" }
-    },
-    "PATCH /api/v1/trajectories/{uuid}/waypoints/{waypointUuid}": {
-      "request": { "$ref": "#/$defs/PatchRequest" },
-      "response200": { "$ref": "#/$defs/TrajectoryFile" }
     },
     "DELETE /api/v1/trajectories/{uuid}/waypoints/{waypointUuid}": {
       "response204": { "$ref": "#/$defs/TrajectoryDeleteResponse" }
@@ -505,10 +586,6 @@
       "request": { "$ref": "#/$defs/AddConstraintRequest" },
       "response201": { "$ref": "#/$defs/TrajectoryFile" }
     },
-    "PATCH /api/v1/trajectories/{uuid}/constraints/{constraintUuid}": {
-      "request": { "$ref": "#/$defs/PatchRequest" },
-      "response200": { "$ref": "#/$defs/TrajectoryFile" }
-    },
     "DELETE /api/v1/trajectories/{uuid}/constraints/{constraintUuid}": {
       "response204": { "$ref": "#/$defs/TrajectoryDeleteResponse" }
     },
@@ -519,10 +596,6 @@
     "POST /api/v1/trajectories/{uuid}/markers": {
       "request": { "$ref": "#/$defs/AddMarkerRequest" },
       "response201": { "$ref": "#/$defs/TrajectoryFile" }
-    },
-    "PATCH /api/v1/trajectories/{uuid}/markers/{markerUuid}": {
-      "request": { "$ref": "#/$defs/PatchRequest" },
-      "response200": { "$ref": "#/$defs/TrajectoryFile" }
     },
     "DELETE /api/v1/trajectories/{uuid}/markers/{markerUuid}": {
       "response204": { "$ref": "#/$defs/TrajectoryDeleteResponse" }

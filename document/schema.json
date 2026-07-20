@@ -114,7 +114,7 @@
 
     "Variable": {
       "type": "object",
-      "description": "A document-level variable: a named, dimensioned Expr. The dimension tag selects the SI unit.",
+      "description": "A document-level scalar variable payload. The dimension tag selects the SI unit.",
       "properties": {
         "dimension": {
           "type": "string",
@@ -142,29 +142,100 @@
       "additionalProperties": false
     },
 
+    "ExpressionVariableEntry": {
+      "type": "object",
+      "description": "Named scalar/dimensional variable keyed by UUID in variables.expressions.",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "dimension": {
+          "type": "string",
+          "enum": [
+            "Number",
+            "Length",
+            "LinVel",
+            "LinAcc",
+            "Angle",
+            "AngVel",
+            "AngAcc",
+            "Time",
+            "Mass",
+            "Torque",
+            "MoI",
+            "Current",
+            "KT",
+            "KV"
+          ]
+        },
+        "var": { "$ref": "#/$defs/Expr" }
+      },
+      "required": ["name", "dimension", "var"],
+      "additionalProperties": false
+    },
+
+    "TranslationVariableEntry": {
+      "type": "object",
+      "description": "Named translation variable keyed by UUID in variables.translations.",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "#/$defs/Translation2e" }
+      },
+      "required": ["name", "value"],
+      "additionalProperties": false
+    },
+
+    "PoseVariableEntry": {
+      "type": "object",
+      "description": "Named pose variable keyed by UUID in variables.poses.",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "#/$defs/Pose2e" }
+      },
+      "required": ["name", "value"],
+      "additionalProperties": false
+    },
+
+    "RegionVariableEntry": {
+      "type": "object",
+      "description": "Named region variable keyed by UUID in variables.regions.",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "#/$defs/Region2e" }
+      },
+      "required": ["name", "value"],
+      "additionalProperties": false
+    },
+
     "Variables": {
       "type": "object",
-      "description": "All document-level named variables, grouped by geometric type.",
+      "description": "All document-level variables keyed by UUID, grouped by variable kind.",
       "properties": {
         "expressions": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/Variable" },
-          "description": "Named scalar/dimensional variables."
+          "additionalProperties": {
+            "$ref": "#/$defs/ExpressionVariableEntry"
+          },
+          "description": "Scalar/dimensional variables keyed by UUID."
         },
         "translations": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/Translation2e" },
-          "description": "Named 2D translation variables."
+          "additionalProperties": {
+            "$ref": "#/$defs/TranslationVariableEntry"
+          },
+          "description": "2D translation variables keyed by UUID."
         },
         "poses": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/Pose2e" },
-          "description": "Named 2D pose variables."
+          "additionalProperties": {
+            "$ref": "#/$defs/PoseVariableEntry"
+          },
+          "description": "2D pose variables keyed by UUID."
         },
         "regions": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/Region2e" },
-          "description": "Named 2D region variables."
+          "additionalProperties": {
+            "$ref": "#/$defs/RegionVariableEntry"
+          },
+          "description": "2D region variables keyed by UUID."
         }
       },
       "additionalProperties": false

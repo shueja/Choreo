@@ -45,15 +45,26 @@ void RegisterApiV1Routes(Router& router) {
 
   RegisterNotImplemented(router, HttpMethod::kGet, "/api/v1/project");
   RegisterNotImplemented(router, HttpMethod::kPut, "/api/v1/project");
-  RegisterNotImplemented(router, HttpMethod::kPatch, "/api/v1/project");
+  RegisterNotImplemented(router, HttpMethod::kPut, "/api/v1/project/config");
+    RegisterNotImplemented(router, HttpMethod::kPut, "/api/v1/project/type");
+  RegisterNotImplemented(router, HttpMethod::kPut,
+                         "/api/v1/project/codegen");
+  RegisterNotImplemented(
+      router, HttpMethod::kPut,
+      "/api/v1/project/variables/expressions/{variableUuid}");
+  RegisterNotImplemented(
+      router, HttpMethod::kPut,
+      "/api/v1/project/variables/translations/{variableUuid}");
+  RegisterNotImplemented(router, HttpMethod::kPut,
+                         "/api/v1/project/variables/poses/{variableUuid}");
+  RegisterNotImplemented(router, HttpMethod::kPut,
+                         "/api/v1/project/variables/regions/{variableUuid}");
 
   RegisterNotImplemented(router, HttpMethod::kGet, "/api/v1/trajectories");
   RegisterNotImplemented(router, HttpMethod::kPost, "/api/v1/trajectories");
   RegisterNotImplemented(router, HttpMethod::kGet,
                          "/api/v1/trajectories/{uuid}");
   RegisterNotImplemented(router, HttpMethod::kPut,
-                         "/api/v1/trajectories/{uuid}");
-  RegisterNotImplemented(router, HttpMethod::kPatch,
                          "/api/v1/trajectories/{uuid}");
   RegisterNotImplemented(router, HttpMethod::kDelete,
                          "/api/v1/trajectories/{uuid}");
@@ -63,9 +74,6 @@ void RegisterApiV1Routes(Router& router) {
   RegisterNotImplemented(router, HttpMethod::kPost,
                          "/api/v1/trajectories/{uuid}/waypoints");
   RegisterNotImplemented(
-      router, HttpMethod::kPatch,
-      "/api/v1/trajectories/{uuid}/waypoints/{waypointUuid}");
-  RegisterNotImplemented(
       router, HttpMethod::kDelete,
       "/api/v1/trajectories/{uuid}/waypoints/{waypointUuid}");
   RegisterNotImplemented(router, HttpMethod::kPost,
@@ -74,9 +82,6 @@ void RegisterApiV1Routes(Router& router) {
   RegisterNotImplemented(router, HttpMethod::kPost,
                          "/api/v1/trajectories/{uuid}/constraints");
   RegisterNotImplemented(
-      router, HttpMethod::kPatch,
-      "/api/v1/trajectories/{uuid}/constraints/{constraintUuid}");
-  RegisterNotImplemented(
       router, HttpMethod::kDelete,
       "/api/v1/trajectories/{uuid}/constraints/{constraintUuid}");
   RegisterNotImplemented(router, HttpMethod::kPost,
@@ -84,8 +89,6 @@ void RegisterApiV1Routes(Router& router) {
 
   RegisterNotImplemented(router, HttpMethod::kPost,
                          "/api/v1/trajectories/{uuid}/markers");
-  RegisterNotImplemented(router, HttpMethod::kPatch,
-                         "/api/v1/trajectories/{uuid}/markers/{markerUuid}");
   RegisterNotImplemented(router, HttpMethod::kDelete,
                          "/api/v1/trajectories/{uuid}/markers/{markerUuid}");
   RegisterNotImplemented(router, HttpMethod::kPost,

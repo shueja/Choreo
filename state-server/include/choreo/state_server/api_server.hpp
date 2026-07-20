@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -93,6 +94,201 @@ class ApiServer {
 
   /// Registers REST routes for project/trajectory document operations
   void RegisterDocumentRoutes();
+
+  /// Registers project-scoped document routes.
+  void RegisterProjectDocumentRoutes();
+
+  /// Registers trajectory-scoped document routes.
+  void RegisterTrajectoryDocumentRoutes();
+
+    /// @brief Record a scope-local history entry from pre/post snapshots.
+    /// @param scope_key History scope identifier.
+    /// @param reason Stable mutation reason string.
+    /// @param before Snapshot captured before mutation.
+  void RecordScopeMutation(std::string_view scope_key, std::string_view reason,
+                           const wpi::util::json& before);
+
+    /// @brief Capture a scope snapshot before mutation.
+    /// @param scope_key History scope identifier.
+    /// @return Scope snapshot, or JSON null when unavailable.
+  [[nodiscard]]
+  wpi::util::json CaptureScopeBefore(std::string_view scope_key) const;
+
+    /// @brief Build a canonical variable PUT response with refreshed ETag.
+    /// @param variable_uuid UUID of the updated variable.
+    /// @param payload Serialized variable payload.
+    /// @return HTTP response carrying payload and current project ETag.
+  [[nodiscard]]
+  rest_router::Response VariablePutResponse(const std::string& variable_uuid,
+                                            const wpi::util::json& payload) const;
+
+    /// @brief Check for name collisions in a trajectory UUID map.
+    /// @param items Trajectory map keyed by UUID.
+    /// @param current_uuid UUID to ignore while checking.
+    /// @param candidate_name Proposed name.
+    /// @return True if another trajectory already uses the same name.
+  [[nodiscard]]
+  bool HasDuplicateNameInMap(
+      const std::unordered_map<std::string, TrajectoryFile>& items,
+      std::string_view current_uuid, std::string_view candidate_name) const;
+
+    /// @brief Check variable name uniqueness across all variable categories.
+    /// @param current_uuid UUID being edited.
+    /// @param candidate_name Proposed variable name.
+    /// @return True if the candidate collides in any variable map.
+  [[nodiscard]]
+  bool HasDuplicateVariableName(std::string_view current_uuid,
+                                std::string_view candidate_name) const;
+
+  using ProjectPreconditionHandler =
+      std::function<rest_router::Response(std::string_view)>;
+
+  /// @brief Enforce project If-Match preconditions before handling mutation.
+  /// @param request Incoming request.
+  /// @param on_success Continuation invoked with project scope key.
+  /// @return Precondition error response or continuation response.
+  [[nodiscard]]
+  rest_router::Response WithProjectPrecondition(
+      const rest_router::Request& request,
+      ProjectPreconditionHandler on_success);
+
+  using ProjectMutationHandler =
+      std::function<rest_router::Response(std::string_view,
+                                          const wpi::util::json&)>;
+
+    /// @brief Capture project pre-mutation snapshot and invoke continuation.
+    /// @param request Incoming request.
+    /// @param on_success Continuation invoked with scope key and before snapshot.
+    /// @return Precondition error response or continuation response.
+  [[nodiscard]]
+  rest_router::Response WithProjectMutation(const rest_router::Request& request,
+                                            ProjectMutationHandler on_success);
+
+  using TrajectoryMap = std::unordered_map<std::string, TrajectoryFile>;
+  using TrajectoryIterator = TrajectoryMap::iterator;
+  using TrajectoryLookupHandler =
+      std::function<rest_router::Response(const std::string&, TrajectoryIterator)>;
+
+  /// @brief Resolve a trajectory UUID route parameter to an existing entry.
+  /// @param params Route parameters containing UUID.
+  /// @param on_success Continuation invoked with UUID and map iterator.
+  /// @return Route/not-found error response or continuation response.
+  [[nodiscard]]
+  rest_router::Response WithExistingTrajectory(
+      const rest_router::RouteParams& params,
+      TrajectoryLookupHandler on_success);
+
+  using TrajectoryMutationHandler =
+      std::function<rest_router::Response(const std::string&, TrajectoryIterator,
+                                          const wpi::util::json&)>;
+
+  /// @brief Validate trajectory preconditions and capture before snapshot.
+  /// @param request Incoming request.
+  /// @param params Route parameters containing UUID.
+  /// @param on_success Continuation invoked with UUID, iterator, and snapshot.
+  /// @return Precondition error response or continuation response.
+  [[nodiscard]]
+  rest_router::Response WithTrajectoryMutation(
+      const rest_router::Request& request,
+      const rest_router::RouteParams& params,
+      TrajectoryMutationHandler on_success);
+
+  /// @brief Build canonical response for deleted trajectory history lookups.
+  /// @param uuid Deleted trajectory UUID.
+  /// @return HTTP response with deleted marker and trajectory ETag.
+  [[nodiscard]]
+  rest_router::Response DeletedTrajectoryResponse(const std::string& uuid) const;
+
+  /// @brief Bump trajectory revision and append trajectory history entry.
+  /// @param trajectory_uuid Mutated trajectory UUID.
+  /// @param mutation_reason Stable mutation reason string.
+  /// @param before Snapshot captured before mutation.
+  void CommitTrajectoryMutation(const std::string& trajectory_uuid,
+                                std::string_view mutation_reason,
+                                const wpi::util::json& before);
+
+  /// @brief Resolve required subresource UUID route parameter.
+  /// @param params Route parameter collection.
+  /// @param param_name Route parameter key.
+  /// @param missing_message Error message when parameter is missing.
+  /// @return UUID reference on success, HTTP error response on failure.
+  std::expected<std::reference_wrapper<const std::string>, rest_router::Response>
+  RequireSubresourceUuid(
+      const rest_router::RouteParams& params,
+      std::string_view param_name,
+      std::string_view missing_message = "Missing route parameter") const;
+
+  /// @brief Parse and validate standard reorder request payload.
+  /// @param body Parsed request body.
+  /// @param out_order Output UUID order list.
+  /// @return Optional HTTP error response when parsing fails.
+  [[nodiscard]]
+  std::optional<rest_router::Response> ParseOrderRequest(
+      const wpi::util::json& body,
+      std::vector<std::string>& out_order) const;
+
+  /// @brief Register trajectory history route (undo/redo) with shared behavior.
+  /// @param method HTTP method to register.
+  /// @param route_path Route template.
+  /// @param apply_history History action callback for a scope key.
+  /// @param missing_entry_message Not-found message, or null for deleted payload.
+  void RegisterTrajectoryHistoryRoute(
+      rest_router::HttpMethod method,
+      const char* route_path,
+      std::function<std::optional<rest_router::Response>(std::string_view)>
+          apply_history,
+      const char* missing_entry_message);
+
+  /// @brief Register the trajectory list summary endpoint.
+  void RegisterTrajectoryListRoute();
+
+  /// @brief Register the trajectory creation endpoint.
+  void RegisterTrajectoryCreateRoute();
+
+  /// @brief Register the single trajectory fetch endpoint.
+  void RegisterTrajectoryGetRoute();
+
+  /// @brief Register waypoint delete endpoint with cleanup behavior.
+  void RegisterWaypointDeleteRoute();
+
+    /// @brief Register full-trajectory replacement endpoint.
+    void RegisterTrajectoryPutRoute();
+
+    /// @brief Register trajectory rename endpoint.
+    void RegisterTrajectoryRenameRoute();
+
+    /// @brief Register waypoint insertion endpoint.
+    void RegisterWaypointInsertRoute();
+
+    /// @brief Register waypoint reorder endpoint.
+    void RegisterWaypointReorderRoute();
+
+    /// @brief Register constraint insertion endpoint.
+    void RegisterConstraintInsertRoute();
+
+    /// @brief Register constraint deletion endpoint.
+    void RegisterConstraintDeleteRoute();
+
+    /// @brief Register constraint reorder endpoint.
+    void RegisterConstraintReorderRoute();
+
+    /// @brief Register marker insertion endpoint.
+    void RegisterMarkerInsertRoute();
+
+    /// @brief Register marker deletion endpoint.
+    void RegisterMarkerDeleteRoute();
+
+    /// @brief Register marker reorder endpoint.
+    void RegisterMarkerReorderRoute();
+
+    /// @brief Register project export bundle endpoint.
+    void RegisterExportRoute();
+
+    /// @brief Register project import bundle endpoint.
+    void RegisterImportRoute();
+
+    /// @brief Register trajectory delete endpoint.
+    void RegisterTrajectoryDeleteRoute();
 
   /// Registers REST routes for generation request and status operations
   void RegisterGenerationRoutes();

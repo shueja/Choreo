@@ -5,11 +5,13 @@
 #include <cctype>
 #include <chrono>
 #include <ctime>
+#include <expected>
 #include <format>
 #include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -23,6 +25,7 @@ namespace choreo::state_server::detail {
 using choreo::rest_router::HeaderMap;
 using choreo::rest_router::Request;
 using choreo::rest_router::Response;
+using choreo::rest_router::RouteParams;
 
 inline std::string ToLower(std::string_view text) {
   std::string out;
@@ -137,6 +140,22 @@ inline Response JsonResponse(int status, const wpi::util::json& body) {
   return response;
 }
 
+template <typename ExpectedT = wpi::util::json, typename Fn = std::function<Response(const ExpectedT&)>>
+inline Response WithParsedJsonBody(const Request& request, Fn&& on_success) {
+  try {
+    auto body_json =
+        wpi::util::json::parse_or_throw(std::string_view{request.body});
+    if constexpr (std::is_same_v<std::decay_t<ExpectedT>, wpi::util::json>) {
+      return on_success(body_json);
+    } else {
+      auto body = body_json.get<ExpectedT>();
+      return on_success(body);
+    }
+  } catch (const std::exception& ex) {
+    return InvalidJson(ex.what());
+  }
+}
+
 template <typename T>
 inline Response JsonModelResponse(int status, const T& value) {
   return JsonResponse(status, wpi::util::json(value));
@@ -176,6 +195,16 @@ inline std::optional<std::reference_wrapper<const std::string>> FindRouteParam(
     return std::nullopt;
   }
   return std::cref(it->second);
+}
+
+inline std::expected<std::reference_wrapper<const std::string>, Response>
+RequireRouteParam(const RouteParams& params, std::string_view key,
+                  std::string_view missing_message = "Missing route parameter") {
+  const auto value = FindRouteParam(params, key);
+  if (!value.has_value()) {
+    return std::unexpected(BadRoute(missing_message));
+  }
+  return *value;
 }
 
 template <typename Map>
@@ -259,6 +288,24 @@ inline bool ParseOrderArray(const wpi::util::json& body,
     out_order.emplace_back(entry.get_string());
   }
   return true;
+}
+
+inline std::optional<std::reference_wrapper<const wpi::util::json>>
+RequireObjectField(const wpi::util::json& body, std::string_view field) {
+  if (!body.is_object() || !body.contains(std::string(field)) ||
+      !body.at(field).is_object()) {
+    return std::nullopt;
+  }
+  return std::cref(body.at(field));
+}
+
+inline std::optional<std::reference_wrapper<const std::string>>
+RequireStringField(const wpi::util::json& body, std::string_view field) {
+  if (!body.is_object() || !body.contains(std::string(field)) ||
+      !body.at(field).is_string()) {
+    return std::nullopt;
+  }
+  return std::cref(body.at(field).get_string());
 }
 
 inline std::vector<std::string> SplitJsonPointer(std::string_view pointer) {

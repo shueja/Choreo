@@ -578,41 +578,6 @@ async function runHttpChecks(args, runner) {
     );
   }
 
-  const patchWithoutIfMatch = await jsonRequest(
-    baseUrl,
-    "PATCH",
-    `/api/v1/trajectories/${newUuid}`,
-    {
-      timeoutMs: args.timeoutMs,
-      body: { name: "Should Fail Without If-Match" }
-    }
-  );
-  requireStatus(
-    runner,
-    "PATCH /api/v1/trajectories/{uuid} missing If-Match",
-    patchWithoutIfMatch,
-    428,
-    reproBase
-  );
-
-  const patchWithStaleIfMatch = await jsonRequest(
-    baseUrl,
-    "PATCH",
-    `/api/v1/trajectories/${newUuid}`,
-    {
-      timeoutMs: args.timeoutMs,
-      headers: { "If-Match": '"traj-stale"' },
-      body: { name: "Should Fail With Stale If-Match" }
-    }
-  );
-  requireStatus(
-    runner,
-    "PATCH /api/v1/trajectories/{uuid} stale If-Match",
-    patchWithStaleIfMatch,
-    409,
-    reproBase
-  );
-
   const generationStateWithoutIfMatch = await jsonRequest(
     baseUrl,
     "GET",

@@ -40,12 +40,12 @@ if(NOT TARGET choreo_document)
     )
 endif()
 
-if(NOT TARGET choreo_renderer)
-    add_subdirectory(
-        "${CMAKE_CURRENT_LIST_DIR}/../renderer"
-        "${CMAKE_CURRENT_BINARY_DIR}/choreo_renderer"
-    )
-endif()
+        # if(NOT TARGET choreo_renderer)
+        #     add_subdirectory(
+        #         "${CMAKE_CURRENT_LIST_DIR}/../renderer"
+        #         "${CMAKE_CURRENT_BINARY_DIR}/choreo_renderer"
+        #     )
+        # endif()
 
 if(NOT TARGET choreo_progress_update_sender)
     add_subdirectory(
@@ -86,7 +86,7 @@ target_link_libraries(
         wpimath
         wpiutil
         choreo_document
-        choreo_renderer
+        # choreo_renderer
         choreo_progress_update_sender
 )
 
