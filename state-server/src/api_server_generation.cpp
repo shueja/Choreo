@@ -258,8 +258,7 @@ void ApiServer::RegisterGenerationRoutes() {
             params, [this, &cancel_operation](OperationId operation_id_value,
                                               OperationRecord& operation_value) {
               if (operation_value.isDone()) {
-                return Conflict("operation_terminal",
-                                "Operation already reached a terminal state");
+                return ErrorResponse(ApiError::OperationTerminal);
               }
 
               cancel_operation(operation_id_value, operation_value);

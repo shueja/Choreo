@@ -239,7 +239,8 @@ void ApiServer::RegisterTrajectoryCreateRoute() {
               auto created = TrajectoryFile::fromJson(body);
               EnsureUuid(created.uuid);
               if (m_trajectories.contains(created.uuid)) {
-                return Conflict("uuid_conflict", "Trajectory UUID already exists");
+                return ErrorResponse(ApiError::UuidConflict,
+                                     "Trajectory UUID already exists");
               }
 
               const auto uuid = created.uuid;
@@ -300,8 +301,8 @@ void ApiServer::RegisterWaypointDeleteRoute() {
 
               auto& waypoints = traj_it->second.params.waypoints;
               if (waypoints.size() <= 1) {
-                return choreo::rest_router::MakeJsonErrorResponse(
-                    422, "invalid_operation",
+                return ErrorResponse(
+                  ApiError::InvalidOperation,
                     "Trajectory must contain at least one waypoint");
               }
               waypoints.erase(waypoints.begin() + *waypoint_index);
@@ -396,13 +397,13 @@ void ApiServer::RegisterTrajectoryRenameRoute() {
                     }
                     const std::string name_value = name->get();
                     if (name_value.empty()) {
-                      return ErrorResponse(400, "invalid_name",
+                      return ErrorResponse(ApiError::InvalidName,
                                            "Trajectory name must not be empty");
                     }
                     if (HasDuplicateNameInMap(m_trajectories,
                                               trajectory_uuid_value,
                                               name_value)) {
-                      return Conflict("name_conflict",
+                      return ErrorResponse(ApiError::NameConflict,
                                       "Trajectory name already exists");
                     }
                     trajectory_value.name = name_value;
@@ -441,7 +442,7 @@ void ApiServer::RegisterWaypointInsertRoute() {
 
                     auto& items = traj_it->second.params.waypoints;
                     if (FindByUuid(items, item.uuid)) {
-                      return Conflict("uuid_conflict",
+                      return ErrorResponse(ApiError::UuidConflict,
                                       "Waypoint UUID already exists");
                     }
 
@@ -541,7 +542,7 @@ void ApiServer::RegisterConstraintInsertRoute() {
 
                     auto& items = traj_it->second.params.constraints;
                     if (FindByUuid(items, item.uuid)) {
-                      return Conflict("uuid_conflict",
+                      return ErrorResponse(ApiError::UuidConflict,
                                       "Constraint UUID already exists");
                     }
 
@@ -671,7 +672,7 @@ void ApiServer::RegisterMarkerInsertRoute() {
 
                     auto& items = traj_it->second.events;
                     if (FindByUuid(items, item.uuid)) {
-                      return Conflict("uuid_conflict",
+                      return ErrorResponse(ApiError::UuidConflict,
                                       "Marker UUID already exists");
                     }
 
@@ -812,7 +813,7 @@ void ApiServer::RegisterImportRoute() {
 
               const std::string mode_value = mode->get();
               if (mode_value != "merge" && mode_value != "replace") {
-                return ErrorResponse(400, "invalid_mode",
+                return ErrorResponse(ApiError::InvalidMode,
                                      "mode must be 'merge' or 'replace'");
               }
 
@@ -821,7 +822,7 @@ void ApiServer::RegisterImportRoute() {
                   !bundle_value.contains("trajectories") ||
                   !bundle_value.at("trajectories").is_array()) {
                 return ErrorResponse(
-                    400, "invalid_json",
+                  ApiError::InvalidJson,
                     "bundle must include project and trajectories array");
               }
 
@@ -979,7 +980,7 @@ void ApiServer::RegisterProjectDocumentRoutes() {
 
                           if (HasDuplicateVariableName(variable_uuid_value,
                                                        updated.name)) {
-                            return Conflict("name_conflict",
+                            return ErrorResponse(ApiError::NameConflict,
                                             name_conflict_message);
                           }
 

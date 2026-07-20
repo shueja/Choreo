@@ -361,14 +361,12 @@ std::optional<rest_router::Response> ApiServer::HandleUndo(
     std::string_view scope_key) {
   auto entry = EnsureHistoryEngine(scope_key).Undo();
   if (!entry.has_value()) {
-    return detail::ErrorResponse(409, "no_undo_available",
-                                 "No undo entry available for this scope");
+    return detail::ErrorResponse(detail::ApiError::NoUndoAvailable);
   }
 
   const auto current = CaptureScopeSnapshot(scope_key);
   if (!current.has_value()) {
-    return detail::ErrorResponse(422, "invalid_history_scope",
-                                 "Unknown history scope");
+    return detail::ErrorResponse(detail::ApiError::InvalidHistoryScope);
   }
 
   // Apply undo patch to the current snapshot, then validate by reloading via
@@ -376,14 +374,16 @@ std::optional<rest_router::Response> ApiServer::HandleUndo(
   auto target = *current;
   std::string error;
   if (!ApplyJsonPatch(target, entry->undo_patch, error)) {
-    return detail::ErrorResponse(422, "invalid_history_patch", error);
+    return detail::ErrorResponse(detail::ApiError::InvalidHistoryPatch, error);
   }
   if (!ApplyScopeSnapshot(scope_key, target, error)) {
-    return detail::ErrorResponse(422, "invalid_history_snapshot", error);
+    return detail::ErrorResponse(detail::ApiError::InvalidHistorySnapshot,
+                                 error);
   }
   if (!BumpScopeRevision(scope_key)) {
-    return detail::ErrorResponse(422, "invalid_history_scope",
-                                 "Failed to bump revision for history scope");
+    return detail::ErrorResponse(
+        detail::ApiError::InvalidHistoryScope,
+        "Failed to bump revision for history scope");
   }
   return std::nullopt;
 }
@@ -392,28 +392,28 @@ std::optional<rest_router::Response> ApiServer::HandleRedo(
     std::string_view scope_key) {
   auto entry = EnsureHistoryEngine(scope_key).Redo();
   if (!entry.has_value()) {
-    return detail::ErrorResponse(409, "no_redo_available",
-                                 "No redo entry available for this scope");
+    return detail::ErrorResponse(detail::ApiError::NoRedoAvailable);
   }
 
   const auto current = CaptureScopeSnapshot(scope_key);
   if (!current.has_value()) {
-    return detail::ErrorResponse(422, "invalid_history_scope",
-                                 "Unknown history scope");
+    return detail::ErrorResponse(detail::ApiError::InvalidHistoryScope);
   }
 
   // Redo follows the same flow but uses the forward patch.
   auto target = *current;
   std::string error;
   if (!ApplyJsonPatch(target, entry->redo_patch, error)) {
-    return detail::ErrorResponse(422, "invalid_history_patch", error);
+    return detail::ErrorResponse(detail::ApiError::InvalidHistoryPatch, error);
   }
   if (!ApplyScopeSnapshot(scope_key, target, error)) {
-    return detail::ErrorResponse(422, "invalid_history_snapshot", error);
+    return detail::ErrorResponse(detail::ApiError::InvalidHistorySnapshot,
+                                 error);
   }
   if (!BumpScopeRevision(scope_key)) {
-    return detail::ErrorResponse(422, "invalid_history_scope",
-                                 "Failed to bump revision for history scope");
+    return detail::ErrorResponse(
+        detail::ApiError::InvalidHistoryScope,
+        "Failed to bump revision for history scope");
   }
   return std::nullopt;
 }

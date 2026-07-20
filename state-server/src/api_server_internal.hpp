@@ -3,8 +3,6 @@
 #pragma once
 
 #include <cctype>
-#include <chrono>
-#include <ctime>
 #include <expected>
 #include <format>
 #include <functional>
@@ -13,7 +11,6 @@
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 #include <wpi/util/json.hpp>
@@ -26,6 +23,75 @@ using choreo::rest_router::HeaderMap;
 using choreo::rest_router::Request;
 using choreo::rest_router::Response;
 using choreo::rest_router::RouteParams;
+
+enum class ApiError {
+  PreconditionRequired,
+  BadRoute,
+  NotFound,
+  InvalidJson,
+  InvalidOrder,
+  StaleRevision,
+  OperationTerminal,
+  NoUndoAvailable,
+  NoRedoAvailable,
+  InvalidHistoryScope,
+  InvalidHistoryPatch,
+  InvalidHistorySnapshot,
+  InvalidName,
+  InvalidMode,
+  InvalidOperation,
+  UuidConflict,
+  NameConflict,
+};
+
+struct ApiErrorDescriptor {
+  int status;
+  std::string_view code;
+  std::string_view message;
+};
+
+constexpr ApiErrorDescriptor DescribeApiError(ApiError error) {
+  switch (error) {
+    case ApiError::PreconditionRequired:
+      return {428, "precondition_required",
+              "Missing If-Match header for mutation request"};
+    case ApiError::BadRoute:
+      return {400, "bad_route", "Invalid route parameters"};
+    case ApiError::NotFound:
+      return {404, "not_found", "Resource not found"};
+    case ApiError::InvalidJson:
+      return {400, "invalid_json", "Invalid JSON payload"};
+    case ApiError::InvalidOrder:
+      return {400, "invalid_order", "Invalid order payload"};
+    case ApiError::StaleRevision:
+      return {409, "stale_revision",
+              "If-Match did not match current resource revision"};
+    case ApiError::OperationTerminal:
+      return {409, "operation_terminal",
+              "Operation already reached a terminal state"};
+    case ApiError::NoUndoAvailable:
+      return {409, "no_undo_available", "No undo entry available for this scope"};
+    case ApiError::NoRedoAvailable:
+      return {409, "no_redo_available", "No redo entry available for this scope"};
+    case ApiError::InvalidHistoryScope:
+      return {422, "invalid_history_scope", "Unknown history scope"};
+    case ApiError::InvalidHistoryPatch:
+      return {422, "invalid_history_patch", "Invalid history patch"};
+    case ApiError::InvalidHistorySnapshot:
+      return {422, "invalid_history_snapshot", "Invalid history snapshot"};
+    case ApiError::InvalidName:
+      return {400, "invalid_name", "Name must not be empty"};
+    case ApiError::InvalidMode:
+      return {400, "invalid_mode", "Invalid mode"};
+    case ApiError::InvalidOperation:
+      return {422, "invalid_operation", "Operation is not allowed"};
+    case ApiError::UuidConflict:
+      return {409, "uuid_conflict", "UUID already exists"};
+    case ApiError::NameConflict:
+      return {409, "name_conflict", "Name already exists"};
+  }
+  return {500, "internal_error", "Internal server error"};
+}
 
 inline std::string ToLower(std::string_view text) {
   std::string out;
@@ -52,59 +118,37 @@ inline std::string QuotedEtag(std::string_view token) {
   return std::format("\"{}\"", token);
 }
 
-inline std::string NowIso8601Utc() {
-  const auto now = std::chrono::system_clock::now();
-  const auto tt = std::chrono::system_clock::to_time_t(now);
-  std::tm tm{};
-#ifdef _WIN32
-  gmtime_s(&tm, &tt);
-#else
-  gmtime_r(&tt, &tm);
-#endif
-  char buf[32]{};
-  std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tm);
-  return std::string(buf);
+inline Response PreconditionRequired() {
+  const auto d = DescribeApiError(ApiError::PreconditionRequired);
+  return choreo::rest_router::MakeJsonErrorResponse(d.status, d.code, d.message);
 }
 
-inline Response PreconditionRequired() {
+inline Response ErrorResponse(ApiError error,
+                              std::string_view message_override = {}) {
+  const auto d = DescribeApiError(error);
   return choreo::rest_router::MakeJsonErrorResponse(
-      428, "precondition_required",
-      "Missing If-Match header for mutation request");
+      d.status, d.code,
+      message_override.empty() ? d.message : message_override);
 }
 
 inline Response BadRoute(std::string_view message) {
-  return choreo::rest_router::MakeJsonErrorResponse(400, "bad_route", message);
+  return ErrorResponse(ApiError::BadRoute, message);
 }
 
 inline Response NotFound(std::string_view message) {
-  return choreo::rest_router::MakeJsonErrorResponse(404, "not_found", message);
-}
-
-inline Response ErrorResponse(int status, std::string_view code,
-                              std::string_view message) {
-  return choreo::rest_router::MakeJsonErrorResponse(status, code, message);
+  return ErrorResponse(ApiError::NotFound, message);
 }
 
 inline Response InvalidJson(std::string_view message) {
-  return ErrorResponse(400, "invalid_json", message);
-}
-
-inline Response InvalidPatch(std::string_view message) {
-  return ErrorResponse(400, "invalid_patch", message);
+  return ErrorResponse(ApiError::InvalidJson, message);
 }
 
 inline Response InvalidOrder(std::string_view message) {
-  return ErrorResponse(400, "invalid_order", message);
-}
-
-inline Response Conflict(std::string_view code, std::string_view message) {
-  return ErrorResponse(409, code, message);
+  return ErrorResponse(ApiError::InvalidOrder, message);
 }
 
 inline Response ConflictStale(std::string_view current_revision) {
-  auto response = choreo::rest_router::MakeJsonErrorResponse(
-      409, "stale_revision",
-      "If-Match did not match current resource revision");
+  auto response = ErrorResponse(ApiError::StaleRevision);
   response.headers["ETag"] = QuotedEtag(current_revision);
   return response;
 }
@@ -217,26 +261,6 @@ inline auto FindMappedValue(Map& map, const typename Map::key_type& key)
   return std::ref(it->second);
 }
 
-template <typename T>
-inline std::optional<std::reference_wrapper<T>> FindByUuidPtr(
-    std::vector<T>& items, std::string_view uuid) {
-  const auto index = FindByUuid(items, uuid);
-  if (!index.has_value()) {
-    return std::nullopt;
-  }
-  return std::ref(items[*index]);
-}
-
-template <typename T>
-inline std::optional<std::reference_wrapper<const T>> FindByUuidPtr(
-    const std::vector<T>& items, std::string_view uuid) {
-  const auto index = FindByUuid(items, uuid);
-  if (!index.has_value()) {
-    return std::nullopt;
-  }
-  return std::cref(items[*index]);
-}
-
 inline bool ParseInsertIndex(const wpi::util::json& body, size_t max_size,
                              size_t& out_index, std::string& error) {
   out_index = max_size;
@@ -306,116 +330,6 @@ RequireStringField(const wpi::util::json& body, std::string_view field) {
     return std::nullopt;
   }
   return std::cref(body.at(field).get_string());
-}
-
-inline std::vector<std::string> SplitJsonPointer(std::string_view pointer) {
-  std::vector<std::string> tokens;
-  if (pointer.empty()) {
-    return tokens;
-  }
-  if (!pointer.starts_with('/')) {
-    return {};
-  }
-
-  size_t start = 1;
-  while (start <= pointer.size()) {
-    const size_t slash = pointer.find('/', start);
-    const size_t end = slash == std::string_view::npos ? pointer.size() : slash;
-    std::string token;
-    token.reserve(end - start);
-    for (size_t i = start; i < end; ++i) {
-      if (pointer[i] == '~' && i + 1 < end) {
-        if (pointer[i + 1] == '0') {
-          token.push_back('~');
-          ++i;
-          continue;
-        }
-        if (pointer[i + 1] == '1') {
-          token.push_back('/');
-          ++i;
-          continue;
-        }
-      }
-      token.push_back(pointer[i]);
-    }
-    tokens.push_back(std::move(token));
-    if (slash == std::string_view::npos) {
-      break;
-    }
-    start = slash + 1;
-  }
-  return tokens;
-}
-
-inline bool ApplyObjectJsonPatch(wpi::util::json& target,
-                                 const wpi::util::json& patch,
-                                 std::string& error) {
-  if (patch.is_object()) {
-    for (const auto& [key, value] : patch.get_object()) {
-      target[key] = value;
-    }
-    return true;
-  }
-
-  if (!patch.is_array()) {
-    error = "PATCH body must be a JSON object or RFC6902 patch array";
-    return false;
-  }
-
-  for (const auto& op_json : patch.get_array()) {
-    if (!op_json.is_object() || !op_json.contains("op") ||
-        !op_json.at("op").is_string() || !op_json.contains("path") ||
-        !op_json.at("path").is_string()) {
-      error = "Each patch operation must include string fields op and path";
-      return false;
-    }
-
-    const std::string op = op_json.at("op").get_string();
-    const std::string path = op_json.at("path").get_string();
-    const auto tokens = SplitJsonPointer(path);
-    if (path.empty() || tokens.empty()) {
-      error = "Only non-root JSON Pointer paths are supported";
-      return false;
-    }
-
-    wpi::util::json* current = &target;
-    for (size_t i = 0; i + 1 < tokens.size(); ++i) {
-      if (!current->is_object()) {
-        error = "Patch path traverses non-object node";
-        return false;
-      }
-      if (!current->contains(tokens[i])) {
-        error = "Patch path does not exist";
-        return false;
-      }
-      current = &(*current)[tokens[i]];
-    }
-
-    const std::string& leaf = tokens.back();
-    if (!current->is_object()) {
-      error = "Patch target parent is not an object";
-      return false;
-    }
-
-    if (op == "remove") {
-      if (!current->contains(leaf)) {
-        error = "remove target does not exist";
-        return false;
-      }
-      current->erase(leaf);
-      continue;
-    }
-
-    if ((op == "add" || op == "replace") && op_json.contains("value")) {
-      (*current)[leaf] = op_json.at("value");
-      continue;
-    }
-
-    error = "Unsupported patch operation (supported: add, replace, remove)";
-    return false;
-  }
-
-  return true;
 }
 
 }  // namespace choreo::state_server::detail
