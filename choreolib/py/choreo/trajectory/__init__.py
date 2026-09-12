@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import TypeGuard
 
 import numpy as np
+from wpimath import ChassisVelocities, Pose2d, Rotation2d, rkdp
+
 from choreo.util import (
     DEFAULT_YEAR,
     MirroredFlipper,
@@ -12,9 +14,6 @@ from choreo.util import (
     RotateAroundFlipper,
     get_flipper_for_year,
 )
-from wpimath.geometry import Pose2d, Rotation2d
-from wpimath.kinematics import ChassisSpeeds
-from wpimath.system import RKDP
 
 
 def lerp(a, b, t) -> float:
@@ -124,12 +123,12 @@ class DifferentialSample:
         """
         return Pose2d(self.x, self.y, Rotation2d(value=self.heading))
 
-    def get_chassis_speeds(self) -> ChassisSpeeds:
+    def get_chassis_speeds(self) -> ChassisVelocities:
         """
         Returns the field-relative chassis speeds of this state.
         """
 
-        return ChassisSpeeds((self.vl + self.vr) / 2.0, 0.0, self.omega)
+        return ChassisVelocities((self.vl + self.vr) / 2.0, 0.0, self.omega)
 
     def interpolate(
         self, end_value: DifferentialSample, t: float
@@ -175,7 +174,7 @@ class DifferentialSample:
             return [v * math.cos(θ), v * math.sin(θ), ω, al, ar, α]
 
         τ = t - self.timestamp
-        sample = RKDP(
+        sample = rkdp(
             f, initial_state, np.array([[self.al], [self.ar], [self.alpha]]), τ
         )
 
@@ -499,11 +498,11 @@ class SwerveSample:
         """
         return Pose2d(self.x, self.y, Rotation2d(value=self.heading))
 
-    def get_chassis_speeds(self) -> ChassisSpeeds:
+    def get_chassis_speeds(self) -> ChassisVelocities:
         """
         Returns the field-relative chassis speeds of this state.
         """
-        return ChassisSpeeds(self.vx, self.vy, self.omega)
+        return ChassisVelocities(self.vx, self.vy, self.omega)
 
     def interpolate(self, end_value: SwerveSample, t: float) -> SwerveSample:
         """

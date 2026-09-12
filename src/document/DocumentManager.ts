@@ -1,6 +1,6 @@
 import { path, window as tauriWindow } from "@tauri-apps/api";
 import { ask, save } from "@tauri-apps/plugin-dialog";
-import { TauriEvent } from "@tauri-apps/api/event";
+import { TauriEvent, UnlistenFn } from "@tauri-apps/api/event";
 import { DocumentStore, SelectableItemTypes } from "./DocumentModel";
 
 import hotkeys from "hotkeys-js";
@@ -457,7 +457,7 @@ export async function setupEventListeners() {
       }
       await tauriWindow.getCurrentWindow().destroy();
     })
-    .then((unlisten) => {
+    .then((unlisten: UnlistenFn) => {
       window.addEventListener("unload", () => {
         unlisten();
       });

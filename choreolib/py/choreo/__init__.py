@@ -2,6 +2,8 @@ import json
 import os
 
 import hal
+from wpilib import get_deploy_directory
+
 from choreo.trajectory import (
     DifferentialSample,
     DifferentialTrajectory,
@@ -14,7 +16,6 @@ from choreo.trajectory import (
 from choreo.util.traj_schema_version import (
     TRAJ_SCHEMA_VERSION as generated_TRAJ_SCHEMA_VERSION,
 )
-from wpilib import getDeployDirectory
 
 TRAJ_SCHEMA_VERSION = generated_TRAJ_SCHEMA_VERSION
 
@@ -28,7 +29,7 @@ def load_differential_trajectory_string(
         The JSON string.
     """
     # Usage report
-    hal.report(hal.tResourceType.kResourceType_ChoreoTrajectory, 2)
+    hal.report_usage("ChoreoTrajectory", 2, "ChoreoLib")
 
     data = json.loads(trajectory_json_string)
     name = data["name"]
@@ -81,7 +82,7 @@ def load_differential_trajectory(trajectory_name: str) -> DifferentialTrajectory
         directory. Do not include ".traj" here.
     """
     with open(
-        os.path.join(getDeployDirectory(), "choreo", trajectory_name + ".traj"),
+        os.path.join(get_deploy_directory(), "choreo", trajectory_name + ".traj"),
         "r",
         encoding="utf-8",
     ) as trajectory_file:
@@ -96,7 +97,7 @@ def load_swerve_trajectory_string(trajectory_json_string: str) -> SwerveTrajecto
         The JSON string.
     """
     # Usage report
-    hal.report(hal.tResourceType.kResourceType_ChoreoTrajectory, 1)
+    hal.report_usage("ChoreoTrajectory", 1, "ChoreoLib")
 
     data = json.loads(trajectory_json_string)
     name = data["name"]
@@ -149,7 +150,7 @@ def load_swerve_trajectory(trajectory_name: str) -> SwerveTrajectory:
         directory. Do not include ".traj" here.
     """
     with open(
-        os.path.join(getDeployDirectory(), "choreo", trajectory_name + ".traj"),
+        os.path.join(get_deploy_directory(), "choreo", trajectory_name + ".traj"),
         "r",
         encoding="utf-8",
     ) as trajectory_file:
