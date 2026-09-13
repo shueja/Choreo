@@ -25,8 +25,7 @@ class TRAJOPT_DLLEXPORT PointAtConstraint {
   /// @param field_point Field point.
   /// @param heading_tolerance The allowed robot heading tolerance (radians).
   ///     Must be nonnegative.
-  /// @param flip False points at the field point while true points away from
-  ///     the field point.
+  /// @param flip Whether to point away from the field point.
   explicit PointAtConstraint(Translation2d field_point,
                              double heading_tolerance, bool flip = false)
       : m_field_point{std::move(field_point)},
