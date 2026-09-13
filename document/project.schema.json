@@ -176,22 +176,62 @@
           "$ref": "./shared.schema.json#/$defs/Expr",
           "description": "Wheel coefficient of friction (dimensionless)"
         },
-        "differentialTrackwidth": {
-          "$ref": "./shared.schema.json#/$defs/Expr",
-          "description": "Track width for differential drive (m)"
-        },
         "wheels": {
-          "type": "array",
-          "items": { "$ref": "./shared.schema.json#/$defs/Translation2e" },
-          "minItems": 4,
-          "maxItems": 4,
-          "description": "Swerve module positions relative to robot center: [FL, BL, BR, FR] (m)"
+          "type": "object",
+          "description": "Drive-type-specific wheel configuration. One or more drive types may be configured.",
+          "properties": {
+            "differential": {
+              "type": "object",
+              "properties": {
+                "trackwidth": {
+                  "$ref": "./shared.schema.json#/$defs/Expr",
+                  "description": "Distance between the left and right wheel contact patches (m)"
+                }
+              },
+              "required": ["trackwidth"],
+              "additionalProperties": false
+            },
+            "swerve": {
+              "type": "object",
+              "properties": {
+                "modules": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "./shared.schema.json#/$defs/Translation2e"
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "description": "Module positions relative to robot center. Order is not assumed in the optimizer. (m)"
+                }
+              },
+              "required": ["modules"],
+              "additionalProperties": false
+            },
+            "mecanum": {
+              "type": "object",
+              "properties": {
+                "frontLeft": {
+                  "$ref": "./shared.schema.json#/$defs/Translation2e"
+                },
+                "frontRight": {
+                  "$ref": "./shared.schema.json#/$defs/Translation2e"
+                },
+                "backLeft": {
+                  "$ref": "./shared.schema.json#/$defs/Translation2e"
+                },
+                "backRight": {
+                  "$ref": "./shared.schema.json#/$defs/Translation2e"
+                }
+              },
+              "required": ["frontLeft", "frontRight", "backLeft", "backRight"],
+              "additionalProperties": false
+            }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
         },
-        "bumpers": {
-          "type": "array",
-          "items": { "$ref": "./shared.schema.json#/$defs/Translation2e" },
-          "description": "Bumper vertices in counter-clockwise order, robot-relative (m)"
-        },
+        "bumpers": { "$ref": "./shared.schema.json#/$defs/Polygon2e" },
+
         "motor": { "$ref": "#/$defs/MotorConfig" }
       },
       "required": [
@@ -200,7 +240,6 @@
         "gearing",
         "radius",
         "cof",
-        "differentialTrackwidth",
         "wheels",
         "bumpers",
         "motor"
