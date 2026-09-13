@@ -60,7 +60,7 @@
     },
     "Translation2e": {
       "type": "object",
-      "description": "A 2D translation parameterized by Expr values (metres).",
+      "description": "A 2D translation parameterized by Expr values (metres), matching WPILib Translation2d.",
       "properties": {
         "x": { "$ref": "#/$defs/Expr", "description": "X coordinate (m)" },
         "y": { "$ref": "#/$defs/Expr", "description": "Y coordinate (m)" }
@@ -68,28 +68,48 @@
       "required": ["x", "y"],
       "additionalProperties": false
     },
+    "Rotation2e": {
+      "type": "object",
+      "description": "A 2D rotation parameterized by an Expr value (radians), matching WPILib Rotation2d.",
+      "properties": {
+        "radians": { "$ref": "#/$defs/Expr", "description": "Rotation angle (rad)" }
+      },
+      "required": ["radians"],
+      "additionalProperties": false
+    },
     "Pose2e": {
       "type": "object",
-      "description": "A 2D pose parameterized by Expr values.",
+      "description": "A 2D pose parameterized by Expr values, matching WPILib Pose2d.",
       "properties": {
-        "x": { "$ref": "#/$defs/Expr", "description": "X coordinate (m)" },
-        "y": { "$ref": "#/$defs/Expr", "description": "Y coordinate (m)" },
-        "heading": { "$ref": "#/$defs/Expr", "description": "Heading (rad)" }
+        "translation": { "$ref": "#/$defs/Translation2e", "description": "Position (m)" },
+        "rotation": { "$ref": "#/$defs/Rotation2e", "description": "Heading (rad)" }
       },
-      "required": ["x", "y", "heading"],
+      "required": ["translation", "rotation"],
       "additionalProperties": false
     },
     "Region2e": {
       "type": "object",
-      "description": "A 2D oriented rectangular/elliptical region parameterized by Expr values.",
+      "description": "A 2D rectangle parameterized by Expr values, matching WPILib Rectangle2d.",
       "properties": {
-        "x": { "$ref": "#/$defs/Expr", "description": "Center X (m)" },
-        "y": { "$ref": "#/$defs/Expr", "description": "Center Y (m)" },
-        "heading": { "$ref": "#/$defs/Expr", "description": "Rotation (rad)" },
-        "w": { "$ref": "#/$defs/Expr", "description": "Width (m)" },
-        "h": { "$ref": "#/$defs/Expr", "description": "Height (m)" }
+        "center": { "$ref": "#/$defs/Pose2e", "description": "Center pose of the rectangle" },
+        "xWidth": { "$ref": "#/$defs/Expr", "description": "Width along the local x axis (m)" },
+        "yWidth": { "$ref": "#/$defs/Expr", "description": "Width along the local y axis (m)" }
       },
-      "required": ["x", "y", "heading", "w", "h"],
+      "required": ["center", "xWidth", "yWidth"],
+      "additionalProperties": false
+    },
+    "Polygon2e": {
+      "type": "object",
+      "description": "A 2D convex polygon parameterized by Expr values.",
+      "properties": {
+        "vertices": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Translation2e" },
+          "minItems": 3,
+          "description": "Polygon vertices in counter-clockwise order, relative to the polygon's local frame (m)"
+        }
+      },
+      "required": ["vertices"],
       "additionalProperties": false
     }
   }

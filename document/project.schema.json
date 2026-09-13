@@ -29,9 +29,9 @@
       "properties": {
         "name": { "type": "string", "minLength": 1 },
         "dimension": { "$ref": "#/$defs/Dimension" },
-        "var": { "$ref": "./shared.schema.json#/$defs/Expr" }
+        "value": { "$ref": "./shared.schema.json#/$defs/Expr" }
       },
-      "required": ["name", "dimension", "var"],
+      "required": ["name", "dimension", "value"],
       "additionalProperties": false
     },
     "TranslationVariableEntry": {
@@ -64,6 +64,16 @@
       "required": ["name", "value"],
       "additionalProperties": false
     },
+    "PolygonVariableEntry": {
+      "type": "object",
+      "description": "Named polygon variable keyed by UUID in variables.polygons.",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "./shared.schema.json#/$defs/Polygon2e" }
+      },
+      "required": ["name", "value"],
+      "additionalProperties": false
+    },
     "Variables": {
       "type": "object",
       "description": "All document-level variables keyed by UUID, grouped by variable kind.",
@@ -91,6 +101,12 @@
           "propertyNames": { "$ref": "./shared.schema.json#/$defs/UUID" },
           "additionalProperties": { "$ref": "#/$defs/RegionVariableEntry" },
           "description": "2D region variables keyed by UUID."
+        },
+        "polygons": {
+          "type": "object",
+          "propertyNames": { "$ref": "./shared.schema.json#/$defs/UUID" },
+          "additionalProperties": { "$ref": "#/$defs/PolygonVariableEntry" },
+          "description": "2D convex polygon variables keyed by UUID."
         }
       },
       "additionalProperties": false
@@ -99,14 +115,14 @@
       "type": "object",
       "description": "Drivetrain motor model parameters.",
       "properties": {
-        "free_speed": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "No-load speed (rad/s)" },
-        "stall_torque": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Stall torque (N·m)" },
+        "freeSpeed": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "No-load speed (rad/s)" },
+        "stallTorque": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Stall torque (N·m)" },
         "kT": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Torque constant (N·m/A)" },
         "kV": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Back-EMF constant (V·s/rad)" },
-        "supply_limit": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Supply current limit (A)" },
-        "stator_limit": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Stator current limit (A)" }
+        "supplyLimit": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Supply current limit (A)" },
+        "statorLimit": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Stator current limit (A)" }
       },
-      "required": ["free_speed", "stall_torque", "kT", "kV", "supply_limit", "stator_limit"],
+      "required": ["freeSpeed", "stallTorque", "kT", "kV", "supplyLimit", "statorLimit"],
       "additionalProperties": false
     },
     "RobotConfig": {
@@ -118,7 +134,7 @@
         "gearing": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Motor-to-wheel gear ratio (dimensionless)" },
         "radius": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Wheel radius (m)" },
         "cof": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Wheel coefficient of friction (dimensionless)" },
-        "differential_track_width": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Track width for differential drive (m)" },
+        "differentialTrackwidth": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Track width for differential drive (m)" },
         "wheels": {
           "type": "array",
           "items": { "$ref": "./shared.schema.json#/$defs/Translation2e" },
@@ -133,7 +149,7 @@
         },
         "motor": { "$ref": "#/$defs/MotorConfig" }
       },
-      "required": ["mass", "inertia", "gearing", "radius", "cof", "differential_track_width", "wheels", "bumpers", "motor"],
+      "required": ["mass", "inertia", "gearing", "radius", "cof", "differentialTrackwidth", "wheels", "bumpers", "motor"],
       "additionalProperties": false
     },
     "CodeGenConfig": {
