@@ -150,7 +150,7 @@ Within `data`, constraint properties are now serialized adjacent to the `type` t
   "props": { "max": { "exp": "2 m/s", "val": 2 } }
 }
 ```
-it's 
+it's
 ```json
 {
   "type": "MaxVelocity",
@@ -273,7 +273,7 @@ Completely reworked to support more robot variety. Example:
 ```
 
 ### Variables
-There are dimensioned scalar "expression" variables and multiple types of geometric variables: 
+There are dimensioned scalar "expression" variables and multiple types of geometric variables:
 Structure of an individual expression variable:
 ```json
 {

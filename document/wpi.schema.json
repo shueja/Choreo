@@ -37,8 +37,14 @@
       "description": "WPILib Rectangle2d with a center pose and width/height.",
       "properties": {
         "center": { "$ref": "#/$defs/WpiPose2d" },
-        "xWidth": { "type": "number", "description": "Width along the local x axis (m)" },
-        "yWidth": { "type": "number", "description": "Width along the local y axis (m)" }
+        "xWidth": {
+          "type": "number",
+          "description": "Width along the local x axis (m)"
+        },
+        "yWidth": {
+          "type": "number",
+          "description": "Width along the local y axis (m)"
+        }
       },
       "required": ["center", "xWidth", "yWidth"],
       "additionalProperties": false
@@ -60,7 +66,10 @@
       "properties": {
         "ax": { "type": "number", "description": "X acceleration (m/s^2)" },
         "ay": { "type": "number", "description": "Y acceleration (m/s^2)" },
-        "alpha": { "type": "number", "description": "Angular acceleration (rad/s^2)" }
+        "alpha": {
+          "type": "number",
+          "description": "Angular acceleration (rad/s^2)"
+        }
       },
       "required": ["ax", "ay", "alpha"],
       "additionalProperties": false
@@ -69,7 +78,10 @@
       "type": "object",
       "description": "wpi::math::HolonomicSample serialized as JSON.",
       "properties": {
-        "time": { "type": "number", "description": "Sample timestamp relative to trajectory start (s)" },
+        "time": {
+          "type": "number",
+          "description": "Sample timestamp relative to trajectory start (s)"
+        },
         "pose": { "$ref": "#/$defs/WpiPose2d" },
         "velocity": { "$ref": "#/$defs/WpiChassisVelocities" },
         "acceleration": { "$ref": "#/$defs/WpiChassisAccelerations" }
@@ -81,27 +93,53 @@
       "type": "object",
       "description": "wpi::math::DifferentialSample serialized as JSON.",
       "properties": {
-        "time": { "type": "number", "description": "Sample timestamp relative to trajectory start (s)" },
+        "time": {
+          "type": "number",
+          "description": "Sample timestamp relative to trajectory start (s)"
+        },
         "pose": { "$ref": "#/$defs/WpiPose2d" },
         "velocity": { "$ref": "#/$defs/WpiChassisVelocities" },
         "acceleration": { "$ref": "#/$defs/WpiChassisAccelerations" },
-        "leftVelocity": { "type": "number", "description": "Left wheel speed (m/s)" },
-        "rightVelocity": { "type": "number", "description": "Right wheel speed (m/s)" }
+        "leftVelocity": {
+          "type": "number",
+          "description": "Left wheel speed (m/s)"
+        },
+        "rightVelocity": {
+          "type": "number",
+          "description": "Right wheel speed (m/s)"
+        }
       },
-      "required": ["time", "pose", "velocity", "acceleration", "leftVelocity", "rightVelocity"],
+      "required": [
+        "time",
+        "pose",
+        "velocity",
+        "acceleration",
+        "leftVelocity",
+        "rightVelocity"
+      ],
       "additionalProperties": false
     },
     "WpiHolonomicTrajectory": {
       "type": "object",
       "description": "WPILib HolonomicTrajectory JSON sample container.",
-      "properties": { "samples": { "type": "array", "items": { "$ref": "#/$defs/WpiHolonomicSample" } } },
+      "properties": {
+        "samples": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/WpiHolonomicSample" }
+        }
+      },
       "required": ["samples"],
       "additionalProperties": false
     },
     "WpiDifferentialTrajectory": {
       "type": "object",
       "description": "WPILib DifferentialTrajectory JSON sample container.",
-      "properties": { "samples": { "type": "array", "items": { "$ref": "#/$defs/WpiDifferentialSample" } } },
+      "properties": {
+        "samples": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/WpiDifferentialSample" }
+        }
+      },
       "required": ["samples"],
       "additionalProperties": false
     }

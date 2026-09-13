@@ -25,7 +25,15 @@
           "description": "Base64-encoded packed WPILib struct-array bytes for the samples."
         }
       },
-      "required": ["version", "event", "driveType", "sampleCount", "sampleStructType", "sampleStructSize", "samplesBase64"],
+      "required": [
+        "version",
+        "event",
+        "driveType",
+        "sampleCount",
+        "sampleStructType",
+        "sampleStructSize",
+        "samplesBase64"
+      ],
       "additionalProperties": false
     },
     "DiagnosticProgressMessage": {
@@ -69,7 +77,10 @@
         "payload": {
           "type": "object",
           "properties": {
-            "trajectoryFile": { "type": "string", "description": "Serialized TrajectoryFile JSON string." }
+            "trajectoryFile": {
+              "type": "string",
+              "description": "Serialized TrajectoryFile JSON string."
+            }
           },
           "required": ["trajectoryFile"],
           "additionalProperties": false

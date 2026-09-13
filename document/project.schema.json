@@ -87,7 +87,9 @@
         "translations": {
           "type": "object",
           "propertyNames": { "$ref": "./shared.schema.json#/$defs/UUID" },
-          "additionalProperties": { "$ref": "#/$defs/TranslationVariableEntry" },
+          "additionalProperties": {
+            "$ref": "#/$defs/TranslationVariableEntry"
+          },
           "description": "2D translation variables keyed by UUID."
         },
         "poses": {
@@ -115,26 +117,69 @@
       "type": "object",
       "description": "Drivetrain motor model parameters.",
       "properties": {
-        "freeSpeed": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "No-load speed (rad/s)" },
-        "stallTorque": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Stall torque (N·m)" },
-        "kT": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Torque constant (N·m/A)" },
-        "kV": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Back-EMF constant (V·s/rad)" },
-        "supplyLimit": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Supply current limit (A)" },
-        "statorLimit": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Stator current limit (A)" }
+        "freeSpeed": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "No-load speed (rad/s)"
+        },
+        "stallTorque": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Stall torque (N·m)"
+        },
+        "kT": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Torque constant (N·m/A)"
+        },
+        "kV": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Back-EMF constant (V·s/rad)"
+        },
+        "supplyLimit": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Supply current limit (A)"
+        },
+        "statorLimit": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Stator current limit (A)"
+        }
       },
-      "required": ["freeSpeed", "stallTorque", "kT", "kV", "supplyLimit", "statorLimit"],
+      "required": [
+        "freeSpeed",
+        "stallTorque",
+        "kT",
+        "kV",
+        "supplyLimit",
+        "statorLimit"
+      ],
       "additionalProperties": false
     },
     "RobotConfig": {
       "type": "object",
       "description": "Complete physical robot configuration.",
       "properties": {
-        "mass": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Robot mass (kg)" },
-        "inertia": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Moment of inertia (kg·m²)" },
-        "gearing": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Motor-to-wheel gear ratio (dimensionless)" },
-        "radius": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Wheel radius (m)" },
-        "cof": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Wheel coefficient of friction (dimensionless)" },
-        "differentialTrackwidth": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Track width for differential drive (m)" },
+        "mass": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Robot mass (kg)"
+        },
+        "inertia": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Moment of inertia (kg·m²)"
+        },
+        "gearing": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Motor-to-wheel gear ratio (dimensionless)"
+        },
+        "radius": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Wheel radius (m)"
+        },
+        "cof": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Wheel coefficient of friction (dimensionless)"
+        },
+        "differentialTrackwidth": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Track width for differential drive (m)"
+        },
         "wheels": {
           "type": "array",
           "items": { "$ref": "./shared.schema.json#/$defs/Translation2e" },
@@ -149,17 +194,42 @@
         },
         "motor": { "$ref": "#/$defs/MotorConfig" }
       },
-      "required": ["mass", "inertia", "gearing", "radius", "cof", "differentialTrackwidth", "wheels", "bumpers", "motor"],
+      "required": [
+        "mass",
+        "inertia",
+        "gearing",
+        "radius",
+        "cof",
+        "differentialTrackwidth",
+        "wheels",
+        "bumpers",
+        "motor"
+      ],
       "additionalProperties": false
     },
     "CodeGenConfig": {
       "type": "object",
       "description": "Code generation settings stored in the project file.",
       "properties": {
-        "root": { "type": "string", "description": "Output root directory path. Empty string means 'not set'." },
-        "genVars": { "type": "boolean", "description": "Generate named variable accessors.", "default": true },
-        "genTrajData": { "type": "boolean", "description": "Generate data objects with details on each trajectory.", "default": true },
-        "useChoreoLib": { "type": "boolean", "description": "Emit ChoreoLib-compatible API calls.", "default": true }
+        "root": {
+          "type": "string",
+          "description": "Output root directory path. Empty string means 'not set'."
+        },
+        "genVars": {
+          "type": "boolean",
+          "description": "Generate named variable accessors.",
+          "default": true
+        },
+        "genTrajData": {
+          "type": "boolean",
+          "description": "Generate data objects with details on each trajectory.",
+          "default": true
+        },
+        "useChoreoLib": {
+          "type": "boolean",
+          "description": "Emit ChoreoLib-compatible API calls.",
+          "default": true
+        }
       },
       "additionalProperties": false
     },
@@ -167,15 +237,30 @@
       "type": "object",
       "description": "Contents of a .chor project file: robot config, drive type, document-level variables, and code-gen settings.",
       "properties": {
-        "uuid": { "$ref": "./shared.schema.json#/$defs/UUID", "description": "Stable UUID for this project document." },
+        "uuid": {
+          "$ref": "./shared.schema.json#/$defs/UUID",
+          "description": "Stable UUID for this project document."
+        },
         "name": { "type": "string" },
-        "version": { "type": "integer", "minimum": 4, "description": "File format version" },
+        "version": {
+          "type": "integer",
+          "minimum": 4,
+          "description": "File format version"
+        },
         "type": { "$ref": "./shared.schema.json#/$defs/DriveType" },
         "variables": { "$ref": "#/$defs/Variables" },
         "config": { "$ref": "#/$defs/RobotConfig" },
         "codegen": { "$ref": "#/$defs/CodeGenConfig" }
       },
-      "required": ["uuid", "name", "version", "type", "variables", "config", "codegen"],
+      "required": [
+        "uuid",
+        "name",
+        "version",
+        "type",
+        "variables",
+        "config",
+        "codegen"
+      ],
       "additionalProperties": false
     }
   },

@@ -6,7 +6,9 @@
   "$defs": {
     "Expr": { "$ref": "./shared.schema.json#/$defs/Expr" },
     "DriveType": { "$ref": "./shared.schema.json#/$defs/DriveType" },
-    "ConstraintScope": { "$ref": "./shared.schema.json#/$defs/ConstraintScope" },
+    "ConstraintScope": {
+      "$ref": "./shared.schema.json#/$defs/ConstraintScope"
+    },
     "UUID": { "$ref": "./shared.schema.json#/$defs/UUID" },
     "WaypointID": { "$ref": "./shared.schema.json#/$defs/WaypointID" },
     "Translation2e": { "$ref": "./shared.schema.json#/$defs/Translation2e" },
@@ -14,10 +16,18 @@
     "Pose2e": { "$ref": "./shared.schema.json#/$defs/Pose2e" },
     "Region2e": { "$ref": "./shared.schema.json#/$defs/Region2e" },
     "Dimension": { "$ref": "./project.schema.json#/$defs/Dimension" },
-    "ExpressionVariableEntry": { "$ref": "./project.schema.json#/$defs/ExpressionVariableEntry" },
-    "TranslationVariableEntry": { "$ref": "./project.schema.json#/$defs/TranslationVariableEntry" },
-    "PoseVariableEntry": { "$ref": "./project.schema.json#/$defs/PoseVariableEntry" },
-    "RegionVariableEntry": { "$ref": "./project.schema.json#/$defs/RegionVariableEntry" },
+    "ExpressionVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/ExpressionVariableEntry"
+    },
+    "TranslationVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/TranslationVariableEntry"
+    },
+    "PoseVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/PoseVariableEntry"
+    },
+    "RegionVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/RegionVariableEntry"
+    },
     "Variables": { "$ref": "./project.schema.json#/$defs/Variables" },
     "MotorConfig": { "$ref": "./project.schema.json#/$defs/MotorConfig" },
     "RobotConfig": { "$ref": "./project.schema.json#/$defs/RobotConfig" },
@@ -25,31 +35,63 @@
     "ProjectFile": { "$ref": "./project.schema.json#/$defs/ProjectFile" },
     "Waypoint": { "$ref": "./trajectory.schema.json#/$defs/Waypoint" },
     "MaxVelocity": { "$ref": "./constraints.schema.json#/$defs/MaxVelocity" },
-    "MaxAngularVelocity": { "$ref": "./constraints.schema.json#/$defs/MaxAngularVelocity" },
+    "MaxAngularVelocity": {
+      "$ref": "./constraints.schema.json#/$defs/MaxAngularVelocity"
+    },
     "KeepInCircle": { "$ref": "./constraints.schema.json#/$defs/KeepInCircle" },
-    "HeadingConstraint": { "$ref": "./constraints.schema.json#/$defs/HeadingConstraint" },
-    "ConstraintVariant": { "$ref": "./constraints.schema.json#/$defs/ConstraintVariant" },
+    "HeadingConstraint": {
+      "$ref": "./constraints.schema.json#/$defs/HeadingConstraint"
+    },
+    "ConstraintVariant": {
+      "$ref": "./constraints.schema.json#/$defs/ConstraintVariant"
+    },
     "Constraint": { "$ref": "./trajectory.schema.json#/$defs/Constraint" },
     "Parameters": { "$ref": "./trajectory.schema.json#/$defs/Parameters" },
-    "EventMarkerData": { "$ref": "./trajectory.schema.json#/$defs/EventMarkerData" },
+    "EventMarkerData": {
+      "$ref": "./trajectory.schema.json#/$defs/EventMarkerData"
+    },
     "EventMarker": { "$ref": "./trajectory.schema.json#/$defs/EventMarker" },
     "WpiTranslation2d": { "$ref": "./wpi.schema.json#/$defs/WpiTranslation2d" },
     "WpiRotation2d": { "$ref": "./wpi.schema.json#/$defs/WpiRotation2d" },
     "WpiPose2d": { "$ref": "./wpi.schema.json#/$defs/WpiPose2d" },
     "WpiRectangle2d": { "$ref": "./wpi.schema.json#/$defs/WpiRectangle2d" },
-    "WpiChassisVelocities": { "$ref": "./wpi.schema.json#/$defs/WpiChassisVelocities" },
-    "WpiChassisAccelerations": { "$ref": "./wpi.schema.json#/$defs/WpiChassisAccelerations" },
-    "WpiHolonomicSample": { "$ref": "./wpi.schema.json#/$defs/WpiHolonomicSample" },
-    "WpiDifferentialSample": { "$ref": "./wpi.schema.json#/$defs/WpiDifferentialSample" },
-    "WpiHolonomicTrajectory": { "$ref": "./wpi.schema.json#/$defs/WpiHolonomicTrajectory" },
-    "WpiDifferentialTrajectory": { "$ref": "./wpi.schema.json#/$defs/WpiDifferentialTrajectory" },
+    "WpiChassisVelocities": {
+      "$ref": "./wpi.schema.json#/$defs/WpiChassisVelocities"
+    },
+    "WpiChassisAccelerations": {
+      "$ref": "./wpi.schema.json#/$defs/WpiChassisAccelerations"
+    },
+    "WpiHolonomicSample": {
+      "$ref": "./wpi.schema.json#/$defs/WpiHolonomicSample"
+    },
+    "WpiDifferentialSample": {
+      "$ref": "./wpi.schema.json#/$defs/WpiDifferentialSample"
+    },
+    "WpiHolonomicTrajectory": {
+      "$ref": "./wpi.schema.json#/$defs/WpiHolonomicTrajectory"
+    },
+    "WpiDifferentialTrajectory": {
+      "$ref": "./wpi.schema.json#/$defs/WpiDifferentialTrajectory"
+    },
     "Output": { "$ref": "./trajectory.schema.json#/$defs/Output" },
-    "TrajectoryFile": { "$ref": "./trajectory.schema.json#/$defs/TrajectoryFile" },
-    "IncompleteTrajectoryProgressMessage": { "$ref": "./progress.schema.json#/$defs/IncompleteTrajectoryProgressMessage" },
-    "DiagnosticProgressMessage": { "$ref": "./progress.schema.json#/$defs/DiagnosticProgressMessage" },
-    "ErrorProgressMessage": { "$ref": "./progress.schema.json#/$defs/ErrorProgressMessage" },
-    "CompleteTrajectoryProgressMessage": { "$ref": "./progress.schema.json#/$defs/CompleteTrajectoryProgressMessage" },
-    "ProgressUpdateMessage": { "$ref": "./progress.schema.json#/$defs/ProgressUpdateMessage" }
+    "TrajectoryFile": {
+      "$ref": "./trajectory.schema.json#/$defs/TrajectoryFile"
+    },
+    "IncompleteTrajectoryProgressMessage": {
+      "$ref": "./progress.schema.json#/$defs/IncompleteTrajectoryProgressMessage"
+    },
+    "DiagnosticProgressMessage": {
+      "$ref": "./progress.schema.json#/$defs/DiagnosticProgressMessage"
+    },
+    "ErrorProgressMessage": {
+      "$ref": "./progress.schema.json#/$defs/ErrorProgressMessage"
+    },
+    "CompleteTrajectoryProgressMessage": {
+      "$ref": "./progress.schema.json#/$defs/CompleteTrajectoryProgressMessage"
+    },
+    "ProgressUpdateMessage": {
+      "$ref": "./progress.schema.json#/$defs/ProgressUpdateMessage"
+    }
   },
   "oneOf": [
     { "$ref": "#/$defs/ProjectFile" },

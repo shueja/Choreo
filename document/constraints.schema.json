@@ -8,7 +8,10 @@
       "description": "Constraint: maximum linear speed along the path.",
       "properties": {
         "type": { "type": "string", "const": "MaxVelocity" },
-        "max": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Maximum speed (m/s)" }
+        "max": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Maximum speed (m/s)"
+        }
       },
       "required": ["type", "max"],
       "additionalProperties": false
@@ -18,7 +21,10 @@
       "description": "Constraint: maximum rotational speed.",
       "properties": {
         "type": { "type": "string", "const": "MaxAngularVelocity" },
-        "max": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Maximum angular speed (rad/s)" }
+        "max": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Maximum angular speed (rad/s)"
+        }
       },
       "required": ["type", "max"],
       "additionalProperties": false
@@ -28,9 +34,18 @@
       "description": "Constraint: keep the robot within a circular field region.",
       "properties": {
         "type": { "type": "string", "const": "KeepInCircle" },
-        "x": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Circle center X (m)" },
-        "y": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Circle center Y (m)" },
-        "r": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Circle radius (m)" }
+        "x": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Circle center X (m)"
+        },
+        "y": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Circle center Y (m)"
+        },
+        "r": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Circle radius (m)"
+        }
       },
       "required": ["type", "x", "y", "r"],
       "additionalProperties": false
@@ -40,8 +55,14 @@
       "description": "Constraint: robot heading must stay within tolerance of a target angle.",
       "properties": {
         "type": { "type": "string", "const": "Heading" },
-        "heading": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Target heading (rad)" },
-        "tolerance": { "$ref": "./shared.schema.json#/$defs/Expr", "description": "Allowed deviation (rad)" }
+        "heading": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Target heading (rad)"
+        },
+        "tolerance": {
+          "$ref": "./shared.schema.json#/$defs/Expr",
+          "description": "Allowed deviation (rad)"
+        }
       },
       "required": ["type", "heading", "tolerance"],
       "additionalProperties": false

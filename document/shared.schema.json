@@ -72,7 +72,10 @@
       "type": "object",
       "description": "A 2D rotation parameterized by an Expr value (radians), matching WPILib Rotation2d.",
       "properties": {
-        "radians": { "$ref": "#/$defs/Expr", "description": "Rotation angle (rad)" }
+        "radians": {
+          "$ref": "#/$defs/Expr",
+          "description": "Rotation angle (rad)"
+        }
       },
       "required": ["radians"],
       "additionalProperties": false
@@ -81,8 +84,14 @@
       "type": "object",
       "description": "A 2D pose parameterized by Expr values, matching WPILib Pose2d.",
       "properties": {
-        "translation": { "$ref": "#/$defs/Translation2e", "description": "Position (m)" },
-        "rotation": { "$ref": "#/$defs/Rotation2e", "description": "Heading (rad)" }
+        "translation": {
+          "$ref": "#/$defs/Translation2e",
+          "description": "Position (m)"
+        },
+        "rotation": {
+          "$ref": "#/$defs/Rotation2e",
+          "description": "Heading (rad)"
+        }
       },
       "required": ["translation", "rotation"],
       "additionalProperties": false
@@ -91,9 +100,18 @@
       "type": "object",
       "description": "A 2D rectangle parameterized by Expr values, matching WPILib Rectangle2d.",
       "properties": {
-        "center": { "$ref": "#/$defs/Pose2e", "description": "Center pose of the rectangle" },
-        "xWidth": { "$ref": "#/$defs/Expr", "description": "Width along the local x axis (m)" },
-        "yWidth": { "$ref": "#/$defs/Expr", "description": "Width along the local y axis (m)" }
+        "center": {
+          "$ref": "#/$defs/Pose2e",
+          "description": "Center pose of the rectangle"
+        },
+        "xWidth": {
+          "$ref": "#/$defs/Expr",
+          "description": "Width along the local x axis (m)"
+        },
+        "yWidth": {
+          "$ref": "#/$defs/Expr",
+          "description": "Width along the local y axis (m)"
+        }
       },
       "required": ["center", "xWidth", "yWidth"],
       "additionalProperties": false
