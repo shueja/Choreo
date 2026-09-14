@@ -3,11 +3,11 @@
   "$id": "https://choreo.dev/schemas/constraints.schema.json",
   "title": "Choreo Trajectory Constraints Schema",
   "$defs": {
-    "MaxVelocity": {
+    "MaxLinearVelocity": {
       "type": "object",
       "description": "Constraint: maximum linear speed along the path.",
       "properties": {
-        "type": { "type": "string", "const": "MaxVelocity" },
+        "type": { "type": "string", "const": "MaxLinearVelocity" },
         "max": {
           "$ref": "./shared.schema.json#/$defs/Expr",
           "description": "Maximum speed (m/s)"
@@ -70,7 +70,7 @@
     "ConstraintVariant": {
       "description": "A typed constraint; discriminated by the 'type' string field.",
       "oneOf": [
-        { "$ref": "#/$defs/MaxVelocity" },
+        { "$ref": "#/$defs/MaxLinearVelocity" },
         { "$ref": "#/$defs/MaxAngularVelocity" },
         { "$ref": "#/$defs/KeepInCircle" },
         { "$ref": "#/$defs/HeadingConstraint" }

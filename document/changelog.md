@@ -146,14 +146,14 @@ Structure:
 Within `data`, constraint properties are now serialized adjacent to the `type` tag. Instead of:
 ```json
 {
-  "type": "MaxVelocity",
+  "type": "MaxLinearVelocity",
   "props": { "max": { "exp": "2 m/s", "val": 2 } }
 }
 ```
 it's
 ```json
 {
-  "type": "MaxVelocity",
+  "type": "MaxLinearVelocity",
   "max": { "exp": "2 m/s", "val": 2 }
 }
 ```
@@ -164,13 +164,13 @@ A full Constraint is therefore serialized as:
   "from": "first",
   "to": "last", // optional, though some constraints need it because they only apply to segments
   "data": {
-    "type": "MaxVelocity",
+    "type": "MaxLinearVelocity",
     "max": { "exp": "2 m/s", "val": 2 }
   },
   "enabled": true
 }
 ```
-The v4 constraint variants are `MaxVelocity`, `MaxAngularVelocity`, `KeepInCircle`,
+The v4 constraint variants are `MaxLinearVelocity`, `MaxAngularVelocity`, `KeepInCircle`,
 and `Heading`, with more to be added as part of v4 before it is finalized.
 
 ### Waypoints

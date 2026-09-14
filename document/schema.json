@@ -34,7 +34,7 @@
     "CodeGenConfig": { "$ref": "./project.schema.json#/$defs/CodeGenConfig" },
     "ProjectFile": { "$ref": "./project.schema.json#/$defs/ProjectFile" },
     "Waypoint": { "$ref": "./trajectory.schema.json#/$defs/Waypoint" },
-    "MaxVelocity": { "$ref": "./constraints.schema.json#/$defs/MaxVelocity" },
+    "MaxLinearVelocity": { "$ref": "./constraints.schema.json#/$defs/MaxLinearVelocity" },
     "MaxAngularVelocity": {
       "$ref": "./constraints.schema.json#/$defs/MaxAngularVelocity"
     },
