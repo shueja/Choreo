@@ -20,6 +20,8 @@ using detail::Translation2d;
 using detail::Rotation2d;
 using detail::Transform2d;
 using detail::Twist2d;
+using detail::Rectangle2d;
+using detail::Ellipse2d;
 
 struct CachedEngine {
   chaiscript::ChaiScript engine{{}, {},
@@ -40,10 +42,13 @@ void ValidateExpression(const chaiscript::AST_Node& node,
                         const detail::Variables& variables) {
   static const std::set<std::string_view> safeFunctions{
       "quantity", "sin", "cos", "tan", "asin", "acos", "atan", "Pose2d",
-      "Translation2d", "Rotation2d", "Transform2d", "Twist2d", "X", "Y",
+      "Translation2d", "Rotation2d", "Transform2d", "Twist2d", "Rectangle2d", "Ellipse2d",
+      "X", "Y",
       "Rotation", "Translation", "RotateBy", "RelativeTo", "TransformBy",
       "Distance", "Norm", "Radians", "Degrees", "Cos", "Sin", "Tan", "Inverse", "Log",
-      "dx", "dy", "dtheta", "Exp"};
+      "dx", "dy", "dtheta", "Exp", "Center", "XWidth", "YWidth", "XSemiAxis", "YSemiAxis",
+      "FocalPoints", "Intersects", "Contains", "Nearest", "RotateAround", "SquaredDistance",
+      "SquaredNorm", "Dot", "Cross", "Angle"};
   static const std::set<std::string_view> safeOperators{
       "+", "-", "*", "/", "^", "==", "!=", "<", "<=", ">", ">=", "!"};
   using Type = chaiscript::AST_Node_Type;
@@ -75,6 +80,8 @@ void ValidateExpression(const chaiscript::AST_Node& node,
     case Type::Constant:
     case Type::Arg_List:
     case Type::Dot_Access:
+    case Type::Array_Call:
+    case Type::Inline_Array:
     case Type::Logical_And:
     case Type::Logical_Or:
       break;
@@ -195,6 +202,10 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
       detail::StoreVariable(replacement->variables, name, chaiscript::boxed_cast<Transform2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<Twist2d>())) {
       detail::StoreVariable(replacement->variables, name, chaiscript::boxed_cast<Twist2d>(value));
+    } else if (type.bare_equal(chaiscript::user_type<Rectangle2d>())) {
+      detail::StoreVariable(replacement->variables, name, chaiscript::boxed_cast<Rectangle2d>(value));
+    } else if (type.bare_equal(chaiscript::user_type<Ellipse2d>())) {
+      detail::StoreVariable(replacement->variables, name, chaiscript::boxed_cast<Ellipse2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<double>())) {
       auto quantity = Quantity{chaiscript::boxed_cast<double>(value), {}};
       detail::RequireFinite(quantity);
@@ -206,7 +217,14 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
       detail::StoreVariable(replacement->variables, name,
                             Quantity{static_cast<double>(chaiscript::boxed_cast<std::int64_t>(value)), {}});
     } else {
-      throw std::invalid_argument("unsupported setup variable type: " + name);
+      Quantity quantity;
+      try {
+        quantity = engine.boxed_cast<Quantity>(value);
+      } catch (const chaiscript::exception::bad_boxed_cast&) {
+        throw std::invalid_argument("unsupported setup variable type: " + name);
+      }
+      detail::RequireFinite(quantity);
+      detail::StoreVariable(replacement->variables, name, quantity);
     }
   };
   for (const auto& [name, value] : engine.get_locals()) {
@@ -264,6 +282,20 @@ void EvaluationContext::SetVariable(std::string name, Twist2d value) {
   detail::StoreVariable(impl_->variables, std::move(name), std::move(value));
 }
 
+void EvaluationContext::SetVariable(std::string name, Rectangle2d value) {
+  if (!impl_) {
+    impl_ = std::make_shared<Impl>();
+  }
+  detail::StoreVariable(impl_->variables, std::move(name), std::move(value));
+}
+
+void EvaluationContext::SetVariable(std::string name, Ellipse2d value) {
+  if (!impl_) {
+    impl_ = std::make_shared<Impl>();
+  }
+  detail::StoreVariable(impl_->variables, std::move(name), std::move(value));
+}
+
 Quantity EvaluationContext::Evaluate(
     std::string_view source, std::optional<Dimension> expectedDimension) const {
   static const detail::Variables emptyVariables;
@@ -305,6 +337,16 @@ Transform2d EvaluationContext::EvaluateTransform2d(std::string_view source) cons
 Twist2d EvaluationContext::EvaluateTwist2d(std::string_view source) const {
   static const detail::Variables emptyVariables;
   return EvaluateResult<Twist2d>(*engineCache_, impl_ ? impl_->variables : emptyVariables, source);
+}
+
+Rectangle2d EvaluationContext::EvaluateRectangle2d(std::string_view source) const {
+  static const detail::Variables emptyVariables;
+  return EvaluateResult<Rectangle2d>(*engineCache_, impl_ ? impl_->variables : emptyVariables, source);
+}
+
+Ellipse2d EvaluationContext::EvaluateEllipse2d(std::string_view source) const {
+  static const detail::Variables emptyVariables;
+  return EvaluateResult<Ellipse2d>(*engineCache_, impl_ ? impl_->variables : emptyVariables, source);
 }
 
 }  // namespace wpilib::expression
