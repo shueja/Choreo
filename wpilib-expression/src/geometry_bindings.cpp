@@ -60,7 +60,7 @@ double GeometryScalar(double value) {
 }
 
 double GeometryScalar(const units::precise_measurement& value) {
-  if (MeasurementDimension(value) != Dimension{}) {
+  if (value.units().base_units() != units::precise::one.base_units()) {
     throw std::invalid_argument("geometry scalar must be dimensionless");
   }
   return GeometryScalar(SiValue(value));

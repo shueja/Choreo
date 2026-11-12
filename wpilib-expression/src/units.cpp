@@ -5,23 +5,6 @@
 
 namespace wpilib::expression::detail {
 
-Dimension MakeDimension(int length, int mass, int time, int current, int angle) {
-  return Dimension{{length, mass, time, current, angle}};
-}
-
-Dimension DimensionFor(const units::precise_unit& unit) {
-  const auto base = unit.base_units();
-  return MakeDimension(base.meter(), base.kg(), base.second(), base.ampere(), base.radian());
-}
-
-Dimension Combine(const Dimension& left, const Dimension& right, int sign) {
-  Dimension result;
-  for (std::size_t index = 0; index < result.exponents.size(); ++index) {
-    result.exponents[index] = left.exponents[index] + sign * right.exponents[index];
-  }
-  return result;
-}
-
 const std::map<std::string, Unit>& UnitRegistry() {
   static const std::map<std::string, Unit> units = [] {
     const std::map<std::string, std::string> definitions{
@@ -38,19 +21,11 @@ const std::map<std::string, Unit>& UnitRegistry() {
     std::map<std::string, Unit> result;
     for (const auto& [name, spelling] : definitions) {
       auto unit = units::unit_from_string(spelling);
-      result.emplace(name, Unit{unit, DimensionFor(unit)});
+      result.emplace(name, Unit{unit});
     }
     return result;
   }();
   return units;
-}
-
-Dimension ScaleDimension(const Dimension& dimension, int exponent) {
-  Dimension result;
-  for (std::size_t index = 0; index < result.exponents.size(); ++index) {
-    result.exponents[index] = dimension.exponents[index] * exponent;
-  }
-  return result;
 }
 
 Unit ParseUnit(std::string_view expression) {
@@ -58,7 +33,7 @@ Unit ParseUnit(std::string_view expression) {
   if (units::is_error(unit)) {
     throw std::invalid_argument("unknown or malformed unit: " + std::string(expression));
   }
-  return Unit{unit, DimensionFor(unit)};
+  return Unit{unit};
 }
 
 }  // namespace wpilib::expression::detail

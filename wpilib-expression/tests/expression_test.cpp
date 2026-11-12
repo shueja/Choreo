@@ -18,7 +18,6 @@ using wpilib::expression::EvaluationContext;
 using wpilib::expression::From;
 using wpilib::expression::In;
 using wpilib::expression::MakeMeasurement;
-using wpilib::expression::MeasurementDimension;
 using wpilib::expression::SiValue;
 using wpilib::expression::TryAs;
 using wpi::math::Pose2d;
@@ -27,8 +26,7 @@ namespace {
 
 bool EvaluatesTo(const EvaluationContext& context, std::string_view expression,
                  double expected, std::string_view unit, double tolerance = 1e-10) {
-  auto dimension = unit.empty() ? wpilib::expression::Dimension{}
-                                : MeasurementDimension(From(1.0, unit));
+  auto dimension = unit.empty() ? units::precise::one : From(1.0, unit).units();
   auto result = context.Evaluate(expression, dimension);
   auto value = unit.empty() ? SiValue(result) : In(result, unit);
   if (std::abs(value - expected) <= tolerance) {
@@ -209,7 +207,7 @@ int TestSetup() {
 
 int TestArithmeticAndVariables() {
   EvaluationContext context;
-  auto length = MeasurementDimension(From(1.0, "m"));
+  auto length = From(1.0, "m").units();
   auto mixedLength = context.Evaluate("2 * m + 3 * ft", length);
   if (std::abs(In(mixedLength, "m") - 2.9144) > 1e-10) {
     std::cerr << "mixed-unit addition returned the wrong value\n";
@@ -500,7 +498,7 @@ int TestMeasurementMath() {
 
 int TestGeometryConstructors() {
   EvaluationContext context;
-  auto length = MeasurementDimension(From(1.0, "m"));
+  auto length = From(1.0, "m").units();
   Pose2d pose;
   try {
     pose = context.EvaluatePose2d("Pose2d(3 m, 4 m, 90 deg)");
@@ -548,7 +546,7 @@ int TestGeometryConstructors() {
     return 1;
   }
   context.SetVariable("nonfiniteLength",
-                      MakeMeasurement(std::numeric_limits<double>::infinity(), length));
+                      MakeMeasurement(std::numeric_limits<double>::infinity(), units::precise::m));
   context.SetVariable("nonfinitePose",
                       Pose2d{wpi::units::meter_t{std::numeric_limits<double>::infinity()},
                              wpi::units::meter_t{0.0}, wpi::math::Rotation2d{}});
@@ -574,11 +572,11 @@ int TestGeometryConstructors() {
 
 int TestGeometryOperations() {
   EvaluationContext context;
-  auto length = MeasurementDimension(From(1.0, "m"));
+  auto length = From(1.0, "m").units();
   auto pose = context.EvaluatePose2d("Pose2d(3 m, 4 m, 90 deg)");
   context.SetVariable("pose", pose);
   context.SetVariable("nonfiniteLength",
-                      MakeMeasurement(std::numeric_limits<double>::infinity(), length));
+                      MakeMeasurement(std::numeric_limits<double>::infinity(), units::precise::m));
   auto origin = context.EvaluatePose2d("Pose2d(0 m, 0 m, 0 deg)");
   context.SetVariable("origin", origin);
   auto rotation = context.EvaluateRotation2d("Rotation2d(90 deg)");
@@ -627,8 +625,8 @@ int TestGeometryOperations() {
     std::cerr << "undefined translation angle was accepted\n";
     return 1;
   }
-  context.SetVariable("factor", MakeMeasurement(2.0, {}));
-  context.SetVariable("nonfiniteFactor", MakeMeasurement(std::numeric_limits<double>::infinity(), {}));
+  context.SetVariable("factor", MakeMeasurement(2.0, units::precise::one));
+  context.SetVariable("nonfiniteFactor", MakeMeasurement(std::numeric_limits<double>::infinity(), units::precise::one));
   if (!EvaluatesTo(context, "(translation + Translation2d(1 m, 2 m)).X()", 4.0, "m") ||
       !EvaluatesTo(context, "(translation - Translation2d(1 m, 2 m)).Y()", 2.0, "m") ||
       !EvaluatesTo(context, "(-translation).X()", -(3.0), "m") ||

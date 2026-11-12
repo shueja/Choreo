@@ -9,9 +9,6 @@
 namespace wpilib::expression::detail {
 namespace {
 
-Dimension LengthDimension() { return MakeDimension(1, 0, 0, 0, 0); }
-Dimension AngleDimension() { return MakeDimension(0, 0, 0, 0, 1); }
-
 units::precise_measurement Power(const units::precise_measurement& value, double exponent) {
   if (!std::isfinite(exponent) || std::trunc(exponent) != exponent ||
       std::abs(exponent) > 16.0) {
@@ -22,14 +19,14 @@ units::precise_measurement Power(const units::precise_measurement& value, double
 }
 
 units::precise_measurement Add(const units::precise_measurement& left, const units::precise_measurement& right) {
-  if (MeasurementDimension(left) != MeasurementDimension(right)) {
+  if (left.units().base_units() != right.units().base_units()) {
     throw std::invalid_argument("addition requires matching dimensions");
   }
   return left + right;
 }
 
 units::precise_measurement Subtract(const units::precise_measurement& left, const units::precise_measurement& right) {
-  if (MeasurementDimension(left) != MeasurementDimension(right)) {
+  if (left.units().base_units() != right.units().base_units()) {
     throw std::invalid_argument("subtraction requires matching dimensions");
   }
   return left - right;
@@ -47,7 +44,7 @@ units::precise_measurement Divide(const units::precise_measurement& left, const 
 }
 
 void RequireComparable(const units::precise_measurement& left, const units::precise_measurement& right) {
-  if (MeasurementDimension(left) != MeasurementDimension(right)) {
+  if (left.units().base_units() != right.units().base_units()) {
     throw std::invalid_argument("comparison requires matching dimensions");
   }
 }
@@ -78,20 +75,21 @@ bool GreaterEqual(const units::precise_measurement& left, const units::precise_m
 }
 
 units::precise_measurement TrigInput(const units::precise_measurement& value, double (*function)(double)) {
-  auto dimension = MeasurementDimension(value);
-  if (dimension != AngleDimension() && dimension != Dimension{}) {
+  auto dimension = value.units().base_units();
+  if (dimension != units::precise::rad.base_units() &&
+      dimension != units::precise::one.base_units()) {
     throw std::invalid_argument(
         "trigonometric functions require an angle or dimensionless value");
   }
-  return MakeMeasurement(function(SiValue(value)), Dimension{});
+  return MakeMeasurement(function(SiValue(value)), units::precise::one);
 }
 
 units::precise_measurement InverseTrigInput(const units::precise_measurement& value, double (*function)(double)) {
-  if (MeasurementDimension(value) != Dimension{}) {
+  if (value.units().base_units() != units::precise::one.base_units()) {
     throw std::invalid_argument(
         "inverse trigonometric functions require a dimensionless value");
   }
-  return MakeMeasurement(function(SiValue(value)), AngleDimension());
+  return MakeMeasurement(function(SiValue(value)), units::precise::rad);
 }
 
 }  // namespace

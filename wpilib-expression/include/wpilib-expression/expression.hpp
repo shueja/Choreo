@@ -35,7 +35,7 @@ class EvaluationContext {
   void SetVariable(std::string name, wpi::math::Ellipse2d value);
   units::precise_measurement Evaluate(
       std::string_view source,
-      std::optional<Dimension> expectedDimension = std::nullopt) const;
+      std::optional<units::precise_unit> expectedDimension = std::nullopt) const;
   bool EvaluateBoolean(std::string_view source) const;
   wpi::math::Pose2d EvaluatePose2d(std::string_view source) const;
   wpi::math::Translation2d EvaluateTranslation2d(std::string_view source) const;

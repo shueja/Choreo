@@ -484,11 +484,12 @@ void EvaluationContext::SetVariable(std::string name, Ellipse2d value) {
 }
 
 units::precise_measurement EvaluationContext::Evaluate(
-    std::string_view source, std::optional<Dimension> expectedDimension) const {
+    std::string_view source, std::optional<units::precise_unit> expectedDimension) const {
   static const detail::Variables emptyVariables;
   auto result = EvaluateResult<units::precise_measurement>(*engineCache_,
                                          impl_ ? impl_->variables : emptyVariables, source);
-  if (expectedDimension && MeasurementDimension(result) != *expectedDimension) {
+  if (expectedDimension &&
+      result.units().base_units() != expectedDimension->base_units()) {
     throw std::invalid_argument("expression result has unexpected dimension");
   }
   return result;

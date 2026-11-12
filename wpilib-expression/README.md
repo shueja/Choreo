@@ -32,13 +32,12 @@ The exported target is `wpilib::expression`. A consumer uses `find_package(wpili
 #include <wpi/units/length.hpp>
 
 wpilib::expression::EvaluationContext context;
-auto length = wpilib::expression::MeasurementDimension(
-    wpilib::expression::From(1.0, "m"));
+auto length = wpilib::expression::From(1.0, "m").units();
 auto distance = context.Evaluate("2 m + 3 ft", length);
 double meters = wpilib::expression::In(distance, "m");
 ```
 
-Contexts register scalar and native WPILib geometry values with `SetVariable`. `Evaluate` returns an LLNL `units::precise_measurement` and can check an expected `Dimension`; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
+Contexts register scalar and native WPILib geometry values with `SetVariable`. `Evaluate` returns an LLNL `units::precise_measurement` and can check an expected LLNL base unit; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
 
 `SetSetupScript` atomically replaces context variables using initialized top-level `var`, `auto`, `const`, or `global` declarations. Initializers may use read-only expressions and previously declared variables. Values must be quantities, numbers, or supported geometry objects; numbers become dimensionless quantities. A failed setup leaves the previous variables unchanged. Other statements, user-defined functions, external scripts, module loading, and I/O are not permitted. Evaluation is not resource-limited.
 

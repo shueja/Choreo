@@ -11,7 +11,6 @@
 using wpilib::expression::EvaluationContext;
 using wpilib::expression::From;
 using wpilib::expression::In;
-using wpilib::expression::MeasurementDimension;
 using wpilib::expression::SiValue;
 
 namespace {
@@ -19,7 +18,7 @@ namespace {
 int RunSmokeTest() {
   EvaluationContext context;
   context.SetSetupScript("var offset = 3 ft;");
-  auto length = MeasurementDimension(From(1.0, "m"));
+  auto length = From(1.0, "m").units();
   auto result = context.Evaluate("2 m + offset", length);
   if (std::abs(In(result, "m") - 2.9144) > 1e-10) {
     std::cerr << "expression library smoke test failed\n";
@@ -78,15 +77,7 @@ int RunRepl(const char* setupPath) {
     }
     try {
       auto result = context.Evaluate(source);
-      auto dimension = MeasurementDimension(result);
-      std::cout << SiValue(result) << " SI [";
-      for (std::size_t index = 0; index < dimension.exponents.size(); ++index) {
-        if (index != 0) {
-          std::cout << ", ";
-        }
-        std::cout << dimension.exponents[index];
-      }
-      std::cout << "]\n";
+      std::cout << SiValue(result) << " " << units::to_string(result.units()) << "\n";
     } catch (const std::exception& error) {
       std::cerr << error.what() << '\n';
     }
