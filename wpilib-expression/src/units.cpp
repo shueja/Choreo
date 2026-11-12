@@ -1,8 +1,6 @@
 #include "units.hpp"
 
 #include <cctype>
-#include <stdexcept>
-
 namespace wpilib::expression::detail {
 
 const std::map<std::string, units::precise_unit>& UnitRegistry() {
@@ -28,10 +26,10 @@ const std::map<std::string, units::precise_unit>& UnitRegistry() {
   return units;
 }
 
-units::precise_unit ParseUnit(std::string_view expression) {
+std::expected<units::precise_unit, Error> ParseUnit(std::string_view expression) {
   auto unit = units::unit_from_string(std::string(expression));
   if (units::is_error(unit)) {
-    throw std::invalid_argument("unknown or malformed unit: " + std::string(expression));
+    return std::unexpected(InvalidUnitError{std::string(expression)});
   }
   return unit;
 }

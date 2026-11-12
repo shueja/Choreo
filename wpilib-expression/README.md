@@ -34,7 +34,10 @@ The exported target is `wpilib::expression`. A consumer uses `find_package(wpili
 wpilib::expression::EvaluationContext context;
 auto length = wpilib::expression::From(1.0, units::precise::m).units();
 auto distance = context.Evaluate("2 m + 3 ft", length);
-double meters = wpilib::expression::In(distance, units::precise::m);
+auto meters = wpilib::expression::In(distance, units::precise::m);
+if (meters) {
+  double valueInMeters = *meters;
+}
 ```
 
 Contexts register scalar and native WPILib geometry values with `SetVariable`. `Evaluate` returns an LLNL `units::precise_measurement` and can check an expected LLNL base unit; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
@@ -73,6 +76,8 @@ bool converted = wpilib::expression::TryAs(context.Evaluate("90 deg"), angle);
 ```
 
 The conversion checks the full WPILib base-dimension signature. Non-linear WPI scales, unsupported runtime dimensions, and dimension mismatches are not converted.
+
+`In` returns `std::expected<double, Error>`. The error variant distinguishes incompatible dimensions from malformed or unknown unit expressions; use `ErrorMessage` to format an error.
 
 ## Expression Support
 

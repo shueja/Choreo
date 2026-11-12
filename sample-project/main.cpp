@@ -4,6 +4,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <print>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -19,15 +20,16 @@ int RunSmokeTest() {
   context.SetSetupScript("var offset = 3 ft;");
   auto length = From(1.0, units::precise::m).units();
   auto result = context.Evaluate("2 m + offset", length);
-  if (std::abs(In(result, units::precise::m) - 2.9144) > 1e-10) {
-    std::cerr << "expression library smoke test failed\n";
+  if (auto meters = In(result, units::precise::m);
+      !meters || std::abs(*meters - 2.9144) > 1e-10) {
+    std::println(stderr, "expression library smoke test failed");
     return 1;
   }
 
   auto pose = context.EvaluatePose2d("Pose2d(3 m, 4 m, 90 deg)");
   if (std::abs(pose.X().value() - 3.0) > 1e-10 ||
       std::abs(pose.Y().value() - 4.0) > 1e-10) {
-    std::cerr << "WPILib geometry smoke test failed\n";
+    std::println(stderr, "WPILib geometry smoke test failed");
     return 1;
   }
   return 0;
@@ -35,24 +37,24 @@ int RunSmokeTest() {
 
 bool LoadSetup(EvaluationContext& context, const char* setupPath) {
   if (setupPath == nullptr) {
-    std::cerr << "No setup file specified; start with --setup <file>.\n";
+    std::println(stderr, "No setup file specified; start with --setup <file>.");
     return false;
   }
   std::ifstream setupFile(setupPath, std::ios::binary);
   if (!setupFile) {
-    std::cerr << "Could not open setup file: " << setupPath << '\n';
+    std::println(stderr, "Could not open setup file: {}", setupPath);
     return false;
   }
   std::ostringstream setup;
   setup << setupFile.rdbuf();
   if (setupFile.bad() || setup.bad()) {
-    std::cerr << "Could not read setup file: " << setupPath << '\n';
+    std::println(stderr, "Could not read setup file: {}", setupPath);
     return false;
   }
   try {
     context.SetSetupScript(setup.str());
   } catch (const std::exception& error) {
-    std::cerr << "Invalid setup file " << setupPath << ": " << error.what() << '\n';
+    std::println(stderr, "Invalid setup file {}: {}", setupPath, error.what());
     return false;
   }
   return true;
@@ -64,22 +66,22 @@ int RunRepl(const char* setupPath) {
     return 1;
   }
   std::string source;
-  while (std::cout << "> " && std::getline(std::cin, source)) {
+  while (std::print("> "), std::getline(std::cin, source)) {
     if (source == ":quit") {
       break;
     }
     if (source == ":reload") {
       if (LoadSetup(context, setupPath)) {
-        std::cout << "Setup reloaded.\n";
+        std::println("Setup reloaded.");
       }
       continue;
     }
     try {
       auto result = context.Evaluate(source);
-      std::cout << result.value() * result.units().multiplier() << " "
-                << units::to_string(result.units()) << "\n";
+      std::println("{} {}", result.value() * result.units().multiplier(),
+                   units::to_string(result.units()));
     } catch (const std::exception& error) {
-      std::cerr << error.what() << '\n';
+      std::println(stderr, "{}", error.what());
     }
   }
   return 0;
@@ -97,6 +99,6 @@ int main(int argc, char** argv) {
   if (argc == 3 && std::string_view(argv[1]) == "--setup") {
     return RunRepl(argv[2]);
   }
-  std::cerr << "Usage: expression_sample [--setup <file> | --smoke]\n";
+  std::println(stderr, "Usage: expression_sample [--setup <file> | --smoke]");
   return 1;
 }
