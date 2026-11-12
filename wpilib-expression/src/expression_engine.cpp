@@ -68,7 +68,7 @@ void ConfigureEngine(chaiscript::ChaiScript& engine, const Variables& variables)
 
 void ConfigureGlobals(chaiscript::ChaiScript& engine, const Variables& variables) {
   for (const auto& [name, unit] : UnitRegistry()) {
-    engine.set_global(chaiscript::var(units::precise_measurement{1.0, unit.unit}),
+    engine.set_global(chaiscript::var(units::precise_measurement{1.0, unit}),
                      name);
   }
   for (const auto& [name, value] : variables) {

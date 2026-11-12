@@ -8,11 +8,7 @@
 
 namespace wpilib::expression::detail {
 
-struct Unit {
-  units::precise_unit unit;
-};
-
-const std::map<std::string, Unit>& UnitRegistry();
-Unit ParseUnit(std::string_view expression);
+const std::map<std::string, units::precise_unit>& UnitRegistry();
+units::precise_unit ParseUnit(std::string_view expression);
 
 }  // namespace wpilib::expression::detail

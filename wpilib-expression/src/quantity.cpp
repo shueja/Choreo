@@ -8,15 +8,15 @@
 namespace wpilib::expression {
 units::precise_measurement From(double value, std::string_view unit) {
   auto parsed = detail::ParseUnit(unit);
-  return units::precise_measurement{value, parsed.unit};
+  return units::precise_measurement{value, parsed};
 }
 
 double In(const units::precise_measurement& measurement, std::string_view unit) {
   auto parsed = detail::ParseUnit(unit);
-  if (measurement.units().base_units() != parsed.unit.base_units()) {
+  if (measurement.units().base_units() != parsed.base_units()) {
     throw std::invalid_argument("requested unit has incompatible dimension");
   }
-  return measurement.value_as(parsed.unit);
+  return measurement.value_as(parsed);
 }
 
 double SiValue(const units::precise_measurement& measurement) {
