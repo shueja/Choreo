@@ -1,6 +1,8 @@
 #pragma once
 
 #include <optional>
+#include <expected>
+#include <string>
 #include <type_traits>
 
 #include <wpi/units/base.hpp>
@@ -36,7 +38,8 @@ constexpr bool MatchesDimension(const units::precise_unit& dimension) {
 }  // namespace detail
 
 units::precise_measurement From(double value, const units::precise_unit& unit);
-double In(const units::precise_measurement& measurement, const units::precise_unit& unit);
+std::expected<double, std::string> In(const units::precise_measurement& measurement,
+                                      const units::precise_unit& unit);
 template <typename UnitValue>
 std::optional<UnitValue> TryAs(const units::precise_measurement& measurement) {
   static_assert(wpi::units::traits::is_unit_t<UnitValue>::value,
