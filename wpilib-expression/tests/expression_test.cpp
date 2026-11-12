@@ -5,7 +5,6 @@
 #include <exception>
 #include <functional>
 #include <print>
-#include <sstream>
 #include <limits>
 #include <numbers>
 #include <stdexcept>
@@ -17,24 +16,12 @@
 #include <wpi/units/length.hpp>
 
 using wpilib::expression::EvaluationContext;
+using wpilib::expression::Error;
+using wpilib::expression::ErrorMessage;
 using wpilib::expression::From;
 using wpilib::expression::In;
 using wpilib::expression::TryAs;
 using wpi::math::Pose2d;
-
-class PrintError {
- public:
-  template <typename Value>
-  PrintError& operator<<(const Value& value) {
-    stream_ << value;
-    return *this;
-  }
-
-  ~PrintError() { std::println(stderr, "{}", stream_.str()); }
-
- private:
-  std::ostringstream stream_;
-};
 
 namespace {
 
@@ -53,8 +40,8 @@ bool EvaluatesTo(const EvaluationContext& context, std::string_view expression,
   if (std::abs(value - expected) <= tolerance) {
     return true;
   }
-  PrintError() << "Expression '" << expression << "' returned " << value << " " << unit
-            << "; expected " << expected << " within " << tolerance << '\n';
+  std::println(stderr, "Expression '{}' returned {} {}; expected {} within {}", expression,
+                value, unit, expected, tolerance);
   return false;
 }
 
@@ -78,7 +65,7 @@ int TestNamespaces() {
       !EvaluatesTo(setup, "field.deep.X", 4.0, "ft") ||
       std::abs(setup.EvaluatePose2d("field.origin").X().value() - 1.0) > 1e-10 ||
       !setup.EvaluateBoolean("field.deep.region.Contains(Translation2d(1 m, 0 m))")) {
-    PrintError() << "namespace values returned the wrong result\n";
+    std::println(stderr, "namespace values returned the wrong result");
     return 1;
   }
     if (!EvaluatesTo(setup, "field.origin.Translation().Norm()", 1.0, "m") ||
@@ -86,7 +73,7 @@ int TestNamespaces() {
       !EvaluatesTo(setup, "field.origin.Distance(Pose2d(4 m, 4 m, 90 deg))", 5.0, "m") ||
       !EvaluatesTo(setup, "field.origin.Distance(target)", 5.0, "m") ||
       !EvaluatesTo(setup, "field.origin.Distance(Pose2d(1 m, 0 m, 180 deg))", 0.0, "m")) {
-    PrintError() << "pose distance or norm returned the wrong value\n";
+    std::println(stderr, "pose distance or norm returned the wrong value");
     return 1;
   }
   for (const char* expression : {"field.origin = Pose2d()", "field.deep.more.length = 5 m",
@@ -98,7 +85,7 @@ int TestNamespaces() {
       rejected = true;
     }
     if (!rejected || !EvaluatesTo(setup, "field.deep.more.length", 2.0, "ft")) {
-      PrintError() << "namespace mutation or missing member was accepted\n";
+      std::println(stderr, "namespace mutation or missing member was accepted");
       return 1;
     }
   }
@@ -116,7 +103,7 @@ int TestNamespaces() {
       rejected = true;
     }
     if (!rejected || !EvaluatesTo(setup, "field.origin.X()", 1.0, "m")) {
-      PrintError() << "invalid namespace setup was accepted or changed the context\n";
+      std::println(stderr, "invalid namespace setup was accepted or changed the context");
       return 1;
     }
   }
@@ -124,7 +111,7 @@ int TestNamespaces() {
   copy.SetSetupScript("namespace field::deep::third::fourth::fifth::sixth { var replacement = 5 m; }");
   if (!EvaluatesTo(copy, "field.deep.third.fourth.fifth.sixth.replacement", 5.0, "m") ||
       !EvaluatesTo(setup, "field.deep.more.length", 2.0, "ft")) {
-    PrintError() << "namespace snapshots leaked between copied contexts\n";
+    std::println(stderr, "namespace snapshots leaked between copied contexts");
     return 1;
   }
   return 0;
@@ -148,7 +135,7 @@ int TestSetup() {
       !EvaluatesTo(setup, "gain", 2.0, "") ||
       !EvaluatesTo(setup, "shared", 4.0, "m") ||
       !EvaluatesTo(setup, "combined", 3.9144, "m")) {
-    PrintError() << "setup script returned incorrect variables\n";
+    std::println(stderr, "setup script returned incorrect variables");
     return 1;
   }
   bool setupFailureRejected = false;
@@ -158,7 +145,7 @@ int TestSetup() {
     setupFailureRejected = true;
   }
   if (!setupFailureRejected || !EvaluatesTo(setup, "base", 2.0, "m")) {
-    PrintError() << "failed setup changed the context\n";
+    std::println(stderr, "failed setup changed the context");
     return 1;
   }
   bool unsupportedSetupRejected = false;
@@ -168,7 +155,7 @@ int TestSetup() {
     unsupportedSetupRejected = true;
   }
   if (!unsupportedSetupRejected || !EvaluatesTo(setup, "base", 2.0, "m")) {
-    PrintError() << "unsupported setup value was accepted or changed the context\n";
+    std::println(stderr, "unsupported setup value was accepted or changed the context");
     return 1;
   }
   for (const char* script : {"var count = 0; while (count < 1) { count += 1; }",
@@ -186,7 +173,7 @@ int TestSetup() {
       rejected = true;
     }
     if (!rejected || !EvaluatesTo(setup, "base", 2.0, "m")) {
-      PrintError() << "unsafe setup was accepted or changed the context\n";
+      std::println(stderr, "unsafe setup was accepted or changed the context");
       return 1;
     }
   }
@@ -197,7 +184,7 @@ int TestSetup() {
     reservedSetupRejected = true;
   }
   if (!reservedSetupRejected || !EvaluatesTo(setup, "base", 2.0, "m")) {
-    PrintError() << "reserved setup name was accepted or changed the context\n";
+    std::println(stderr, "reserved setup name was accepted or changed the context");
     return 1;
   }
   for (const char* name : {"Cos", "Degrees"}) {
@@ -208,7 +195,7 @@ int TestSetup() {
       methodNameRejected = true;
     }
     if (!methodNameRejected) {
-      PrintError() << "geometry method name was accepted as a variable\n";
+      std::println(stderr, "geometry method name was accepted as a variable");
       return 1;
     }
   }
@@ -220,7 +207,7 @@ int TestSetup() {
     oldSetupRejected = true;
   }
   if (!oldSetupRejected || !EvaluatesTo(setup, "replacement", 5.0, "m")) {
-    PrintError() << "setup did not replace previous variables\n";
+    std::println(stderr, "setup did not replace previous variables");
     return 1;
   }
   return 0;
@@ -231,7 +218,7 @@ int TestArithmeticAndVariables() {
   auto length = From(1.0, units::precise::m).units();
   auto mixedLength = context.Evaluate("2 * m + 3 * ft", length);
   if (std::abs(In(mixedLength, units::precise::m).value() - 2.9144) > 1e-10) {
-    PrintError() << "mixed-unit addition returned the wrong value\n";
+    std::println(stderr, "mixed-unit addition returned the wrong value");
     return 1;
   }
 
@@ -242,7 +229,7 @@ int TestArithmeticAndVariables() {
     incompatibleAdditionRejected = true;
   }
   if (!incompatibleAdditionRejected) {
-    PrintError() << "incompatible addition was accepted\n";
+    std::println(stderr, "incompatible addition was accepted");
     return 1;
   }
 
@@ -253,19 +240,19 @@ int TestArithmeticAndVariables() {
     expectedDimensionRejected = true;
   }
   if (!expectedDimensionRejected) {
-    PrintError() << "unexpected result dimension was accepted\n";
+    std::println(stderr, "unexpected result dimension was accepted");
     return 1;
   }
 
   context.SetVariable("offset", From(3.0, (units::precise::m * 0.3048)));
   auto withVariable = context.Evaluate("2 * m + offset", length);
   if (std::abs(In(withVariable, units::precise::m).value() - 2.9144) > 1e-10) {
-    PrintError() << "registered variable returned the wrong value\n";
+    std::println(stderr, "registered variable returned the wrong value");
     return 1;
   }
   context.SetVariable("offset", From(1.0, units::precise::m));
   if (!EvaluatesTo(context, "offset", 1.0, "m")) {
-    PrintError() << "updated variable returned the wrong value\n";
+    std::println(stderr, "updated variable returned the wrong value");
     return 1;
   }
   return 0;
@@ -286,13 +273,13 @@ int TestReadOnlyExpressions() {
       rejected = true;
     }
     if (!rejected || !EvaluatesTo(context, "offset", 1.0, "m")) {
-      PrintError() << "state-changing evaluation was accepted or changed the context\n";
+      std::println(stderr, "state-changing evaluation was accepted or changed the context");
       return 1;
     }
   }
   if (!context.EvaluateBoolean("1 m == 100 cm") ||
       !context.EvaluateBoolean("1 m < 2 m && 2 m > 1 m")) {
-    PrintError() << "read-only comparison was rejected\n";
+    std::println(stderr, "read-only comparison was rejected");
     return 1;
   }
   return 0;
@@ -304,35 +291,35 @@ int TestErrorMessages() {
                                  "Translation2d(1 m, 2 m).Distance(Pose2d())"}) {
     try {
       context.Evaluate(expression);
-      PrintError() << "invalid expression was accepted\n";
+      std::println(stderr, "invalid expression was accepted");
       return 1;
     } catch (const std::invalid_argument& error) {
       std::string_view message = error.what();
       if (!message.starts_with("Syntax error:") || message.find("function dispatch") != message.npos) {
-        PrintError() << "invalid expression exposed an internal error: " << message << '\n';
+        std::println(stderr, "invalid expression exposed an internal error: {}", message);
         return 1;
       }
     }
   }
   try {
     context.Evaluate("Translation2d(1 m, 2 m).Distance(Pose2d())");
-    PrintError() << "invalid method arguments were accepted\n";
+    std::println(stderr, "invalid method arguments were accepted");
     return 1;
   } catch (const std::invalid_argument& error) {
     if (std::string_view(error.what()).find("invalid arguments for 'Distance'") ==
         std::string_view::npos) {
-      PrintError() << "method error did not identify the invalid call: " << error.what() << '\n';
+      std::println(stderr, "method error did not identify the invalid call: {}", error.what());
       return 1;
     }
   }
   for (const char* script : {"var value = (", "var value = Translation2d().Distance(Pose2d());"}) {
     try {
       context.SetSetupScript(script);
-      PrintError() << "invalid setup script was accepted\n";
+      std::println(stderr, "invalid setup script was accepted");
       return 1;
     } catch (const std::invalid_argument& error) {
       if (!std::string_view(error.what()).starts_with("Syntax error:")) {
-        PrintError() << "invalid setup did not report a syntax error: " << error.what() << '\n';
+        std::println(stderr, "invalid setup did not report a syntax error: {}", error.what());
         return 1;
       }
     }
@@ -362,13 +349,13 @@ int TestContextCopies() {
   firstThread.join();
   secondThread.join();
   if (concurrentFailed) {
-    PrintError() << "concurrent copied contexts returned the wrong value\n";
+    std::println(stderr, "concurrent copied contexts returned the wrong value");
     return 1;
   }
   EvaluationContext moved = std::move(first);
   if (!EvaluatesTo(moved, "distance", 1.0, "m") ||
       !EvaluatesTo(first, "1 m", 1.0, "m")) {
-    PrintError() << "moved context or moved-from context returned the wrong value\n";
+    std::println(stderr, "moved context or moved-from context returned the wrong value");
     return 1;
   }
   return 0;
@@ -377,71 +364,71 @@ int TestContextCopies() {
 int TestUnitExpressions() {
   EvaluationContext context;
   if (!EvaluatesTo(context, "2 m", 2.0, "m")) {
-    PrintError() << "bare length suffix returned the wrong value\n";
+    std::println(stderr, "bare length suffix returned the wrong value");
     return 1;
   }
   if (!EvaluatesTo(context, "90 deg", std::acos(-1.0) / 2.0, "rad")) {
-    PrintError() << "bare angle suffix returned the wrong value\n";
+    std::println(stderr, "bare angle suffix returned the wrong value");
     return 1;
   }
   if (!EvaluatesTo(context, "6000 RPM", 200.0 * std::acos(-1.0), "rad/s", 1e-9)) {
-    PrintError() << "rotational speed conversion returned the wrong value\n";
+    std::println(stderr, "rotational speed conversion returned the wrong value");
     return 1;
   }
   if (!EvaluatesTo(context, "1 in", 0.0254, "m") ||
       !EvaluatesTo(context, "100 cm", 1.0, "m")) {
-    PrintError() << "alternate length units returned the wrong value\n";
+    std::println(stderr, "alternate length units returned the wrong value");
     return 1;
   }
   if (!EvaluatesTo(context, "1 min", 60.0, "s") ||
       !EvaluatesTo(context, "1 ms", 1e-3, "s")) {
-    PrintError() << "alternate time units returned the wrong value\n";
+    std::println(stderr, "alternate time units returned the wrong value");
     return 1;
   }
   if (!EvaluatesTo(context, "1 lb", 0.45359237, "kg") ||
       !EvaluatesTo(context, "500 mA", 0.5, "A")) {
-    PrintError() << "alternate mass or current units returned the wrong value\n";
+    std::println(stderr, "alternate mass or current units returned the wrong value");
     return 1;
   }
   if (!EvaluatesTo(context, "1 turn", 2.0 * std::acos(-1.0), "rad") ||
       !EvaluatesTo(context, "2 kV", 2000.0, "V")) {
-    PrintError() << "alternate angle or voltage units returned the wrong value\n";
+    std::println(stderr, "alternate angle or voltage units returned the wrong value");
     return 1;
   }
   if (!EvaluatesTo(context, "1 kW", 1000.0, "W") ||
       !EvaluatesTo(context, "1 kPa", 1000.0, "Pa")) {
-    PrintError() << "derived power or pressure units returned the wrong value\n";
+    std::println(stderr, "derived power or pressure units returned the wrong value");
     return 1;
   }
   auto feet = TryAs<wpi::units::foot_t>(From(1.0, units::precise::m));
   if (!feet || std::abs(feet->value() - (1.0 / 0.3048)) > 1e-10) {
-    PrintError() << "WPILib foot conversion returned the wrong value\n";
+    std::println(stderr, "WPILib foot conversion returned the wrong value");
     return 1;
   }
   auto radians = TryAs<wpi::units::radian_t>(From(90.0, (units::precise::rad * (std::numbers::pi / 180.0))));
   if (!radians || std::abs(radians->value() - std::acos(-1.0) / 2.0) > 1e-10) {
-    PrintError() << "WPILib radian conversion returned the wrong value\n";
+    std::println(stderr, "WPILib radian conversion returned the wrong value");
     return 1;
   }
   if (TryAs<wpi::units::meter_t>(From(1.0, units::precise::s))) {
-    PrintError() << "incompatible WPILib unit conversion succeeded\n";
+    std::println(stderr, "incompatible WPILib unit conversion succeeded");
     return 1;
   }
   wpi::units::meter_t output;
   if (!TryAs(From(2.0, units::precise::m), output) || std::abs(output.value() - 2.0) > 1e-10) {
-    PrintError() << "WPILib output-parameter conversion returned the wrong value\n";
+    std::println(stderr, "WPILib output-parameter conversion returned the wrong value");
     return 1;
   }
   if (!EvaluatesTo(context, "2 m/s^2", 2.0, "m/s^2")) {
-    PrintError() << "compound acceleration unit returned the wrong value\n";
+    std::println(stderr, "compound acceleration unit returned the wrong value");
     return 1;
   }
   if (!EvaluatesTo(context, "0.018 N*m/A", 0.018, "N*m/A")) {
-    PrintError() << "compound motor constant returned the wrong value\n";
+    std::println(stderr, "compound motor constant returned the wrong value");
     return 1;
   }
   if (!EvaluatesTo(context, "(2e0 m + 3 ft)", 2.9144, "m")) {
-    PrintError() << "scientific notation or grouping returned the wrong value\n";
+    std::println(stderr, "scientific notation or grouping returned the wrong value");
     return 1;
   }
   return 0;
@@ -456,7 +443,7 @@ int TestIdentifiers() {
     unknownSuffixRejected = true;
   }
   if (!unknownSuffixRejected) {
-    PrintError() << "unknown unit suffix was accepted\n";
+    std::println(stderr, "unknown unit suffix was accepted");
     return 1;
   }
 
@@ -467,7 +454,7 @@ int TestIdentifiers() {
     unitNameCollisionRejected = true;
   }
   if (!unitNameCollisionRejected) {
-    PrintError() << "unit name was accepted as a variable\n";
+    std::println(stderr, "unit name was accepted as a variable");
     return 1;
   }
   bool constructorNameCollisionRejected = false;
@@ -477,7 +464,7 @@ int TestIdentifiers() {
     constructorNameCollisionRejected = true;
   }
   if (!constructorNameCollisionRejected) {
-    PrintError() << "geometry constructor name was accepted as a variable\n";
+    std::println(stderr, "geometry constructor name was accepted as a variable");
     return 1;
   }
   return 0;
@@ -487,21 +474,21 @@ int TestMeasurementMath() {
   EvaluationContext context;
   auto area = context.Evaluate("(2 m)^2");
   if (std::abs(In(area, units::precise::m.pow(2)).value() - 4.0) > 1e-10) {
-    PrintError() << "integer quantity power returned the wrong value\n";
+    std::println(stderr, "integer quantity power returned the wrong value");
     return 1;
   }
   if (!EvaluatesTo(context, "((2 m)^2) * 3 m", 12.0, "m^3") ||
       !EvaluatesTo(context, "3 m * ((2 m)^2)", 12.0, "m^3") ||
       !EvaluatesTo(context, "10000000000 * m", 1e10, "m", 1e-3)) {
-    PrintError() << "compound quantity arithmetic returned the wrong value\n";
+    std::println(stderr, "compound quantity arithmetic returned the wrong value");
     return 1;
   }
   if (!EvaluatesTo(context, "sin(90 deg)", 1.0, "")) {
-    PrintError() << "angle-aware sine returned the wrong value\n";
+    std::println(stderr, "angle-aware sine returned the wrong value");
     return 1;
   }
   if (!context.EvaluateBoolean("2 ft < 1 m")) {
-    PrintError() << "comparison across compatible units returned the wrong value\n";
+    std::println(stderr, "comparison across compatible units returned the wrong value");
     return 1;
   }
   bool incompatibleComparisonRejected = false;
@@ -511,7 +498,7 @@ int TestMeasurementMath() {
     incompatibleComparisonRejected = true;
   }
   if (!incompatibleComparisonRejected) {
-    PrintError() << "comparison across incompatible dimensions was accepted\n";
+    std::println(stderr, "comparison across incompatible dimensions was accepted");
     return 1;
   }
   return 0;
@@ -524,14 +511,14 @@ int TestGeometryConstructors() {
   try {
     pose = context.EvaluatePose2d("Pose2d(3 m, 4 m, 90 deg)");
   } catch (const std::exception& error) {
-    PrintError() << "pose constructor failed: " << error.what() << '\n';
+    std::println(stderr, "pose constructor failed: {}", error.what());
     return 1;
   }
   context.SetVariable("pose", pose);
   auto translationFromPose = context.EvaluateTranslation2d("Translation2d(pose.X(), 2 ft)");
   if (std::abs(translationFromPose.X().value() - 3.0) > 1e-10 ||
       std::abs(translationFromPose.Y().value() - 0.6096) > 1e-10) {
-    PrintError() << "typed Translation2d conversion returned the wrong value\n";
+    std::println(stderr, "typed Translation2d conversion returned the wrong value");
     return 1;
   }
   bool invalidTranslationRejected = false;
@@ -541,7 +528,7 @@ int TestGeometryConstructors() {
     invalidTranslationRejected = true;
   }
   if (!invalidTranslationRejected) {
-    PrintError() << "typed Translation2d accepted an incompatible dimension\n";
+    std::println(stderr, "typed Translation2d accepted an incompatible dimension");
     return 1;
   }
   if (!EvaluatesTo(context, "Rotation2d(90 deg).Radians()", 90.0, "deg") ||
@@ -552,7 +539,7 @@ int TestGeometryConstructors() {
       !EvaluatesTo(context, "Twist2d(3 m, 4 m, 90 deg).dtheta()", 90.0, "deg") ||
       !EvaluatesTo(context, "pose.X() + pose.Y()", 7.0, "m") ||
       !context.EvaluateBoolean("pose.X() == 3 m")) {
-    PrintError() << "typed geometry conversion returned the wrong value\n";
+    std::println(stderr, "typed geometry conversion returned the wrong value");
     return 1;
   }
   if (!EvaluatesTo(context, "Pose2d().X()", 0.0, "m") ||
@@ -563,7 +550,7 @@ int TestGeometryConstructors() {
       !EvaluatesTo(context, "Pose2d(Translation2d(3 m, 4 m), Rotation2d(90 deg)).X()", 3.0, "m") ||
       !EvaluatesTo(context, "Transform2d(Translation2d(3 m, 4 m), Rotation2d(90 deg)).Y()", 4.0, "m") ||
       !EvaluatesTo(context, "Transform2d(Pose2d(), Pose2d(3 m, 4 m, 90 deg)).X()", 3.0, "m")) {
-    PrintError() << "geometry constructor overload returned the wrong value\n";
+    std::println(stderr, "geometry constructor overload returned the wrong value");
     return 1;
   }
   context.SetVariable("nonfiniteLength",
@@ -584,7 +571,7 @@ int TestGeometryConstructors() {
       rejected = true;
     }
     if (!rejected) {
-      PrintError() << "typed geometry accepted an incompatible or non-finite quantity\n";
+      std::println(stderr, "typed geometry accepted an incompatible or non-finite quantity");
       return 1;
     }
   }
@@ -603,14 +590,14 @@ int TestGeometryOperations() {
   auto rotation = context.EvaluateRotation2d("Rotation2d(90 deg)");
   context.SetVariable("rotation", rotation);
   if (!EvaluatesTo(context, "pose.X()", 3.0, "m")) {
-    PrintError() << "Pose2d::X returned the wrong value\n";
+    std::println(stderr, "Pose2d::X returned the wrong value");
     return 1;
   }
 
   auto relativePose = context.EvaluatePose2d("pose.RotateBy(rotation).RelativeTo(origin)");
   if (std::abs(relativePose.X().value() + 4.0) > 1e-10 ||
       std::abs(relativePose.Y().value() - 3.0) > 1e-10) {
-    PrintError() << "WPILib pose method chain returned the wrong translation\n";
+    std::println(stderr, "WPILib pose method chain returned the wrong translation");
     return 1;
   }
 
@@ -621,7 +608,7 @@ int TestGeometryOperations() {
   if (!EvaluatesTo(context, "translation.Distance(other)", 5.0, "m") ||
       !EvaluatesTo(context, "translation.Norm()", 5.0, "m") ||
       !EvaluatesTo(context, "translation.Y()", 4.0, "m")) {
-    PrintError() << "Translation2d::Distance returned the wrong value\n";
+    std::println(stderr, "Translation2d::Distance returned the wrong value");
     return 1;
   }
 
@@ -633,7 +620,7 @@ int TestGeometryOperations() {
       !EvaluatesTo(context, "Translation2d(0 m, 1 m).Angle().Degrees()", 90.0, "deg") ||
       !EvaluatesTo(context, "Translation2d(2 m, 0 m).RotateAround(Translation2d(1 m, 0 m), rotation).Y()", 1.0, "m") ||
       !EvaluatesTo(context, "Pose2d(2 m, 0 m, 0 deg).RotateAround(Translation2d(1 m, 0 m), rotation).Y()", 1.0, "m")) {
-    PrintError() << "translation or pose operation returned the wrong value\n";
+    std::println(stderr, "translation or pose operation returned the wrong value");
     return 1;
   }
   bool undefinedAngleRejected = false;
@@ -643,7 +630,7 @@ int TestGeometryOperations() {
     undefinedAngleRejected = true;
   }
   if (!undefinedAngleRejected) {
-    PrintError() << "undefined translation angle was accepted\n";
+    std::println(stderr, "undefined translation angle was accepted");
     return 1;
   }
   context.SetVariable("factor", units::precise_measurement{2.0, units::precise::one});
@@ -682,7 +669,7 @@ int TestGeometryOperations() {
       !EvaluatesTo(context, "translation.Nearest([Translation2d(9 m, 9 m), Translation2d(4 m, 4 m)]).X()", 4.0, "m") ||
       !EvaluatesTo(context, "origin.Nearest([Pose2d(5 m, 0 m, 0 deg), Pose2d(1 m, 0 m, 0 deg)]).X()", 1.0, "m") ||
       !EvaluatesTo(context, "origin.Nearest([Pose2d(1 m, 0 m, 90 deg), Pose2d(1 m, 0 m, 0 deg)]).Rotation().Degrees()", 0.0, "deg")) {
-    PrintError() << "geometry arithmetic or equality returned the wrong value\n";
+    std::println(stderr, "geometry arithmetic or equality returned the wrong value");
     return 1;
   }
   for (const char* expression : {"(translation * 1 m).X()", "(translation / 0.0).X()",
@@ -698,7 +685,7 @@ int TestGeometryOperations() {
       rejected = true;
     }
     if (!rejected) {
-      PrintError() << "invalid geometry scalar was accepted\n";
+      std::println(stderr, "invalid geometry scalar was accepted");
       return 1;
     }
   }
@@ -710,7 +697,7 @@ int TestGeometryOperations() {
     invalidGeometryRejected = true;
   }
   if (!invalidGeometryRejected || context.EvaluatePose2d("pose") != pose) {
-    PrintError() << "invalid geometry input was accepted or corrupted the context\n";
+    std::println(stderr, "invalid geometry input was accepted or corrupted the context");
     return 1;
   }
   return 0;
@@ -722,7 +709,7 @@ int TestShapes() {
       !context.EvaluateBoolean("Ellipse2d(Pose2d(), 2 m, 1 m).Intersects(Translation2d(2 m, 0 m))") ||
       !EvaluatesTo(context, "Rectangle2d(Pose2d(), 4 m, 2 m).XWidth()", 4.0, "m") ||
       !EvaluatesTo(context, "Ellipse2d(Pose2d(), 2 m, 1 m).Distance(Translation2d(3 m, 0 m))", 1.0, "m", 1e-8)) {
-    PrintError() << "rectangle or ellipse binding returned the wrong value\n";
+    std::println(stderr, "rectangle or ellipse binding returned the wrong value");
     return 1;
   }
 
@@ -754,7 +741,7 @@ int TestShapes() {
       !EvaluatesTo(shapes, "ellipse.RotateBy(Rotation2d(90 deg)).Rotation().Degrees()", 90.0, "deg") ||
       !EvaluatesTo(shapes, "Rectangle2d(Translation2d(0 m, 0 m), Translation2d(4 m, 2 m)).Center().X()", 2.0, "m") ||
       !EvaluatesTo(shapes, "Ellipse2d(Translation2d(0 m, 0 m), 2.0).YSemiAxis()", 2.0, "m")) {
-    PrintError() << "shape method, constructor, or setup binding returned the wrong value\n";
+    std::println(stderr, "shape method, constructor, or setup binding returned the wrong value");
     return 1;
   }
   for (const char* expression : {"rect.FocalPoints()[0].X()",
@@ -770,7 +757,7 @@ int TestShapes() {
       rejected = true;
     }
     if (!rejected) {
-      PrintError() << "invalid shape expression was accepted\n";
+      std::println(stderr, "invalid shape expression was accepted");
       return 1;
     }
   }
@@ -802,7 +789,7 @@ constexpr TestCase tests[]{
 
 int main(int argc, char** argv) {
   if (argc > 2) {
-    PrintError() << "Usage: wpilib_expression_test [case]\n";
+    std::println(stderr, "Usage: wpilib_expression_test [case]");
     return 2;
   }
   bool found = false;
@@ -813,19 +800,19 @@ int main(int argc, char** argv) {
     found = true;
     try {
       if (test.run() != 0) {
-        PrintError() << "Test failed: " << test.name << '\n';
+        std::println(stderr, "Test failed: {}", test.name);
         return 1;
       }
     } catch (const std::exception& error) {
-      PrintError() << "Test " << test.name << " threw: " << error.what() << '\n';
+      std::println(stderr, "Test {} threw: {}", test.name, error.what());
       return 1;
     } catch (...) {
-      PrintError() << "Test " << test.name << " threw a non-standard exception\n";
+      std::println(stderr, "Test {} threw a non-standard exception", test.name);
       return 1;
     }
   }
   if (!found) {
-    PrintError() << "Unknown test case: " << argv[1] << '\n';
+    std::println(stderr, "Unknown test case: {}", argv[1]);
     return 2;
   }
   return 0;
