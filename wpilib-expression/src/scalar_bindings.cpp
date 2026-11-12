@@ -100,6 +100,11 @@ Quantity InverseTrigInput(const Quantity& value, double (*function)(double)) {
 
 void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
   engine.add(chaiscript::user_type<Quantity>(), "Quantity");
+  engine.add(chaiscript::user_type<units::precise_measurement>(), "precise_measurement");
+  engine.add(chaiscript::type_conversion<units::precise_measurement, Quantity>(
+      [](const units::precise_measurement& value) {
+        return Quantity{value, DimensionFor(value.units())};
+      }));
   engine.add(chaiscript::fun([](double value, const std::string& unit) {
     return Quantity::From(value, unit);
   }), "quantity");

@@ -7,6 +7,7 @@
 - WPILib `allwpilib` revision `f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a`
 - ChaiScript revision `f635b51e3f8e95868210edfc66fdbd8e475710f5`
 - Eigen revision `b7f6aed1b9974fd56cce651b4ff059c3bfc67782`
+- LLNL units revision `v0.13.1`
 - CMake 3.21 or newer and a C++23 compiler
 
 The CMake project fetches these dependencies. On Windows, configure from an environment with the compiler, Windows SDK resource compiler, and MSVC libraries available.
@@ -71,7 +72,7 @@ wpi::units::radian_t angle;
 bool converted = context.Evaluate("90 deg").TryAs(angle);
 ```
 
-The conversion checks the full WPILib base-dimension signature. Non-linear WPI scales, unsupported runtime dimensions, non-finite conversions, and dimension mismatches are not converted.
+The conversion checks the full WPILib base-dimension signature. Non-linear WPI scales, unsupported runtime dimensions, and dimension mismatches are not converted.
 
 ## Expression Support
 

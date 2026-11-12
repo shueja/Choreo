@@ -1,7 +1,6 @@
 #pragma once
 
 #include <array>
-#include <cmath>
 #include <optional>
 #include <string_view>
 #include <type_traits>
@@ -65,9 +64,6 @@ class Quantity {
       }
 
       double converted = wpi::units::convert<SiUnit, UnitTag>(siValue);
-      if (!std::isfinite(converted)) {
-        return std::nullopt;
-      }
       return UnitValue{converted};
     }
   }
@@ -84,10 +80,9 @@ class Quantity {
 
   Quantity() = default;
   Quantity(double value, Dimension dimension);
+  Quantity(units::precise_measurement measurement, Dimension dimension);
 
  private:
-  friend Quantity MakeQuantity(const units::precise_measurement& measurement);
-  Quantity(units::precise_measurement measurement, Dimension dimension);
   units::precise_measurement measurement_{};
 };
 

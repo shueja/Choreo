@@ -37,7 +37,7 @@ void RegisterQuantityConversion(chaiscript::ChaiScript& engine, std::string_view
     if (!converted) {
       throw chaiscript::exception::bad_boxed_cast(
           chaiscript::user_type<Quantity>(), typeid(UnitValue),
-          "quantity has an incompatible dimension or non-finite value");
+          "quantity has an incompatible dimension");
     }
     return *converted;
   }));
@@ -47,9 +47,23 @@ void RegisterQuantityConversion(chaiscript::ChaiScript& engine, std::string_view
     } catch (const std::domain_error&) {
       throw chaiscript::exception::bad_boxed_cast(
           chaiscript::user_type<UnitValue>(), typeid(Quantity),
-          "unit value cannot be converted to a finite quantity");
+          "unit value cannot be converted to a quantity");
     }
   }));
+  engine.add(chaiscript::type_conversion<units::precise_measurement, UnitValue>(
+      [unit](const units::precise_measurement& value) {
+        auto converted = Quantity{value, ParseUnit(unit).dimension}.TryAs<UnitValue>();
+        if (!converted) {
+          throw chaiscript::exception::bad_boxed_cast(
+              chaiscript::user_type<units::precise_measurement>(), typeid(UnitValue),
+              "precise measurement has an incompatible dimension");
+        }
+        return *converted;
+      }));
+  engine.add(chaiscript::type_conversion<UnitValue, units::precise_measurement>(
+      [unit](const UnitValue& value) {
+        return Quantity::From(value.value(), unit).measurement();
+      }));
 }
 
 double GeometryScalar(double value) {
