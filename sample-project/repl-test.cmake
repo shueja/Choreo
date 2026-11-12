@@ -1,4 +1,4 @@
-file(WRITE "${TEST_DIR}/repl-test-input.txt" "2 m + offset\ntarget.Rotation().Degrees()\ntarget.Rotation().Degrees() / deg\n:quit\n")
+file(WRITE "${TEST_DIR}/repl-test-input.txt" ":reload\n2 m + offset\ntarget.Rotation().Degrees()\ntarget.Rotation().Degrees() / deg\n:quit\n")
 execute_process(
     COMMAND "${SAMPLE}" --setup "${SETUP}"
     INPUT_FILE "${TEST_DIR}/repl-test-input.txt"
@@ -6,12 +6,12 @@ execute_process(
     OUTPUT_VARIABLE output
     ERROR_VARIABLE error
 )
-if(NOT result EQUAL 0 OR NOT output MATCHES "2\\.9144 SI" OR
+if(NOT result EQUAL 0 OR NOT output MATCHES "Setup reloaded\\." OR NOT output MATCHES "2\\.9144 SI" OR
     NOT output MATCHES "1\\.5708 SI" OR NOT output MATCHES "90 SI" OR NOT error STREQUAL "")
     message(FATAL_ERROR "Setup REPL failed (${result}): ${output} ${error}")
 endif()
 
-file(WRITE "${TEST_DIR}/repl-test-input.txt" "1 m\n:quit\n")
+file(WRITE "${TEST_DIR}/repl-test-input.txt" ":reload\n1 m\n:quit\n")
 execute_process(
     COMMAND "${SAMPLE}"
     INPUT_FILE "${TEST_DIR}/repl-test-input.txt"
@@ -19,7 +19,7 @@ execute_process(
     OUTPUT_VARIABLE output
     ERROR_VARIABLE error
 )
-if(NOT result EQUAL 0 OR NOT output MATCHES "1 SI" OR NOT error STREQUAL "")
+if(NOT result EQUAL 0 OR NOT output MATCHES "1 SI" OR NOT error MATCHES "No setup file specified")
     message(FATAL_ERROR "REPL without setup failed (${result}): ${output} ${error}")
 endif()
 

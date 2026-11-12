@@ -137,6 +137,9 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
   // These make copies instead of references.
   BIND_COPY_METHOD(Pose2d, Translation);
   BIND_COPY_METHOD(Pose2d, Rotation);
+  BIND_LAMBDA(Distance, [](const Pose2d& pose, const Pose2d& other) {
+    return pose.Translation().Distance(other.Translation());
+  });
   BIND_METHOD(Pose2d, RotateBy);
   BIND_METHOD(Pose2d, RotateAround);
   BIND_METHOD(Pose2d, RelativeTo);

@@ -26,4 +26,5 @@ From the repository root, load context variables from a setup file before starti
 ```
 
 The file uses the restricted setup syntax described in the expression library documentation. For example, with the included setup file, evaluate `2 m + offset`.
+Enter `:reload` to reload the setup file. If loading fails, the previous context remains available.
 Rotation methods such as `target.Rotation().Degrees()` return an angle displayed in SI radians; divide by `deg` to display a dimensionless degree value.

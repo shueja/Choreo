@@ -40,6 +40,20 @@ Contexts register scalar and native WPILib geometry values with `SetVariable`. `
 
 `SetSetupScript` atomically replaces context variables using initialized top-level `var`, `auto`, `const`, or `global` declarations. Initializers may use read-only expressions and previously declared variables. Values must be quantities, numbers, or supported geometry objects; numbers become dimensionless quantities. A failed setup leaves the previous variables unchanged. Other statements, user-defined functions, external scripts, module loading, and I/O are not permitted. Evaluation is not resource-limited.
 
+Setup supports nested namespace blocks and the `namespace("name")` form. Namespace members are frozen after setup and can be accessed with `.` or `::`. Initializers referencing earlier members must use their qualified names.
+
+```cpp
+context.SetSetupScript(R"(
+  namespace field::starting {
+    var origin = Pose2d(0 m, 0 m, 0 deg);
+  }
+  namespace field::target {
+    var position = field.starting.origin.Translation();
+  }
+)");
+auto origin = context.EvaluatePose2d("field.starting.origin");
+```
+
 ```cpp
 context.SetSetupScript("var distance = 2 m; var target = Pose2d(3 m, 4 m, 90 deg);");
 auto result = context.Evaluate("distance + target.X()");
@@ -66,5 +80,7 @@ Bare unit suffixes include `2 m`, `90 deg`, `6000 RPM`, `2 m/s^2`, and `0.018 N*
 The bounded unit registry includes common Choreo/FRC engineering units: `m`, `mm`, `cm`, `km`, `in`, `ft`, `yd`, `mi`; `s`, `ms`, `us`, `min`, `hr`; `kg`, `g`, `lb`; `A`, `mA`; `rad`, `deg`, `turn`, `rev`; `N`, `lbf`, `V`, `mV`, `kV`, `Hz`, `kHz`, `W`, `kW`, `J`, `kJ`, `C`, `Pa`, `kPa`, `psi`, `ohm`, `Ohm`, `Nm`, and `RPM`/`rpm`. Symbols are case-sensitive. Compound unit expressions accept `*`, `/`, and integer exponents with magnitude up to 16. Unit names are reserved and cannot be reused as variable names. Unknown unit suffixes, incompatible dimensions, divide-by-zero, non-finite results, and invalid geometry dimensions are rejected.
 
 Geometry bindings cover constructors and commonly used properties/methods for WPILib `Pose2d`, `Translation2d`, `Rotation2d`, `Transform2d`, `Twist2d`, `Rectangle2d`, and `Ellipse2d`. Shape operations include containment, intersection, distance, nearest point, transforms, and rotation. An ellipse's `FocalPoints()` returns two points accessible with `[0]` and `[1]`. Geometry arguments are checked at the scalar-to-WPILib boundary. Evaluation accepts only a single read-only expression using the library's supported operators and functions; assignments, declarations, and other script operations are rejected.
+
+For convenience, `Pose2d` supports `Distance(otherPose)` using its translation; this ignores rotation. For a pose's norm, use `pose.Translation().Norm()` or `pose.Translation().SquaredNorm()`.
 
 Planar geometry values support WPILib's arithmetic and equality operators. Scaling accepts finite dimensionless scalars; division by zero is rejected. `Translation2d::Angle()` returns a rotation and rejects translations whose direction is undefined. Pose and translation `Nearest()` accept non-empty inline lists, for example `origin.Nearest([Pose2d(), target])`.
