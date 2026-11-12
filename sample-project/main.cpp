@@ -17,9 +17,9 @@ namespace {
 int RunSmokeTest() {
   EvaluationContext context;
   context.SetSetupScript("var offset = 3 ft;");
-  auto length = From(1.0, "m").units();
+  auto length = From(1.0, units::unit_from_string("m")).units();
   auto result = context.Evaluate("2 m + offset", length);
-  if (std::abs(In(result, "m") - 2.9144) > 1e-10) {
+  if (std::abs(In(result, units::unit_from_string("m")) - 2.9144) > 1e-10) {
     std::cerr << "expression library smoke test failed\n";
     return 1;
   }

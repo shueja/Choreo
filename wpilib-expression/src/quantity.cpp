@@ -3,20 +3,17 @@
 #include "units.hpp"
 
 #include <stdexcept>
-#include <utility>
 
 namespace wpilib::expression {
-units::precise_measurement From(double value, std::string_view unit) {
-  auto parsed = detail::ParseUnit(unit);
-  return units::precise_measurement{value, parsed};
+units::precise_measurement From(double value, const units::precise_unit& unit) {
+  return units::precise_measurement{value, unit};
 }
 
-double In(const units::precise_measurement& measurement, std::string_view unit) {
-  auto parsed = detail::ParseUnit(unit);
-  if (measurement.units().base_units() != parsed.base_units()) {
+double In(const units::precise_measurement& measurement, const units::precise_unit& unit) {
+  if (measurement.units().base_units() != unit.base_units()) {
     throw std::invalid_argument("requested unit has incompatible dimension");
   }
-  return measurement.value_as(parsed);
+  return measurement.value_as(unit);
 }
 
 }  // namespace wpilib::expression

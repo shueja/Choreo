@@ -45,7 +45,7 @@ void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
   }), name)
   engine.add(chaiscript::user_type<units::precise_measurement>(), "precise_measurement");
   engine.add(chaiscript::fun([](double value, const std::string& unit) {
-    return From(value, unit);
+    return From(value, detail::ParseUnit(unit));
   }), "quantity");
   BIND_MEASUREMENT_OPERATOR("+", +);
   BIND_MEASUREMENT_OPERATOR("-", -);

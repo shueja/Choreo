@@ -109,7 +109,7 @@ int TestNamespaces() {
 
 int TestSetup() {
   EvaluationContext setup;
-  setup.SetVariable("old", From(1.0, "m"));
+  setup.SetVariable("old", From(1.0, units::unit_from_string("m")));
   setup.SetSetupScript("// 2 unknown_units\nvar base = 2 m; /* 3 unknown_units */ "
                "var offset = 3 ft; var total = base + offset; "
                        "var pose = Pose2d(3 m, 4 m, 90 deg); var gain = 2; "
@@ -180,7 +180,7 @@ int TestSetup() {
   for (const char* name : {"Cos", "Degrees"}) {
     bool methodNameRejected = false;
     try {
-      setup.SetVariable(name, From(1.0, "m"));
+      setup.SetVariable(name, From(1.0, units::unit_from_string("m")));
     } catch (const std::invalid_argument&) {
       methodNameRejected = true;
     }
@@ -205,9 +205,9 @@ int TestSetup() {
 
 int TestArithmeticAndVariables() {
   EvaluationContext context;
-  auto length = From(1.0, "m").units();
+  auto length = From(1.0, units::unit_from_string("m")).units();
   auto mixedLength = context.Evaluate("2 * m + 3 * ft", length);
-  if (std::abs(In(mixedLength, "m") - 2.9144) > 1e-10) {
+  if (std::abs(In(mixedLength, units::unit_from_string("m")) - 2.9144) > 1e-10) {
     std::cerr << "mixed-unit addition returned the wrong value\n";
     return 1;
   }
@@ -234,13 +234,13 @@ int TestArithmeticAndVariables() {
     return 1;
   }
 
-  context.SetVariable("offset", From(3.0, "ft"));
+  context.SetVariable("offset", From(3.0, units::unit_from_string("ft")));
   auto withVariable = context.Evaluate("2 * m + offset", length);
-  if (std::abs(In(withVariable, "m") - 2.9144) > 1e-10) {
+  if (std::abs(In(withVariable, units::unit_from_string("m")) - 2.9144) > 1e-10) {
     std::cerr << "registered variable returned the wrong value\n";
     return 1;
   }
-  context.SetVariable("offset", From(1.0, "m"));
+  context.SetVariable("offset", From(1.0, units::unit_from_string("m")));
   if (!EvaluatesTo(context, "offset", 1.0, "m")) {
     std::cerr << "updated variable returned the wrong value\n";
     return 1;
@@ -250,7 +250,7 @@ int TestArithmeticAndVariables() {
 
 int TestReadOnlyExpressions() {
   EvaluationContext context;
-  context.SetVariable("offset", From(1.0, "m"));
+  context.SetVariable("offset", From(1.0, units::unit_from_string("m")));
   for (const char* expression : {"var temporary = 2; 2 * m", "offset = 5 * m",
                                  "def temporaryFunction() { return 2 * m; } temporaryFunction()",
                                  "eval(\"1 * m\")", "++offset", "set_global(2 * m, \"offset\")",
@@ -320,8 +320,8 @@ int TestErrorMessages() {
 int TestContextCopies() {
   EvaluationContext first;
   EvaluationContext second = first;
-  first.SetVariable("distance", From(1.0, "m"));
-  second.SetVariable("distance", From(2.0, "m"));
+  first.SetVariable("distance", From(1.0, units::unit_from_string("m")));
+  second.SetVariable("distance", From(2.0, units::unit_from_string("m")));
   std::atomic<bool> concurrentFailed{false};
   auto evaluateRepeatedly = [&](const EvaluationContext& current, double expected) {
     try {
@@ -390,22 +390,22 @@ int TestUnitExpressions() {
     std::cerr << "derived power or pressure units returned the wrong value\n";
     return 1;
   }
-  auto feet = TryAs<wpi::units::foot_t>(From(1.0, "m"));
+  auto feet = TryAs<wpi::units::foot_t>(From(1.0, units::unit_from_string("m")));
   if (!feet || std::abs(feet->value() - (1.0 / 0.3048)) > 1e-10) {
     std::cerr << "WPILib foot conversion returned the wrong value\n";
     return 1;
   }
-  auto radians = TryAs<wpi::units::radian_t>(From(90.0, "deg"));
+  auto radians = TryAs<wpi::units::radian_t>(From(90.0, units::unit_from_string("deg")));
   if (!radians || std::abs(radians->value() - std::acos(-1.0) / 2.0) > 1e-10) {
     std::cerr << "WPILib radian conversion returned the wrong value\n";
     return 1;
   }
-  if (TryAs<wpi::units::meter_t>(From(1.0, "s"))) {
+  if (TryAs<wpi::units::meter_t>(From(1.0, units::unit_from_string("s")))) {
     std::cerr << "incompatible WPILib unit conversion succeeded\n";
     return 1;
   }
   wpi::units::meter_t output;
-  if (!TryAs(From(2.0, "m"), output) || std::abs(output.value() - 2.0) > 1e-10) {
+  if (!TryAs(From(2.0, units::unit_from_string("m")), output) || std::abs(output.value() - 2.0) > 1e-10) {
     std::cerr << "WPILib output-parameter conversion returned the wrong value\n";
     return 1;
   }
@@ -439,7 +439,7 @@ int TestIdentifiers() {
 
   bool unitNameCollisionRejected = false;
   try {
-    context.SetVariable("m", From(1.0, "m"));
+    context.SetVariable("m", From(1.0, units::unit_from_string("m")));
   } catch (const std::invalid_argument&) {
     unitNameCollisionRejected = true;
   }
@@ -449,7 +449,7 @@ int TestIdentifiers() {
   }
   bool constructorNameCollisionRejected = false;
   try {
-    context.SetVariable("Pose2d", From(1.0, "m"));
+    context.SetVariable("Pose2d", From(1.0, units::unit_from_string("m")));
   } catch (const std::invalid_argument&) {
     constructorNameCollisionRejected = true;
   }
@@ -463,7 +463,7 @@ int TestIdentifiers() {
 int TestMeasurementMath() {
   EvaluationContext context;
   auto area = context.Evaluate("(2 m)^2");
-  if (std::abs(In(area, "m^2") - 4.0) > 1e-10) {
+  if (std::abs(In(area, units::unit_from_string("m^2")) - 4.0) > 1e-10) {
     std::cerr << "integer quantity power returned the wrong value\n";
     return 1;
   }
@@ -496,7 +496,7 @@ int TestMeasurementMath() {
 
 int TestGeometryConstructors() {
   EvaluationContext context;
-  auto length = From(1.0, "m").units();
+  auto length = From(1.0, units::unit_from_string("m")).units();
   Pose2d pose;
   try {
     pose = context.EvaluatePose2d("Pose2d(3 m, 4 m, 90 deg)");
@@ -570,7 +570,7 @@ int TestGeometryConstructors() {
 
 int TestGeometryOperations() {
   EvaluationContext context;
-  auto length = From(1.0, "m").units();
+  auto length = From(1.0, units::unit_from_string("m")).units();
   auto pose = context.EvaluatePose2d("Pose2d(3 m, 4 m, 90 deg)");
   context.SetVariable("pose", pose);
   context.SetVariable("nonfiniteLength",

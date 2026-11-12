@@ -13,7 +13,6 @@
 #include <cmath>
 #include <span>
 #include <stdexcept>
-#include <string_view>
 #include <typeinfo>
 #include <vector>
 
@@ -31,7 +30,8 @@ using wpi::units::meter_t;
 using wpi::units::radian_t;
 
 template <typename UnitValue>
-void RegisterMeasurementConversion(chaiscript::ChaiScript& engine, std::string_view unit) {
+void RegisterMeasurementConversion(chaiscript::ChaiScript& engine,
+                                   const units::precise_unit& unit) {
   engine.add(chaiscript::type_conversion<units::precise_measurement, UnitValue>([](const units::precise_measurement& value) {
     auto converted = TryAs<UnitValue>(value);
     if (!converted) {
@@ -121,10 +121,10 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
   engine.add(chaiscript::user_type<Ellipse2d>(), "Ellipse2d");
   engine.add(chaiscript::user_type<wpi::util::array<Translation2d, 2>>(), "EllipseFocalPoints");
 
-  RegisterMeasurementConversion<wpi::units::meter_t>(engine, "m");
-  RegisterMeasurementConversion<wpi::units::radian_t>(engine, "rad");
-  RegisterMeasurementConversion<wpi::units::degree_t>(engine, "deg");
-  RegisterMeasurementConversion<wpi::units::square_meter_t>(engine, "m^2");
+  RegisterMeasurementConversion<wpi::units::meter_t>(engine, units::precise::m);
+  RegisterMeasurementConversion<wpi::units::radian_t>(engine, units::precise::rad);
+  RegisterMeasurementConversion<wpi::units::degree_t>(engine, detail::ParseUnit("deg"));
+  RegisterMeasurementConversion<wpi::units::square_meter_t>(engine, units::precise::m.pow(2));
 
   BIND_LAMBDA(Pose2d, [](meter_t x, meter_t y, radian_t angle) {
     return Pose2d{x, y, Rotation2d{angle}};
