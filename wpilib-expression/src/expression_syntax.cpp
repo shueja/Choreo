@@ -13,6 +13,51 @@ std::string ExpandUnitSuffixes(std::string_view source) {
   expanded.reserve(source.size() + 16);
 
   for (std::size_t position = 0; position < source.size();) {
+    if (source[position] == '#' || source.substr(position, 2) == "//") {
+      auto end = source.find('\n', position);
+      if (end == std::string_view::npos) {
+        end = source.size();
+      }
+      expanded.append(source.substr(position, end - position));
+      position = end;
+      continue;
+    }
+    if (source.substr(position, 2) == "/*") {
+      auto end = source.find("*/", position + 2);
+      end = end == std::string_view::npos ? source.size() : end + 2;
+      expanded.append(source.substr(position, end - position));
+      position = end;
+      continue;
+    }
+    if (source.substr(position, 2) == "R\"") {
+      auto open = source.find('(', position + 2);
+      if (open != std::string_view::npos) {
+        auto closing = ")" + std::string(source.substr(position + 2, open - position - 2)) + "\"";
+        auto end = source.find(closing, open + 1);
+        end = end == std::string_view::npos ? source.size() : end + closing.size();
+        expanded.append(source.substr(position, end - position));
+        position = end;
+        continue;
+      }
+    }
+    if (source[position] == '"' || source[position] == '\'') {
+      auto start = position;
+      char quote = source[position++];
+      bool escaped = false;
+      while (position < source.size()) {
+        char character = source[position++];
+        if (!escaped && character == quote) {
+          break;
+        }
+        if (!escaped && character == '\\') {
+          escaped = true;
+        } else {
+          escaped = false;
+        }
+      }
+      expanded.append(source.substr(start, position - start));
+      continue;
+    }
     unsigned char current = static_cast<unsigned char>(source[position]);
     bool followsIdentifier = position > 0 &&
                              (std::isalnum(static_cast<unsigned char>(source[position - 1])) ||

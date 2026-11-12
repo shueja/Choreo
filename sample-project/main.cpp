@@ -1,8 +1,12 @@
 #include <wpilib-expression/expression.hpp>
 
 #include <cmath>
+#include <exception>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
+#include <string_view>
 
 using wpilib::expression::EvaluationContext;
 using wpilib::expression::Quantity;
@@ -11,8 +15,9 @@ namespace {
 
 int RunSmokeTest() {
   EvaluationContext context;
+  context.SetSetupScript("var offset = 3 ft;");
   auto length = Quantity::From(1.0, "m").dimension;
-  auto result = context.Evaluate("2 m + 3 ft", length);
+  auto result = context.Evaluate("2 m + offset", length);
   if (std::abs(result.In("m") - 2.9144) > 1e-10) {
     std::cerr << "expression library smoke test failed\n";
     return 1;
@@ -27,8 +32,27 @@ int RunSmokeTest() {
   return 0;
 }
 
-void RunRepl() {
+int RunRepl(const char* setupPath) {
   EvaluationContext context;
+  if (setupPath != nullptr) {
+    std::ifstream setupFile(setupPath, std::ios::binary);
+    if (!setupFile) {
+      std::cerr << "Could not open setup file: " << setupPath << '\n';
+      return 1;
+    }
+    std::ostringstream setup;
+    setup << setupFile.rdbuf();
+    if (setupFile.bad() || setup.bad()) {
+      std::cerr << "Could not read setup file: " << setupPath << '\n';
+      return 1;
+    }
+    try {
+      context.SetSetupScript(setup.str());
+    } catch (const std::exception& error) {
+      std::cerr << "Invalid setup file " << setupPath << ": " << error.what() << '\n';
+      return 1;
+    }
+  }
   std::string source;
   while (std::cout << "> " && std::getline(std::cin, source)) {
     if (source == ":quit") {
@@ -48,14 +72,21 @@ void RunRepl() {
       std::cerr << error.what() << '\n';
     }
   }
+  return 0;
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc == 2 && std::string(argv[1]) == "--smoke") {
+  if (argc == 2 && std::string_view(argv[1]) == "--smoke") {
     return RunSmokeTest();
   }
-  RunRepl();
-  return 0;
+  if (argc == 1) {
+    return RunRepl(nullptr);
+  }
+  if (argc == 3 && std::string_view(argv[1]) == "--setup") {
+    return RunRepl(argv[2]);
+  }
+  std::cerr << "Usage: expression_sample [--setup <file> | --smoke]\n";
+  return 1;
 }

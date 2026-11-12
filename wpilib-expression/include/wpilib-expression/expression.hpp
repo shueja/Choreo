@@ -17,6 +17,12 @@ namespace wpilib::expression {
 
 class EvaluationContext {
  public:
+  EvaluationContext();
+  EvaluationContext(const EvaluationContext&) = default;
+  EvaluationContext& operator=(const EvaluationContext&) = default;
+  EvaluationContext(EvaluationContext&& other) noexcept;
+  EvaluationContext& operator=(EvaluationContext&& other) noexcept;
+  void SetSetupScript(std::string_view source);
   void SetVariable(std::string name, Quantity value);
   void SetVariable(std::string name, wpi::math::Pose2d value);
   void SetVariable(std::string name, wpi::math::Translation2d value);
@@ -35,7 +41,9 @@ class EvaluationContext {
 
  private:
   struct Impl;
+  struct EngineCache;
   std::shared_ptr<Impl> impl_;
+  std::shared_ptr<EngineCache> engineCache_;
 };
 
 }  // namespace wpilib::expression

@@ -26,7 +26,7 @@ void ValidateVariableName(std::string_view name) {
       "quantity", "Pose2d", "Translation2d", "Rotation2d", "Transform2d", "Twist2d",
       "sin", "cos", "tan", "asin", "acos", "atan", "X", "Y", "Rotation",
       "Translation", "RotateBy", "RelativeTo", "TransformBy", "Distance", "Norm",
-      "Radians", "Inverse", "Log", "dx", "dy", "dtheta"};
+      "Radians", "Degrees", "Cos", "Sin", "Tan", "Inverse", "Log", "dx", "dy", "dtheta", "Exp"};
   if (UnitRegistry().contains(std::string(name)) || reservedNames.contains(std::string(name))) {
     throw std::invalid_argument("variable name is reserved by the expression language: " +
                                 std::string(name));
@@ -43,13 +43,16 @@ void StoreVariable(Variables& variables, std::string name, VariableValue value) 
 void ConfigureEngine(chaiscript::ChaiScript& engine, const Variables& variables) {
   ConfigureScalarBindings(engine);
   ConfigureGeometryBindings(engine);
+  ConfigureGlobals(engine, variables);
+}
 
+void ConfigureGlobals(chaiscript::ChaiScript& engine, const Variables& variables) {
   for (const auto& [name, unit] : UnitRegistry()) {
-    engine.add_global(chaiscript::var(Quantity{unit.scale, unit.dimension}), name);
+    engine.set_global(chaiscript::var(Quantity{unit.scale, unit.dimension}), name);
   }
   for (const auto& [name, value] : variables) {
     std::visit([&](const auto& variable) {
-      engine.add_global(chaiscript::var(variable), name);
+      engine.set_global(chaiscript::var(variable), name);
     }, value);
   }
 }

@@ -51,3 +51,11 @@ target_link_libraries(expression_sample PRIVATE wpilib::expression)
 
 enable_testing()
 add_test(NAME expression_sample_smoke COMMAND expression_sample --smoke)
+add_test(
+    NAME expression_sample_repl
+    COMMAND ${CMAKE_COMMAND}
+        -DSAMPLE=$<TARGET_FILE:expression_sample>
+        -DSETUP=${CMAKE_CURRENT_SOURCE_DIR}/example-setup.chai
+        -DTEST_DIR=${CMAKE_CURRENT_BINARY_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/repl-test.cmake
+)

@@ -38,6 +38,13 @@ double meters = distance.In("m");
 
 Contexts register scalar and native WPILib geometry values with `SetVariable`. `Evaluate` returns a `Quantity` and can check an expected `Dimension`; `EvaluateBoolean` evaluates comparisons. `EvaluatePose2d`, `EvaluateTranslation2d`, `EvaluateRotation2d`, `EvaluateTransform2d`, and `EvaluateTwist2d` return actual WPILib objects.
 
+`SetSetupScript` atomically replaces context variables using initialized top-level `var`, `auto`, `const`, or `global` declarations. Initializers may use read-only expressions and previously declared variables. Values must be quantities, numbers, or supported geometry objects; numbers become dimensionless quantities. A failed setup leaves the previous variables unchanged. Other statements, user-defined functions, external scripts, module loading, and I/O are not permitted. Evaluation is not resource-limited.
+
+```cpp
+context.SetSetupScript("var distance = 2 m; var target = Pose2d(3 m, 4 m, 90 deg);");
+auto result = context.Evaluate("distance + target.X()");
+```
+
 `Quantity::TryAs<UnitValue>()` converts to a compatible linear WPILib `unit_t` container and returns `std::optional<UnitValue>`; the output-parameter overload returns `false` on incompatibility:
 
 ```cpp
@@ -58,4 +65,4 @@ Bare unit suffixes include `2 m`, `90 deg`, `6000 RPM`, `2 m/s^2`, and `0.018 N*
 
 The bounded unit registry includes common Choreo/FRC engineering units: `m`, `mm`, `cm`, `km`, `in`, `ft`, `yd`, `mi`; `s`, `ms`, `us`, `min`, `hr`; `kg`, `g`, `lb`; `A`, `mA`; `rad`, `deg`, `turn`, `rev`; `N`, `lbf`, `V`, `mV`, `kV`, `Hz`, `kHz`, `W`, `kW`, `J`, `kJ`, `C`, `Pa`, `kPa`, `psi`, `ohm`, `Ohm`, `Nm`, and `RPM`/`rpm`. Symbols are case-sensitive. Compound unit expressions accept `*`, `/`, and integer exponents with magnitude up to 16. Unit names are reserved and cannot be reused as variable names. Unknown unit suffixes, incompatible dimensions, divide-by-zero, non-finite results, and invalid geometry dimensions are rejected.
 
-Geometry bindings cover constructors and commonly used properties/methods for WPILib `Pose2d`, `Translation2d`, `Rotation2d`, `Transform2d`, and `Twist2d`. Geometry arguments are checked at the scalar-to-WPILib boundary. Unsupported ChaiScript features remain available only when explicitly bound by the library.
+Geometry bindings cover constructors and commonly used properties/methods for WPILib `Pose2d`, `Translation2d`, `Rotation2d`, `Transform2d`, and `Twist2d`. Geometry arguments are checked at the scalar-to-WPILib boundary. Evaluation accepts only a single read-only expression using the library's supported operators and functions; assignments, declarations, and other script operations are rejected.
