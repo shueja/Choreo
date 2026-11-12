@@ -31,9 +31,9 @@ using Ellipse2d = wpi::math::Ellipse2d;
 struct NamespaceValues;
 using NamespacePtr = std::shared_ptr<const NamespaceValues>;
 using Translation2dArray = std::vector<Translation2d>;
-using VariableValue = std::variant<Quantity, Pose2d, Translation2d, Translation2dArray,
-                                   Rotation2d, Transform2d, Twist2d, Rectangle2d, Ellipse2d,
-                                   NamespacePtr>;
+using VariableValue = std::variant<units::precise_measurement, Pose2d, Translation2d,
+                                   Translation2dArray, Rotation2d, Transform2d, Twist2d,
+                                   Rectangle2d, Ellipse2d, NamespacePtr>;
 using Variables = std::map<std::string, VariableValue>;
 
 struct NamespaceValues {

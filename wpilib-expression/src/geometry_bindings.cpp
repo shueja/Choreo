@@ -31,39 +31,35 @@ using wpi::units::meter_t;
 using wpi::units::radian_t;
 
 template <typename UnitValue>
-void RegisterQuantityConversion(chaiscript::ChaiScript& engine, std::string_view unit) {
-  engine.add(chaiscript::type_conversion<Quantity, UnitValue>([](const Quantity& value) {
-    auto converted = value.TryAs<UnitValue>();
+void RegisterMeasurementConversion(chaiscript::ChaiScript& engine, std::string_view unit) {
+  engine.add(chaiscript::type_conversion<units::precise_measurement, UnitValue>([](const units::precise_measurement& value) {
+    if (!std::isfinite(SiValue(value))) {
+      throw chaiscript::exception::bad_boxed_cast(
+          chaiscript::user_type<units::precise_measurement>(), typeid(UnitValue),
+          "geometry quantity must be finite");
+    }
+    auto converted = TryAs<UnitValue>(value);
     if (!converted) {
       throw chaiscript::exception::bad_boxed_cast(
-          chaiscript::user_type<Quantity>(), typeid(UnitValue),
+          chaiscript::user_type<units::precise_measurement>(), typeid(UnitValue),
           "quantity has an incompatible dimension");
     }
     return *converted;
   }));
-  engine.add(chaiscript::type_conversion<UnitValue, Quantity>([unit](const UnitValue& value) {
+  engine.add(chaiscript::type_conversion<UnitValue, units::precise_measurement>([unit](const UnitValue& value) {
+    if (!std::isfinite(value.value())) {
+      throw chaiscript::exception::bad_boxed_cast(
+          chaiscript::user_type<UnitValue>(), typeid(units::precise_measurement),
+          "geometry result must be finite");
+    }
     try {
-      return Quantity::From(value.value(), unit);
+      return From(value.value(), unit);
     } catch (const std::domain_error&) {
       throw chaiscript::exception::bad_boxed_cast(
-          chaiscript::user_type<UnitValue>(), typeid(Quantity),
+          chaiscript::user_type<UnitValue>(), typeid(units::precise_measurement),
           "unit value cannot be converted to a quantity");
     }
   }));
-  engine.add(chaiscript::type_conversion<units::precise_measurement, UnitValue>(
-      [unit](const units::precise_measurement& value) {
-        auto converted = Quantity{value, ParseUnit(unit).dimension}.TryAs<UnitValue>();
-        if (!converted) {
-          throw chaiscript::exception::bad_boxed_cast(
-              chaiscript::user_type<units::precise_measurement>(), typeid(UnitValue),
-              "precise measurement has an incompatible dimension");
-        }
-        return *converted;
-      }));
-  engine.add(chaiscript::type_conversion<UnitValue, units::precise_measurement>(
-      [unit](const UnitValue& value) {
-        return Quantity::From(value.value(), unit).measurement();
-      }));
 }
 
 double GeometryScalar(double value) {
@@ -73,11 +69,11 @@ double GeometryScalar(double value) {
   return value;
 }
 
-double GeometryScalar(const Quantity& value) {
-  if (value.dimension != Dimension{}) {
+double GeometryScalar(const units::precise_measurement& value) {
+  if (MeasurementDimension(value) != Dimension{}) {
     throw std::invalid_argument("geometry scalar must be dimensionless");
   }
-  return GeometryScalar(value.measurement().value());
+  return GeometryScalar(SiValue(value));
 }
 
 double GeometryDivisor(double value) {
@@ -87,7 +83,7 @@ double GeometryDivisor(double value) {
   return value;
 }
 
-double GeometryDivisor(const Quantity& value) {
+double GeometryDivisor(const units::precise_measurement& value) {
   return GeometryDivisor(GeometryScalar(value));
 }
 
@@ -130,9 +126,9 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
   BIND_LAMBDA(!=, [](const type& left, const type& right) { return left != right; })
 #define BIND_SCALING(type) \
   BIND_LAMBDA(*, [](const type& object, double scalar) { return object * GeometryScalar(scalar); }); \
-  BIND_LAMBDA(*, [](const type& object, const Quantity& scalar) { return object * GeometryScalar(scalar); }); \
+  BIND_LAMBDA(*, [](const type& object, const units::precise_measurement& scalar) { return object * GeometryScalar(scalar); }); \
   BIND_LAMBDA(/, [](const type& object, double scalar) { return object / GeometryDivisor(scalar); }); \
-  BIND_LAMBDA(/, [](const type& object, const Quantity& scalar) { return object / GeometryDivisor(scalar); })
+  BIND_LAMBDA(/, [](const type& object, const units::precise_measurement& scalar) { return object / GeometryDivisor(scalar); })
 
   engine.add(chaiscript::user_type<Pose2d>(), "Pose2d");
   engine.add(chaiscript::user_type<Translation2d>(), "Translation2d");
@@ -144,10 +140,10 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
   engine.add(chaiscript::user_type<wpi::util::array<Translation2d, 2>>(), "EllipseFocalPoints");
   engine.add(chaiscript::user_type<std::vector<Translation2d>>(), "Translation2dArray");
 
-  RegisterQuantityConversion<wpi::units::meter_t>(engine, "m");
-  RegisterQuantityConversion<wpi::units::radian_t>(engine, "rad");
-  RegisterQuantityConversion<wpi::units::degree_t>(engine, "deg");
-  RegisterQuantityConversion<wpi::units::square_meter_t>(engine, "m^2");
+  RegisterMeasurementConversion<wpi::units::meter_t>(engine, "m");
+  RegisterMeasurementConversion<wpi::units::radian_t>(engine, "rad");
+  RegisterMeasurementConversion<wpi::units::degree_t>(engine, "deg");
+  RegisterMeasurementConversion<wpi::units::square_meter_t>(engine, "m^2");
 
   BIND_LAMBDA(Pose2d, [](meter_t x, meter_t y, radian_t angle) {
     return Pose2d{x, y, Rotation2d{angle}};
@@ -248,7 +244,7 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
   BIND_METHOD(Twist2d, Exp);
   BIND_EQUALITY(Twist2d);
   BIND_LAMBDA(*, [](const Twist2d& twist, double scalar) { return twist * GeometryScalar(scalar); });
-  BIND_LAMBDA(*, [](const Twist2d& twist, const Quantity& scalar) { return twist * GeometryScalar(scalar); });
+  BIND_LAMBDA(*, [](const Twist2d& twist, const units::precise_measurement& scalar) { return twist * GeometryScalar(scalar); });
 
   BIND_CONSTRUCTOR(Rectangle2d, const Pose2d&, meter_t, meter_t);
   BIND_CONSTRUCTOR(Rectangle2d, const Translation2d&, const Translation2d&);
