@@ -100,6 +100,9 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
   engine.add(chaiscript::fun([](const Rotation2d& rotation) {
     return FromRadians(rotation.Radians());
   }), "Radians");
+  engine.add(chaiscript::fun([](const Rotation2d& rotation) {
+    return FromRadians(wpi::units::radian_t{rotation.Degrees()});
+  }), "Degrees");
   engine.add(chaiscript::fun(&Rotation2d::RotateBy), "RotateBy");
   engine.add(chaiscript::fun(&Rotation2d::RelativeTo), "RelativeTo");
   engine.add(chaiscript::fun(&Rotation2d::Cos), "Cos");

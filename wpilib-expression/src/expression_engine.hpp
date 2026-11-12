@@ -28,5 +28,6 @@ using Variables = std::map<std::string, VariableValue>;
 
 void StoreVariable(Variables& variables, std::string name, VariableValue value);
 void ConfigureEngine(chaiscript::ChaiScript& engine, const Variables& variables);
+void ConfigureGlobals(chaiscript::ChaiScript& engine, const Variables& variables);
 
 }  // namespace wpilib::expression::detail

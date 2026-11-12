@@ -1,8 +1,12 @@
 #include "wpilib-expression/expression.hpp"
 
+#include <atomic>
 #include <cmath>
+#include <functional>
 #include <iostream>
 #include <stdexcept>
+#include <thread>
+#include <utility>
 
 #include <wpi/units/angle.hpp>
 #include <wpi/units/length.hpp>
@@ -12,6 +16,98 @@ using wpilib::expression::Quantity;
 using wpi::math::Pose2d;
 
 int main() {
+  EvaluationContext setup;
+  setup.SetVariable("old", Quantity::From(1.0, "m"));
+  setup.SetSetupScript("// 2 unknown_units\nvar base = 2 m; /* 3 unknown_units */ "
+               "var offset = 3 ft; var total = base + offset; "
+                       "var pose = Pose2d(3 m, 4 m, 90 deg); var gain = 2; "
+                       "var heading = pose.Rotation().Degrees(); "
+                       "global shared = 4 m; const var extra = 1 m; auto combined = total + extra;");
+  if (std::abs(setup.Evaluate("base + offset").In("m") - 2.9144) > 1e-10 ||
+      std::abs(setup.Evaluate("total").In("m") - 2.9144) > 1e-10 ||
+      std::abs(setup.Evaluate("pose.X()").In("m") - 3.0) > 1e-10 ||
+      std::abs(setup.Evaluate("pose.Rotation().Degrees()").In("deg") - 90.0) > 1e-10 ||
+      std::abs(setup.Evaluate("pose.Rotation().Degrees() / deg").siValue - 90.0) > 1e-10 ||
+      std::abs(setup.Evaluate("heading").In("deg") - 90.0) > 1e-10 ||
+      std::abs(setup.Evaluate("gain").siValue - 2.0) > 1e-10 ||
+      std::abs(setup.Evaluate("shared").In("m") - 4.0) > 1e-10 ||
+      std::abs(setup.Evaluate("combined").In("m") - 3.9144) > 1e-10) {
+    std::cerr << "setup script returned incorrect variables\n";
+    return 1;
+  }
+  bool setupFailureRejected = false;
+  try {
+    setup.SetSetupScript("var invalid = 1 m + 2 s;");
+  } catch (const std::exception&) {
+    setupFailureRejected = true;
+  }
+  if (!setupFailureRejected || std::abs(setup.Evaluate("base").In("m") - 2.0) > 1e-10) {
+    std::cerr << "failed setup changed the context\n";
+    return 1;
+  }
+  bool unsupportedSetupRejected = false;
+  try {
+    setup.SetSetupScript("var bad = [1, 2];");
+  } catch (const std::exception&) {
+    unsupportedSetupRejected = true;
+  }
+  if (!unsupportedSetupRejected || std::abs(setup.Evaluate("base").In("m") - 2.0) > 1e-10) {
+    std::cerr << "unsupported setup value was accepted or changed the context\n";
+    return 1;
+  }
+  for (const char* script : {"var count = 0; while (count < 1) { count += 1; }",
+                             "var value = eval(\"1\");", "var value = use(\"missing.chai\");",
+                             "load_module(\"missing\");", "var value = 1; value = 2;",
+                             "def calculate() { return 1; } var value = calculate();",
+                             "var value = (fun() { return 1; })();",
+                             "var value = quantity(1, \"${eval(1)}\");",
+                             "var value = get_objects();", "var value = 1 / 0; print(\"no\");",
+                             "var value = 1; var value = 2;", "var value;"}) {
+    bool rejected = false;
+    try {
+      setup.SetSetupScript(script);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    if (!rejected || std::abs(setup.Evaluate("base").In("m") - 2.0) > 1e-10) {
+      std::cerr << "unsafe setup was accepted or changed the context\n";
+      return 1;
+    }
+  }
+  bool reservedSetupRejected = false;
+  try {
+    setup.SetSetupScript("var m = 2;");
+  } catch (const std::exception&) {
+    reservedSetupRejected = true;
+  }
+  if (!reservedSetupRejected || std::abs(setup.Evaluate("base").In("m") - 2.0) > 1e-10) {
+    std::cerr << "reserved setup name was accepted or changed the context\n";
+    return 1;
+  }
+  for (const char* name : {"Cos", "Degrees"}) {
+    bool methodNameRejected = false;
+    try {
+      setup.SetVariable(name, Quantity::From(1.0, "m"));
+    } catch (const std::invalid_argument&) {
+      methodNameRejected = true;
+    }
+    if (!methodNameRejected) {
+      std::cerr << "geometry method name was accepted as a variable\n";
+      return 1;
+    }
+  }
+  setup.SetSetupScript("var replacement = 5 m;");
+  bool oldSetupRejected = false;
+  try {
+    setup.Evaluate("base");
+  } catch (const std::exception&) {
+    oldSetupRejected = true;
+  }
+  if (!oldSetupRejected || std::abs(setup.Evaluate("replacement").In("m") - 5.0) > 1e-10) {
+    std::cerr << "setup did not replace previous variables\n";
+    return 1;
+  }
+
   EvaluationContext context;
   auto length = Quantity::From(1.0, "m").dimension;
   auto mixedLength = context.Evaluate("2 * m + 3 * ft", length);
@@ -46,6 +142,63 @@ int main() {
   auto withVariable = context.Evaluate("2 * m + offset", length);
   if (std::abs(withVariable.In("m") - 2.9144) > 1e-10) {
     std::cerr << "registered variable returned the wrong value\n";
+    return 1;
+  }
+  context.SetVariable("offset", Quantity::From(1.0, "m"));
+  if (std::abs(context.Evaluate("offset", length).In("m") - 1.0) > 1e-10) {
+    std::cerr << "updated variable returned the wrong value\n";
+    return 1;
+  }
+  for (const char* expression : {"var temporary = 2; 2 * m", "offset = 5 * m",
+                                 "def temporaryFunction() { return 2 * m; } temporaryFunction()",
+                                 "eval(\"1 * m\")", "++offset", "set_global(2 * m, \"offset\")",
+                                 "(fun() { return 2 * m; })()", "1 * m; 2 * m",
+                                 "quantity(1, \"${set_global(2, 1)}\")"}) {
+    bool rejected = false;
+    try {
+      context.Evaluate(expression);
+    } catch (const std::exception&) {
+      rejected = true;
+    }
+    if (!rejected || std::abs(context.Evaluate("offset").In("m") - 1.0) > 1e-10) {
+      std::cerr << "state-changing evaluation was accepted or changed the context\n";
+      return 1;
+    }
+  }
+  if (!context.EvaluateBoolean("1 m == 100 cm") ||
+      !context.EvaluateBoolean("1 m < 2 m && 2 m > 1 m")) {
+    std::cerr << "read-only comparison was rejected\n";
+    return 1;
+  }
+
+  EvaluationContext first;
+  EvaluationContext second = first;
+  first.SetVariable("distance", Quantity::From(1.0, "m"));
+  second.SetVariable("distance", Quantity::From(2.0, "m"));
+  std::atomic<bool> concurrentFailed{false};
+  auto evaluateRepeatedly = [&](const EvaluationContext& current, double expected) {
+    try {
+      for (int iteration = 0; iteration < 5; ++iteration) {
+        if (std::abs(current.Evaluate("distance").In("m") - expected) > 1e-10) {
+          concurrentFailed = true;
+        }
+      }
+    } catch (const std::exception&) {
+      concurrentFailed = true;
+    }
+  };
+  std::thread firstThread(evaluateRepeatedly, std::cref(first), 1.0);
+  std::thread secondThread(evaluateRepeatedly, std::cref(second), 2.0);
+  firstThread.join();
+  secondThread.join();
+  if (concurrentFailed) {
+    std::cerr << "concurrent copied contexts returned the wrong value\n";
+    return 1;
+  }
+  EvaluationContext moved = std::move(first);
+  if (std::abs(moved.Evaluate("distance").In("m") - 1.0) > 1e-10 ||
+      std::abs(first.Evaluate("1 m").In("m") - 1.0) > 1e-10) {
+    std::cerr << "moved context or moved-from context returned the wrong value\n";
     return 1;
   }
 
