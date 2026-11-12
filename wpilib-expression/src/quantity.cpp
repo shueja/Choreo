@@ -10,7 +10,7 @@ units::precise_measurement From(double value, const units::precise_unit& unit) {
 std::expected<double, std::string> In(const units::precise_measurement& measurement,
                                       const units::precise_unit& unit) {
   if (measurement.units().base_units() != unit.base_units()) {
-    return std::unexpected("requested unit has incompatible dimension");
+    return std::unexpected(std::string{"requested unit has incompatible dimension"});
   }
   return measurement.value_as(unit);
 }
