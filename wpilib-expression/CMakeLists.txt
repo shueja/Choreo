@@ -99,7 +99,7 @@ target_include_directories(
 if(MSVC AND DEFINED ENV{INCLUDE})
     target_include_directories(wpilib_expression SYSTEM PRIVATE $ENV{INCLUDE})
 endif()
-target_link_libraries(wpilib_expression PUBLIC wpimath::wpimath units)
+target_link_libraries(wpilib_expression PUBLIC wpimath::wpimath units::units)
 set_target_properties(wpilib_expression PROPERTIES EXPORT_NAME expression)
 
 option(WPILIB_EXPRESSION_BUILD_TESTS "Build expression library tests" ON)
