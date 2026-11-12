@@ -319,9 +319,6 @@ Result EvaluateResult(Cache& engineCache, const detail::Variables& variables,
       throw SyntaxError(error);
     }
   }();
-  if constexpr (std::is_same_v<Result, Quantity>) {
-    detail::RequireFinite(result);
-  }
   return result;
 }
 
@@ -396,7 +393,6 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
       save(std::move(result));
     } else if (type.bare_equal(chaiscript::user_type<Quantity>())) {
       auto quantity = chaiscript::boxed_cast<Quantity>(value);
-      detail::RequireFinite(quantity);
       save(quantity);
     } else if (type.bare_equal(chaiscript::user_type<Pose2d>())) {
       save(chaiscript::boxed_cast<Pose2d>(value));
@@ -426,7 +422,6 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
       save(chaiscript::boxed_cast<Ellipse2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<double>())) {
       auto quantity = Quantity{chaiscript::boxed_cast<double>(value), {}};
-      detail::RequireFinite(quantity);
       save(quantity);
     } else if (type.bare_equal(chaiscript::user_type<int>())) {
       save(Quantity{static_cast<double>(chaiscript::boxed_cast<int>(value)), {}});
@@ -439,7 +434,6 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
       } catch (const chaiscript::exception::bad_boxed_cast&) {
         throw std::invalid_argument("unsupported setup variable type: " + name);
       }
-      detail::RequireFinite(quantity);
       save(quantity);
     }
   };

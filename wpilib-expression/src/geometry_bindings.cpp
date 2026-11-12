@@ -63,7 +63,7 @@ double GeometryScalar(const Quantity& value) {
   if (value.dimension != Dimension{}) {
     throw std::invalid_argument("geometry scalar must be dimensionless");
   }
-  return GeometryScalar(value.siValue);
+  return GeometryScalar(value.measurement().value());
 }
 
 double GeometryDivisor(double value) {

@@ -9,7 +9,7 @@
 namespace wpilib::expression::detail {
 
 struct Unit {
-  double scale;
+  units::precise_unit unit;
   Dimension dimension;
 };
 
@@ -18,6 +18,6 @@ Dimension Combine(const Dimension& left, const Dimension& right, int sign);
 Dimension ScaleDimension(const Dimension& dimension, int exponent);
 const std::map<std::string, Unit>& UnitRegistry();
 Unit ParseUnit(std::string_view expression);
-void RequireFinite(const Quantity& quantity);
+Dimension DimensionFor(const units::precise_unit& unit);
 
 }  // namespace wpilib::expression::detail

@@ -7,6 +7,7 @@
 #include <type_traits>
 
 #include <wpi/units/base.hpp>
+#include <units/units.hpp>
 
 namespace wpilib::expression {
 
@@ -45,6 +46,7 @@ class Quantity {
 
   static Quantity From(double value, std::string_view unit);
   double In(std::string_view unit) const;
+  const units::precise_measurement& measurement() const { return measurement_; }
 
   template <typename UnitValue>
   std::optional<UnitValue> TryAs() const {
@@ -79,6 +81,14 @@ class Quantity {
     result = *converted;
     return true;
   }
+
+  Quantity() = default;
+  Quantity(double value, Dimension dimension);
+
+ private:
+  friend Quantity MakeQuantity(const units::precise_measurement& measurement);
+  Quantity(units::precise_measurement measurement, Dimension dimension);
+  units::precise_measurement measurement_{};
 };
 
 }  // namespace wpilib::expression

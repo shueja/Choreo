@@ -56,6 +56,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(chaiscript_extras)
 set(CHAISCRIPT_EXTRAS_INCLUDE_DIR "${chaiscript_extras_SOURCE_DIR}/include")
+FetchContent_Declare(
+    llnl_units
+    GIT_REPOSITORY https://github.com/LLNL/units.git
+    GIT_TAG v0.13.1
+    SYSTEM
+)
+FetchContent_MakeAvailable(llnl_units)
 
 if(TARGET wpimath AND NOT TARGET wpimath::wpimath)
     add_library(wpimath::wpimath ALIAS wpimath)
@@ -100,7 +107,7 @@ target_include_directories(
 if(MSVC AND DEFINED ENV{INCLUDE})
     target_include_directories(wpilib_expression SYSTEM PRIVATE $ENV{INCLUDE})
 endif()
-target_link_libraries(wpilib_expression PUBLIC wpimath::wpimath)
+target_link_libraries(wpilib_expression PUBLIC wpimath::wpimath $<BUILD_INTERFACE:units>)
 set_target_properties(wpilib_expression PROPERTIES EXPORT_NAME expression)
 
 option(WPILIB_EXPRESSION_BUILD_TESTS "Build expression library tests" ON)
