@@ -63,7 +63,7 @@ double GeometryScalar(const units::precise_measurement& value) {
   if (value.units().base_units() != units::precise::one.base_units()) {
     throw std::invalid_argument("geometry scalar must be dimensionless");
   }
-  return GeometryScalar(SiValue(value));
+  return GeometryScalar(wpilib::expression::detail::SiValue(value));
 }
 
 double GeometryDivisor(double value) {

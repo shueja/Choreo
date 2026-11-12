@@ -9,6 +9,23 @@
 namespace wpilib::expression::detail {
 namespace {
 
+template <auto Function, bool Inverse>
+units::precise_measurement BindTrig(const units::precise_measurement& value) {
+  const auto dimension = value.units().base_units();
+  if constexpr (Inverse) {
+    if (dimension != units::precise::one.base_units()) {
+      throw std::invalid_argument(
+          "inverse trigonometric functions require a dimensionless value");
+    }
+  } else if (dimension != units::precise::rad.base_units() &&
+             dimension != units::precise::one.base_units()) {
+    throw std::invalid_argument(
+        "trigonometric functions require an angle or dimensionless value");
+  }
+  const auto resultUnit = Inverse ? units::precise::rad : units::precise::one;
+  return units::precise_measurement{Function(SiValue(value)), resultUnit};
+}
+
 units::precise_measurement Power(const units::precise_measurement& value, double exponent) {
   if (!std::isfinite(exponent) || std::trunc(exponent) != exponent ||
       std::abs(exponent) > 16.0) {
@@ -18,84 +35,35 @@ units::precise_measurement Power(const units::precise_measurement& value, double
   return pow(value, integerExponent);
 }
 
-units::precise_measurement TrigInput(const units::precise_measurement& value, double (*function)(double)) {
-  auto dimension = value.units().base_units();
-  if (dimension != units::precise::rad.base_units() &&
-      dimension != units::precise::one.base_units()) {
-    throw std::invalid_argument(
-        "trigonometric functions require an angle or dimensionless value");
-  }
-  return MakeMeasurement(function(SiValue(value)), units::precise::one);
-}
-
-units::precise_measurement InverseTrigInput(const units::precise_measurement& value, double (*function)(double)) {
-  if (value.units().base_units() != units::precise::one.base_units()) {
-    throw std::invalid_argument(
-        "inverse trigonometric functions require a dimensionless value");
-  }
-  return MakeMeasurement(function(SiValue(value)), units::precise::rad);
-}
-
 }  // namespace
 
 void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
+#define BIND_MEASUREMENT_OPERATOR(name, operation) \
+  engine.add(chaiscript::fun([](const units::precise_measurement& left, \
+                                const units::precise_measurement& right) { \
+    return left operation right; \
+  }), name)
   engine.add(chaiscript::user_type<units::precise_measurement>(), "precise_measurement");
   engine.add(chaiscript::fun([](double value, const std::string& unit) {
     return From(value, unit);
   }), "quantity");
-  engine.add(chaiscript::fun([](const units::precise_measurement& left,
-                                const units::precise_measurement& right) {
-    return left + right;
-  }), "+");
-  engine.add(chaiscript::fun([](const units::precise_measurement& left,
-                                const units::precise_measurement& right) {
-    return left - right;
-  }), "-");
-  engine.add(chaiscript::fun([](const units::precise_measurement& left,
-                                const units::precise_measurement& right) {
-    return left * right;
-  }), "*");
-  engine.add(chaiscript::fun([](const units::precise_measurement& left,
-                                const units::precise_measurement& right) {
-    return left / right;
-  }), "/");
+  BIND_MEASUREMENT_OPERATOR("+", +);
+  BIND_MEASUREMENT_OPERATOR("-", -);
+  BIND_MEASUREMENT_OPERATOR("*", *);
+  BIND_MEASUREMENT_OPERATOR("/", /);
   engine.add(chaiscript::fun(&Power), "^");
-  engine.add(chaiscript::fun([](const units::precise_measurement& left, const units::precise_measurement& right) {
-    return left == right;
-  }), "==");
-  engine.add(chaiscript::fun([](const units::precise_measurement& left, const units::precise_measurement& right) {
-    return left != right;
-  }), "!=");
-  engine.add(chaiscript::fun([](const units::precise_measurement& left, const units::precise_measurement& right) {
-    return left < right;
-  }), "<");
-  engine.add(chaiscript::fun([](const units::precise_measurement& left, const units::precise_measurement& right) {
-    return left <= right;
-  }), "<=");
-  engine.add(chaiscript::fun([](const units::precise_measurement& left, const units::precise_measurement& right) {
-    return left > right;
-  }), ">");
-  engine.add(chaiscript::fun([](const units::precise_measurement& left, const units::precise_measurement& right) {
-    return left >= right;
-  }), ">=");
-  engine.add(chaiscript::fun([](const units::precise_measurement& value) {
-    return TrigInput(value, static_cast<double (*)(double)>(std::sin));
-  }), "sin");
-  engine.add(chaiscript::fun([](const units::precise_measurement& value) {
-    return TrigInput(value, static_cast<double (*)(double)>(std::cos));
-  }), "cos");
-  engine.add(chaiscript::fun([](const units::precise_measurement& value) {
-    return TrigInput(value, static_cast<double (*)(double)>(std::tan));
-  }), "tan");
-  engine.add(chaiscript::fun([](const units::precise_measurement& value) {
-    return InverseTrigInput(value, static_cast<double (*)(double)>(std::asin));
-  }), "asin");
-  engine.add(chaiscript::fun([](const units::precise_measurement& value) {
-    return InverseTrigInput(value, static_cast<double (*)(double)>(std::acos));
-  }), "acos");
-  engine.add(chaiscript::fun([](const units::precise_measurement& value) {
-    return InverseTrigInput(value, static_cast<double (*)(double)>(std::atan));
-  }), "atan");
+  BIND_MEASUREMENT_OPERATOR("==", ==);
+  BIND_MEASUREMENT_OPERATOR("!=", !=);
+  BIND_MEASUREMENT_OPERATOR("<", <);
+  BIND_MEASUREMENT_OPERATOR("<=", <=);
+  BIND_MEASUREMENT_OPERATOR(">", >);
+  BIND_MEASUREMENT_OPERATOR(">=", >=);
+  engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::sin), false>), "sin");
+  engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::cos), false>), "cos");
+  engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::tan), false>), "tan");
+  engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::asin), true>), "asin");
+  engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::acos), true>), "acos");
+  engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::atan), true>), "atan");
   engine.add(chaiscript::fun([](double value, const units::precise_measurement& quantity) {
     return quantity * value;
   }), "*");
@@ -108,6 +76,7 @@ void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
     }
     return quantity / value;
   }), "/");
+#undef BIND_MEASUREMENT_OPERATOR
 }
 
 }  // namespace wpilib::expression::detail

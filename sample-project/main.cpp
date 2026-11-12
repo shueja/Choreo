@@ -11,7 +11,6 @@
 using wpilib::expression::EvaluationContext;
 using wpilib::expression::From;
 using wpilib::expression::In;
-using wpilib::expression::SiValue;
 
 namespace {
 
@@ -77,7 +76,8 @@ int RunRepl(const char* setupPath) {
     }
     try {
       auto result = context.Evaluate(source);
-      std::cout << SiValue(result) << " " << units::to_string(result.units()) << "\n";
+      std::cout << result.value() * result.units().multiplier() << " "
+                << units::to_string(result.units()) << "\n";
     } catch (const std::exception& error) {
       std::cerr << error.what() << '\n';
     }

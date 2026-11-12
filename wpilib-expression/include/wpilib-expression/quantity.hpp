@@ -11,6 +11,10 @@ namespace wpilib::expression {
 
 namespace detail {
 
+inline double SiValue(const units::precise_measurement& measurement) {
+  return measurement.value() * measurement.units().multiplier();
+}
+
 template <typename Ratio>
 constexpr bool MatchesExponent(int exponent) {
   return Ratio::den == 1 && Ratio::num == exponent;
@@ -34,9 +38,6 @@ constexpr bool MatchesDimension(const units::precise_unit& dimension) {
 
 units::precise_measurement From(double value, std::string_view unit);
 double In(const units::precise_measurement& measurement, std::string_view unit);
-double SiValue(const units::precise_measurement& measurement);
-units::precise_measurement MakeMeasurement(double value, const units::precise_unit& unit);
-
 template <typename UnitValue>
 std::optional<UnitValue> TryAs(const units::precise_measurement& measurement) {
   static_assert(wpi::units::traits::is_unit_t<UnitValue>::value,
@@ -51,7 +52,7 @@ std::optional<UnitValue> TryAs(const units::precise_measurement& measurement) {
     if (!detail::MatchesDimension<BaseUnit>(measurement.units())) {
       return std::nullopt;
     }
-    return UnitValue{wpi::units::convert<SiUnit, UnitTag>(SiValue(measurement))};
+    return UnitValue{wpi::units::convert<SiUnit, UnitTag>(detail::SiValue(measurement))};
   }
 }
 

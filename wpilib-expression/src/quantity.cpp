@@ -19,12 +19,4 @@ double In(const units::precise_measurement& measurement, std::string_view unit) 
   return measurement.value_as(parsed);
 }
 
-double SiValue(const units::precise_measurement& measurement) {
-  return measurement.value() * measurement.units().multiplier();
-}
-
-units::precise_measurement MakeMeasurement(double value, const units::precise_unit& unit) {
-  return units::precise_measurement{value, unit};
-}
-
 }  // namespace wpilib::expression

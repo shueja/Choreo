@@ -17,8 +17,6 @@
 using wpilib::expression::EvaluationContext;
 using wpilib::expression::From;
 using wpilib::expression::In;
-using wpilib::expression::MakeMeasurement;
-using wpilib::expression::SiValue;
 using wpilib::expression::TryAs;
 using wpi::math::Pose2d;
 
@@ -28,7 +26,7 @@ bool EvaluatesTo(const EvaluationContext& context, std::string_view expression,
                  double expected, std::string_view unit, double tolerance = 1e-10) {
   auto dimension = unit.empty() ? units::precise::one : From(1.0, unit).units();
   auto result = context.Evaluate(expression, dimension);
-  auto value = unit.empty() ? SiValue(result) : In(result, unit);
+  auto value = unit.empty() ? result.value() * result.units().multiplier() : In(result, unit);
   if (std::abs(value - expected) <= tolerance) {
     return true;
   }
@@ -546,7 +544,7 @@ int TestGeometryConstructors() {
     return 1;
   }
   context.SetVariable("nonfiniteLength",
-                      MakeMeasurement(std::numeric_limits<double>::infinity(), units::precise::m));
+                      units::precise_measurement{std::numeric_limits<double>::infinity(), units::precise::m});
   context.SetVariable("nonfinitePose",
                       Pose2d{wpi::units::meter_t{std::numeric_limits<double>::infinity()},
                              wpi::units::meter_t{0.0}, wpi::math::Rotation2d{}});
@@ -576,7 +574,7 @@ int TestGeometryOperations() {
   auto pose = context.EvaluatePose2d("Pose2d(3 m, 4 m, 90 deg)");
   context.SetVariable("pose", pose);
   context.SetVariable("nonfiniteLength",
-                      MakeMeasurement(std::numeric_limits<double>::infinity(), units::precise::m));
+                      units::precise_measurement{std::numeric_limits<double>::infinity(), units::precise::m});
   auto origin = context.EvaluatePose2d("Pose2d(0 m, 0 m, 0 deg)");
   context.SetVariable("origin", origin);
   auto rotation = context.EvaluateRotation2d("Rotation2d(90 deg)");
@@ -625,8 +623,8 @@ int TestGeometryOperations() {
     std::cerr << "undefined translation angle was accepted\n";
     return 1;
   }
-  context.SetVariable("factor", MakeMeasurement(2.0, units::precise::one));
-  context.SetVariable("nonfiniteFactor", MakeMeasurement(std::numeric_limits<double>::infinity(), units::precise::one));
+  context.SetVariable("factor", units::precise_measurement{2.0, units::precise::one});
+  context.SetVariable("nonfiniteFactor", units::precise_measurement{std::numeric_limits<double>::infinity(), units::precise::one});
   if (!EvaluatesTo(context, "(translation + Translation2d(1 m, 2 m)).X()", 4.0, "m") ||
       !EvaluatesTo(context, "(translation - Translation2d(1 m, 2 m)).Y()", 2.0, "m") ||
       !EvaluatesTo(context, "(-translation).X()", -(3.0), "m") ||
