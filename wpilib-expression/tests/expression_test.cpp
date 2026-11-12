@@ -501,6 +501,18 @@ int TestMeasurementMath() {
     std::println(stderr, "comparison across incompatible dimensions was accepted");
     return 1;
   }
+  for (const char* expression : {"1 m / 0 m", "0 m / 0 m"}) {
+    bool divisionByZeroRejected = false;
+    try {
+      context.Evaluate(expression);
+    } catch (const std::domain_error&) {
+      divisionByZeroRejected = true;
+    }
+    if (!divisionByZeroRejected) {
+      std::println(stderr, "measurement division by zero was accepted");
+      return 1;
+    }
+  }
   return 0;
 }
 

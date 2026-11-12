@@ -35,6 +35,15 @@ units::precise_measurement Power(const units::precise_measurement& value, double
   return pow(value, integerExponent);
 }
 
+units::precise_measurement DivideMeasurements(
+    const units::precise_measurement& numerator,
+    const units::precise_measurement& denominator) {
+  if (SiValue(denominator) == 0.0) {
+    throw std::domain_error("division by zero");
+  }
+  return numerator / denominator;
+}
+
 }  // namespace
 
 void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
@@ -54,7 +63,7 @@ void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
   BIND_MEASUREMENT_OPERATOR("+", +);
   BIND_MEASUREMENT_OPERATOR("-", -);
   BIND_MEASUREMENT_OPERATOR("*", *);
-  BIND_MEASUREMENT_OPERATOR("/", /);
+  engine.add(chaiscript::fun(&DivideMeasurements), "/");
   engine.add(chaiscript::fun(&Power), "^");
   BIND_MEASUREMENT_OPERATOR("==", ==);
   BIND_MEASUREMENT_OPERATOR("!=", !=);

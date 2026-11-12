@@ -77,7 +77,7 @@ bool converted = wpilib::expression::TryAs(context.Evaluate("90 deg"), angle);
 
 The conversion checks the full WPILib base-dimension signature. Non-linear WPI scales, unsupported runtime dimensions, and dimension mismatches are not converted.
 
-`In` returns `std::expected<double, Error>`. The error variant distinguishes incompatible dimensions from malformed or unknown unit expressions; use `ErrorMessage` to format an error.
+`In` returns `std::expected<double, Error>`; an incompatible dimension returns `IncompatibleDimensionError`. Use `ErrorMessage` to format an error.
 
 ## Expression Support
 
