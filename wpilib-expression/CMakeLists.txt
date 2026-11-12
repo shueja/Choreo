@@ -98,7 +98,22 @@ if(WPILIB_EXPRESSION_BUILD_TESTS)
     enable_testing()
     add_executable(wpilib_expression_test tests/expression_test.cpp)
     target_link_libraries(wpilib_expression_test PRIVATE wpilib::expression)
-    add_test(NAME wpilib_expression_test COMMAND wpilib_expression_test)
+    foreach(test_case IN ITEMS
+        namespaces
+        setup
+        arithmetic_and_variables
+        read_only_expressions
+        error_messages
+        context_copies
+        unit_expressions
+        identifiers
+        quantity_math
+        geometry_constructors
+        geometry_operations
+        shapes
+    )
+        add_test(NAME wpilib_expression.${test_case} COMMAND wpilib_expression_test ${test_case})
+    endforeach()
 endif()
 
 install(

@@ -4,7 +4,9 @@
 #include "expression_syntax.hpp"
 #include "units.hpp"
 
+#include <cctype>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -38,8 +40,54 @@ struct CachedEngine {
   }
 };
 
+using NamespacePaths = std::set<std::string>;
+
+std::invalid_argument SyntaxError(const chaiscript::exception::eval_error& error) {
+  constexpr std::string_view dispatchPrefix = "Error with function dispatch for function '";
+  std::string reason = error.reason;
+  if (reason.starts_with(dispatchPrefix)) {
+    auto end = reason.find('\'', dispatchPrefix.size());
+    if (end != std::string::npos) {
+      reason = "invalid arguments for '" + reason.substr(dispatchPrefix.size(),
+                                                          end - dispatchPrefix.size()) + "'";
+    }
+  }
+  return std::invalid_argument("Syntax error: " + reason);
+}
+
+bool GetMemberPath(const chaiscript::AST_Node& node, std::string& path) {
+  using Type = chaiscript::AST_Node_Type;
+  // Recognize only identifiers and dotted member chains, not method calls or indexing.
+  if (node.identifier == Type::Id) {
+    path = node.text;
+    return true;
+  }
+  auto children = node.get_children();
+  if (node.identifier != Type::Dot_Access || children.size() != 2 ||
+      children[1].get().identifier != Type::Id || !GetMemberPath(children[0].get(), path)) {
+    return false;
+  }
+  path += "." + children[1].get().text;
+  return true;
+}
+
+void CollectNamespacePaths(const detail::Variables& variables, const std::string& prefix,
+                           NamespacePaths& paths) {
+  // Record namespace roots and their members from the frozen context snapshot.
+  for (const auto& [name, value] : variables) {
+    auto path = prefix.empty() ? name : prefix + "." + name;
+    if (!prefix.empty() || std::holds_alternative<detail::NamespacePtr>(value)) {
+      paths.insert(path);
+    }
+    if (const auto* nested = std::get_if<detail::NamespacePtr>(&value)) {
+      CollectNamespacePaths((*nested)->members, path, paths);
+    }
+  }
+}
+
 void ValidateExpression(const chaiscript::AST_Node& node,
-                        const detail::Variables& variables) {
+                        const detail::Variables& variables, const NamespacePaths& namespacePaths) {
+  // Calls and operators are restricted to the library's read-only expression surface.
   static const std::set<std::string_view> safeFunctions{
       "quantity", "sin", "cos", "tan", "asin", "acos", "atan", "Pose2d",
       "Translation2d", "Rotation2d", "Transform2d", "Twist2d", "Rectangle2d", "Ellipse2d",
@@ -53,19 +101,33 @@ void ValidateExpression(const chaiscript::AST_Node& node,
       "+", "-", "*", "/", "^", "==", "!=", "<", "<=", ">", ">=", "!"};
   using Type = chaiscript::AST_Node_Type;
   auto children = node.get_children();
+  std::string path;
+  // Resolve namespace member chains against declared paths; method calls are checked below.
+  if (node.identifier == Type::Dot_Access && GetMemberPath(node, path)) {
+    auto separator = path.find('.');
+    if (separator != std::string::npos && namespacePaths.contains(path.substr(0, separator))) {
+      if (!namespacePaths.contains(path)) {
+        throw std::invalid_argument("unknown namespace member: " + path);
+      }
+      return;
+    }
+  }
   switch (node.identifier) {
     case Type::File:
+      // Multiple top-level statements would permit scripts instead of one expression.
       if (children.size() != 1) {
         throw std::invalid_argument("expected a single read-only expression");
       }
       break;
     case Type::Id:
+      // Bare identifiers must be context values, units, allowed functions, or booleans.
       if (!variables.contains(node.text) && !detail::UnitRegistry().contains(node.text) &&
           !safeFunctions.contains(node.text) && node.text != "true" && node.text != "false") {
         throw std::invalid_argument("unknown expression identifier: " + node.text);
       }
       break;
     case Type::Fun_Call:
+      // Reject indirect calls and built-ins such as eval, use, and namespace.
       if (children.empty() || children.front().get().identifier != Type::Id ||
           !safeFunctions.contains(children.front().get().text)) {
         throw std::invalid_argument("function is not permitted in an expression");
@@ -73,6 +135,7 @@ void ValidateExpression(const chaiscript::AST_Node& node,
       break;
     case Type::Binary:
     case Type::Prefix:
+      // Exclude mutation operators such as increment and compound assignment.
       if (!safeOperators.contains(node.text)) {
         throw std::invalid_argument("operator is not permitted in an expression");
       }
@@ -84,29 +147,119 @@ void ValidateExpression(const chaiscript::AST_Node& node,
     case Type::Inline_Array:
     case Type::Logical_And:
     case Type::Logical_Or:
+      // These expression nodes are allowed only after all of their children are validated.
       break;
     default:
+      // Reject assignments, declarations, control flow, lambdas, and other script nodes.
       throw std::invalid_argument("only read-only expressions are permitted");
   }
   for (const auto& child : children) {
-    ValidateExpression(child.get(), variables);
+    ValidateExpression(child.get(), variables, namespacePaths);
   }
 }
 
 void ValidateSetup(const chaiscript::AST_Node& root,
                    const std::map<std::string, chaiscript::Boxed_Value>& initialObjects) {
   using Type = chaiscript::AST_Node_Type;
+  // Setup is a file of declarations, not an arbitrary executable AST.
   if (root.identifier != Type::File) {
     throw std::invalid_argument("expected setup variable declarations");
   }
   detail::Variables variables;
+  NamespacePaths namespacePaths;
+  NamespacePaths namespaces;
+  auto declareNamespace = [&](std::string_view qualifiedName) {
+    // Validate each component and prevent namespaces from replacing existing values.
+    std::string path;
+    std::size_t start = 0;
+    while (start < qualifiedName.size()) {
+      auto end = qualifiedName.find("::", start);
+      auto part = qualifiedName.substr(start, end == std::string_view::npos ? end : end - start);
+      if (part.empty() || !(std::isalpha(static_cast<unsigned char>(part.front())) || part.front() == '_')) {
+        throw std::invalid_argument("invalid namespace name");
+      }
+      for (char character : part) {
+        if (!(std::isalnum(static_cast<unsigned char>(character)) || character == '_')) {
+          throw std::invalid_argument("invalid namespace name");
+        }
+      }
+      path = path.empty() ? std::string(part) : path + "." + std::string(part);
+      if (namespacePaths.contains(path) && !namespaces.contains(path)) {
+        throw std::invalid_argument("namespace conflicts with a value: " + path);
+      }
+      if (path.find('.') == std::string::npos && !namespaces.contains(path)) {
+        // A new namespace root must not collide with units, built-ins, or prior variables.
+        if (variables.contains(path) || initialObjects.contains(path)) {
+          throw std::invalid_argument("invalid or duplicate namespace: " + path);
+        }
+        detail::StoreVariable(variables, path, std::make_shared<detail::NamespaceValues>());
+      }
+      namespacePaths.insert(path);
+      namespaces.insert(path);
+      if (end == std::string_view::npos) {
+        return path;
+      }
+      start = end + 2;
+    }
+    throw std::invalid_argument("invalid namespace name");
+  };
   for (const auto& statement : root.get_children()) {
     const auto& node = statement.get();
     auto children = node.get_children();
+    // Permit only a literal name in the legacy namespace("name") declaration.
+    if (node.identifier == Type::Fun_Call && children.size() == 2 &&
+        children[0].get().identifier == Type::Id && children[0].get().text == "namespace") {
+      auto arguments = children[1].get().get_children();
+      if (arguments.size() != 1 || arguments[0].get().identifier != Type::Constant) {
+        throw std::invalid_argument("namespace requires a literal name");
+      }
+      declareNamespace(arguments[0].get().text);
+      continue;
+    }
+    // Namespace blocks may contain initialized variables, but not functions or control flow.
+    if (node.identifier == Type::Namespace_Block && children.size() == 2 &&
+        children[0].get().identifier == Type::Id) {
+      auto path = declareNamespace(children[0].get().text);
+      const auto& body = children[1].get();
+      if (body.identifier != Type::Block && body.identifier != Type::Scopeless_Block) {
+        throw std::invalid_argument("invalid namespace block");
+      }
+      for (const auto& statement : body.get_children()) {
+        const auto& declaration = statement.get();
+        auto parts = declaration.get_children();
+        if ((declaration.identifier != Type::Assign_Decl &&
+             declaration.identifier != Type::Const_Assign_Decl) ||
+            parts.size() != 2 || parts[0].get().identifier != Type::Id) {
+          throw std::invalid_argument("namespace permits only initialized variable declarations");
+        }
+        auto member = path + "." + parts[0].get().text;
+        if (namespaces.contains(member)) {
+          throw std::invalid_argument("namespace conflicts with a value: " + member);
+        }
+        // Initializers may refer only to values declared earlier in the setup.
+        ValidateExpression(parts[1].get(), variables, namespacePaths);
+        namespacePaths.insert(member);
+      }
+      continue;
+    }
     if (children.size() != 2) {
       throw std::invalid_argument("setup permits only initialized variable declarations");
     }
     const chaiscript::AST_Node* name = &children[0].get();
+    std::string memberPath;
+    // Legacy dotted assignments must target a declared namespace, not a value or its fields.
+    if (node.identifier == Type::Equation && node.text == "=" &&
+        name->identifier == Type::Dot_Access && GetMemberPath(*name, memberPath)) {
+      auto separator = memberPath.rfind('.');
+      if (separator == std::string::npos || !namespaces.contains(memberPath.substr(0, separator)) ||
+          namespaces.contains(memberPath)) {
+        throw std::invalid_argument("invalid namespace member: " + memberPath);
+      }
+      ValidateExpression(children[1].get(), variables, namespacePaths);
+      namespacePaths.insert(memberPath);
+      continue;
+    }
+    // Top-level declarations include initialized locals, constants, and global variables.
     if (node.identifier == Type::Equation && node.text == "=" &&
         name->identifier == Type::Global_Decl) {
       auto globalChildren = name->get_children();
@@ -122,7 +275,7 @@ void ValidateSetup(const chaiscript::AST_Node& root,
         initialObjects.contains(name->text)) {
       throw std::invalid_argument("invalid or duplicate setup variable: " + name->text);
     }
-    ValidateExpression(children[1].get(), variables);
+    ValidateExpression(children[1].get(), variables, namespacePaths);
     detail::StoreVariable(variables, name->text, Quantity{});
   }
 }
@@ -136,12 +289,25 @@ Result EvaluateResult(Cache& engineCache, const detail::Variables& variables,
   }
   auto& cache = *engineCache.cache;
   auto expanded = detail::ExpandUnitSuffixes(source);
-  auto parsed = cache.engine.parse(expanded);
-  ValidateExpression(*parsed, variables);
+  chaiscript::AST_NodePtr parsed;
+  try {
+    parsed = cache.engine.parse(expanded);
+  } catch (const chaiscript::exception::eval_error& error) {
+    throw SyntaxError(error);
+  }
+  NamespacePaths namespacePaths;
+  CollectNamespacePaths(variables, "", namespacePaths);
+  ValidateExpression(*parsed, variables, namespacePaths);
   cache.engine.set_state(cache.initialState);
   cache.engine.set_locals(cache.initialLocals);
   detail::ConfigureGlobals(cache.engine, variables);
-  auto result = cache.engine.template eval<Result>(expanded);
+  auto result = [&]() -> Result {
+    try {
+      return cache.engine.template eval<Result>(expanded);
+    } catch (const chaiscript::exception::eval_error& error) {
+      throw SyntaxError(error);
+    }
+  }();
   if constexpr (std::is_same_v<Result, Quantity>) {
     detail::RequireFinite(result);
   }
@@ -181,41 +347,68 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
   auto initialObjects = engine.get_scripting_objects();
   auto initialLocals = engine.get_locals();
   auto expanded = detail::ExpandUnitSuffixes(source);
-  auto parsed = engine.parse(expanded);
+  chaiscript::AST_NodePtr parsed;
+  try {
+    parsed = engine.parse(expanded);
+  } catch (const chaiscript::exception::eval_error& error) {
+    throw SyntaxError(error);
+  }
   ValidateSetup(*parsed, initialObjects);
-  engine.eval(expanded);
+  try {
+    engine.eval(expanded);
+  } catch (const chaiscript::exception::eval_error& error) {
+    throw SyntaxError(error);
+  }
 
   auto replacement = std::make_shared<Impl>();
-  auto store = [&](const std::string& name, const chaiscript::Boxed_Value& value) {
+  std::set<const chaiscript::Namespace*> activeNamespaces;
+  std::function<void(detail::Variables&, const std::string&, const chaiscript::Boxed_Value&)> store;
+  store = [&](detail::Variables& destination, const std::string& name, const chaiscript::Boxed_Value& value) {
+    auto save = [&](detail::VariableValue variable) {
+      if (&destination == &replacement->variables) {
+        detail::StoreVariable(destination, name, std::move(variable));
+      } else {
+        destination.insert_or_assign(name, std::move(variable));
+      }
+    };
     auto type = value.get_type_info();
-    if (type.bare_equal(chaiscript::user_type<Quantity>())) {
+    if (type.bare_equal(chaiscript::user_type<chaiscript::Namespace>())) {
+      const auto& object = chaiscript::boxed_cast<const chaiscript::Namespace&>(value);
+      if (!activeNamespaces.insert(&object).second) {
+        throw std::invalid_argument("cyclic namespace: " + name);
+      }
+      auto result = std::make_shared<detail::NamespaceValues>();
+      for (const auto& [memberName, member] : object.get_attrs()) {
+        store(result->members, memberName, member);
+      }
+      activeNamespaces.erase(&object);
+      save(std::move(result));
+    } else if (type.bare_equal(chaiscript::user_type<Quantity>())) {
       auto quantity = chaiscript::boxed_cast<Quantity>(value);
       detail::RequireFinite(quantity);
-      detail::StoreVariable(replacement->variables, name, quantity);
+      save(quantity);
     } else if (type.bare_equal(chaiscript::user_type<Pose2d>())) {
-      detail::StoreVariable(replacement->variables, name, chaiscript::boxed_cast<Pose2d>(value));
+      save(chaiscript::boxed_cast<Pose2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<Translation2d>())) {
-      detail::StoreVariable(replacement->variables, name, chaiscript::boxed_cast<Translation2d>(value));
+      save(chaiscript::boxed_cast<Translation2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<Rotation2d>())) {
-      detail::StoreVariable(replacement->variables, name, chaiscript::boxed_cast<Rotation2d>(value));
+      save(chaiscript::boxed_cast<Rotation2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<Transform2d>())) {
-      detail::StoreVariable(replacement->variables, name, chaiscript::boxed_cast<Transform2d>(value));
+      save(chaiscript::boxed_cast<Transform2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<Twist2d>())) {
-      detail::StoreVariable(replacement->variables, name, chaiscript::boxed_cast<Twist2d>(value));
+      save(chaiscript::boxed_cast<Twist2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<Rectangle2d>())) {
-      detail::StoreVariable(replacement->variables, name, chaiscript::boxed_cast<Rectangle2d>(value));
+      save(chaiscript::boxed_cast<Rectangle2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<Ellipse2d>())) {
-      detail::StoreVariable(replacement->variables, name, chaiscript::boxed_cast<Ellipse2d>(value));
+      save(chaiscript::boxed_cast<Ellipse2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<double>())) {
       auto quantity = Quantity{chaiscript::boxed_cast<double>(value), {}};
       detail::RequireFinite(quantity);
-      detail::StoreVariable(replacement->variables, name, quantity);
+      save(quantity);
     } else if (type.bare_equal(chaiscript::user_type<int>())) {
-      detail::StoreVariable(replacement->variables, name,
-                            Quantity{static_cast<double>(chaiscript::boxed_cast<int>(value)), {}});
+      save(Quantity{static_cast<double>(chaiscript::boxed_cast<int>(value)), {}});
     } else if (type.bare_equal(chaiscript::user_type<std::int64_t>())) {
-      detail::StoreVariable(replacement->variables, name,
-                            Quantity{static_cast<double>(chaiscript::boxed_cast<std::int64_t>(value)), {}});
+      save(Quantity{static_cast<double>(chaiscript::boxed_cast<std::int64_t>(value)), {}});
     } else {
       Quantity quantity;
       try {
@@ -224,17 +417,17 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
         throw std::invalid_argument("unsupported setup variable type: " + name);
       }
       detail::RequireFinite(quantity);
-      detail::StoreVariable(replacement->variables, name, quantity);
+      save(quantity);
     }
   };
   for (const auto& [name, value] : engine.get_locals()) {
     if (!initialLocals.contains(name)) {
-      store(name, value);
+      store(replacement->variables, name, value);
     }
   }
   for (const auto& [name, value] : engine.get_scripting_objects()) {
     if (!initialObjects.contains(name) && !replacement->variables.contains(name)) {
-      store(name, value);
+      store(replacement->variables, name, value);
     }
   }
   impl_ = std::move(replacement);

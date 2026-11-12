@@ -32,31 +32,46 @@ int RunSmokeTest() {
   return 0;
 }
 
+bool LoadSetup(EvaluationContext& context, const char* setupPath) {
+  if (setupPath == nullptr) {
+    std::cerr << "No setup file specified; start with --setup <file>.\n";
+    return false;
+  }
+  std::ifstream setupFile(setupPath, std::ios::binary);
+  if (!setupFile) {
+    std::cerr << "Could not open setup file: " << setupPath << '\n';
+    return false;
+  }
+  std::ostringstream setup;
+  setup << setupFile.rdbuf();
+  if (setupFile.bad() || setup.bad()) {
+    std::cerr << "Could not read setup file: " << setupPath << '\n';
+    return false;
+  }
+  try {
+    context.SetSetupScript(setup.str());
+  } catch (const std::exception& error) {
+    std::cerr << "Invalid setup file " << setupPath << ": " << error.what() << '\n';
+    return false;
+  }
+  return true;
+}
+
 int RunRepl(const char* setupPath) {
   EvaluationContext context;
-  if (setupPath != nullptr) {
-    std::ifstream setupFile(setupPath, std::ios::binary);
-    if (!setupFile) {
-      std::cerr << "Could not open setup file: " << setupPath << '\n';
-      return 1;
-    }
-    std::ostringstream setup;
-    setup << setupFile.rdbuf();
-    if (setupFile.bad() || setup.bad()) {
-      std::cerr << "Could not read setup file: " << setupPath << '\n';
-      return 1;
-    }
-    try {
-      context.SetSetupScript(setup.str());
-    } catch (const std::exception& error) {
-      std::cerr << "Invalid setup file " << setupPath << ": " << error.what() << '\n';
-      return 1;
-    }
+  if (setupPath != nullptr && !LoadSetup(context, setupPath)) {
+    return 1;
   }
   std::string source;
   while (std::cout << "> " && std::getline(std::cin, source)) {
     if (source == ":quit") {
       break;
+    }
+    if (source == ":reload") {
+      if (LoadSetup(context, setupPath)) {
+        std::cout << "Setup reloaded.\n";
+      }
+      continue;
     }
     try {
       auto result = context.Evaluate(source);

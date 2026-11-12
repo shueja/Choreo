@@ -7,6 +7,7 @@
 #include <cctype>
 #include <set>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 
 namespace wpilib::expression::detail {
@@ -38,6 +39,22 @@ void ValidateVariableName(std::string_view name) {
 
 }  // namespace
 
+chaiscript::Boxed_Value BoxImmutable(const VariableValue& value) {
+  return std::visit([](const auto& variable) -> chaiscript::Boxed_Value {
+    using Value = std::decay_t<decltype(variable)>;
+    if constexpr (std::is_same_v<Value, NamespacePtr>) {
+      chaiscript::Namespace object;
+      object.set_explicit(true);
+      for (const auto& [name, member] : variable->members) {
+        object[name] = BoxImmutable(member);
+      }
+      return chaiscript::const_var(object);
+    } else {
+      return chaiscript::const_var(variable);
+    }
+  }, value);
+}
+
 void StoreVariable(Variables& variables, std::string name, VariableValue value) {
   ValidateVariableName(name);
   variables.insert_or_assign(std::move(name), std::move(value));
@@ -54,9 +71,7 @@ void ConfigureGlobals(chaiscript::ChaiScript& engine, const Variables& variables
     engine.set_global(chaiscript::var(Quantity{unit.scale, unit.dimension}), name);
   }
   for (const auto& [name, value] : variables) {
-    std::visit([&](const auto& variable) {
-      engine.set_global(chaiscript::var(variable), name);
-    }, value);
+    engine.set_global(BoxImmutable(value), name);
   }
 }
 
