@@ -8,6 +8,94 @@
 
 namespace wpilib::expression::detail {
 
+std::string RenameVariableReferences(std::string_view source, std::string_view oldName,
+                                     std::string_view newName) {
+  std::string result;
+  result.reserve(source.size());
+  bool memberAccess = false;
+  for (std::size_t position = 0; position < source.size();) {
+    auto start = position;
+    if (source[position] == '#' || source.substr(position, 2) == "//") {
+      position = source.find('\n', position);
+      if (position == std::string_view::npos) {
+        position = source.size();
+      }
+    } else if (source.substr(position, 2) == "/*") {
+      position = source.find("*/", position + 2);
+      position = position == std::string_view::npos ? source.size() : position + 2;
+    } else if (source.substr(position, 2) == "R\"") {
+      auto open = source.find('(', position + 2);
+      if (open == std::string_view::npos) {
+        position = source.size();
+      } else {
+        auto closing = ")" + std::string(source.substr(position + 2, open - position - 2)) + "\"";
+        auto end = source.find(closing, open + 1);
+        position = end == std::string_view::npos ? source.size() : end + closing.size();
+      }
+      memberAccess = false;
+    } else if (source[position] == '"' || source[position] == '\'') {
+      char quote = source[position++];
+      bool escaped = false;
+      while (position < source.size()) {
+        char character = source[position++];
+        if (!escaped && character == quote) {
+          break;
+        }
+        if (!escaped && character == '\\') {
+          escaped = true;
+        } else {
+          escaped = false;
+        }
+      }
+      memberAccess = false;
+    } else if ((std::isalpha(static_cast<unsigned char>(source[position])) ||
+                source[position] == '_') &&
+               (position == 0 ||
+                !(std::isalnum(static_cast<unsigned char>(source[position - 1])) ||
+                  source[position - 1] == '_'))) {
+      ++position;
+      while (position < source.size() &&
+             (std::isalnum(static_cast<unsigned char>(source[position])) ||
+              source[position] == '_')) {
+        ++position;
+      }
+      auto next = position;
+      while (next < source.size()) {
+        if (std::isspace(static_cast<unsigned char>(source[next]))) {
+          ++next;
+        } else if (source[next] == '#' || source.substr(next, 2) == "//") {
+          next = source.find('\n', next);
+          if (next == std::string_view::npos) {
+            next = source.size();
+          }
+        } else if (source.substr(next, 2) == "/*") {
+          auto end = source.find("*/", next + 2);
+          next = end == std::string_view::npos ? source.size() : end + 2;
+        } else {
+          break;
+        }
+      }
+      if (!memberAccess && source.substr(start, position - start) == oldName &&
+          (next == source.size() || source[next] != '(')) {
+        result.append(newName);
+        memberAccess = false;
+        continue;
+      }
+      memberAccess = false;
+    } else if (std::isspace(static_cast<unsigned char>(source[position]))) {
+      ++position;
+    } else if (source[position] == '.' || source.substr(position, 2) == "::") {
+      position += source[position] == '.' ? 1 : 2;
+      memberAccess = true;
+    } else {
+      ++position;
+      memberAccess = false;
+    }
+    result.append(source.substr(start, position - start));
+  }
+  return result;
+}
+
 std::string ExpandUnitSuffixes(std::string_view source) {
   std::string expanded;
   expanded.reserve(source.size() + 16);

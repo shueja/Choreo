@@ -4,8 +4,12 @@
 
 #include <memory>
 #include <optional>
+#include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include <wpi/math/geometry/Pose2d.hpp>
@@ -18,6 +22,59 @@
 
 namespace wpilib::expression {
 
+struct SetupVariable {
+  std::string id;
+  std::string name;
+  std::string initializer;
+};
+
+std::string RenameVariableReferences(std::string_view source, std::string_view oldName,
+                                     std::string_view newName);
+std::vector<SetupVariable> RenameSetupVariable(std::span<const SetupVariable> variables,
+                                               std::string_view id, std::string_view newName);
+
+class SetupVariableError : public std::invalid_argument {
+ public:
+  SetupVariableError(std::string id, std::string message)
+      : std::invalid_argument("setup variable '" + id + "': " + message), id_(std::move(id)) {}
+  const std::string& Id() const noexcept { return id_; }
+
+ private:
+  std::string id_;
+};
+
+enum class VariableType {
+  Quantity,
+  Pose2d,
+  Translation2d,
+  Translation2dArray,
+  Rotation2d,
+  Transform2d,
+  Twist2d,
+  Rectangle2d,
+  Ellipse2d
+};
+
+using VariableValue =
+    std::variant<units::precise_measurement, wpi::math::Pose2d, wpi::math::Translation2d,
+                 std::vector<wpi::math::Translation2d>, wpi::math::Rotation2d,
+                 wpi::math::Transform2d, wpi::math::Twist2d, wpi::math::Rectangle2d,
+                 wpi::math::Ellipse2d>;
+
+struct VariableDefinition {
+  std::string id;
+  std::string namespacePath;
+  std::string name;
+  std::string expression;
+};
+
+struct VariableInfo {
+  VariableDefinition definition;
+  VariableType type;
+  std::optional<units::precise_unit> dimension;
+  VariableValue value;
+};
+
 class EvaluationContext {
  public:
   EvaluationContext();
@@ -26,6 +83,11 @@ class EvaluationContext {
   EvaluationContext(EvaluationContext&& other) noexcept;
   EvaluationContext& operator=(EvaluationContext&& other) noexcept;
   void SetSetupScript(std::string_view source);
+  void SetSetupVariables(std::span<const SetupVariable> variables);
+  void SetVariables(std::vector<VariableDefinition> variables);
+  std::vector<VariableInfo> GetVariables() const;
+  std::vector<std::string> FindReferences(std::string_view variableId) const;
+  void RenameVariable(std::string_view variableId, std::string newName);
   void SetVariable(std::string name, units::precise_measurement value);
   void SetVariable(std::string name, wpi::math::Pose2d value);
   void SetVariable(std::string name, wpi::math::Translation2d value);
@@ -37,7 +99,7 @@ class EvaluationContext {
   void SetVariable(std::string name, wpi::math::Ellipse2d value);
   units::precise_measurement Evaluate(
       std::string_view source,
-      std::optional<Dimension> expectedDimension = std::nullopt) const;
+      std::optional<units::precise_unit> expectedDimension = std::nullopt) const;
   bool EvaluateBoolean(std::string_view source) const;
   wpi::math::Pose2d EvaluatePose2d(std::string_view source) const;
   wpi::math::Translation2d EvaluateTranslation2d(std::string_view source) const;
@@ -50,6 +112,8 @@ class EvaluationContext {
  private:
   struct Impl;
   struct EngineCache;
+  Impl& MutableImpl();
+  void SetSetupScriptImpl(std::string_view source, std::span<const SetupVariable> ordered);
   std::shared_ptr<Impl> impl_;
   std::shared_ptr<EngineCache> engineCache_;
 };

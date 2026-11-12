@@ -24,6 +24,12 @@ ctest --test-dir .\wpilib-expression\build --output-on-failure
 cmake --install .\wpilib-expression\build --prefix C:\path\to\expression-install
 ```
 
+To build and run the variable-replacement benchmark, configure with
+`-DWPILIB_EXPRESSION_BUILD_BENCHMARKS=ON`, build the
+`wpilib_expression_setup_replacement_benchmark` target, then run that executable.
+It reports variable replacement and evaluation times for batches of 100, 500,
+and 1,000 expressions over three replacements.
+
 The exported target is `wpilib::expression`. A consumer uses `find_package(wpilib-expression CONFIG REQUIRED)` and links that target. The consumer must also make WPILib's `wpimath::wpimath` target available or install WPILib and add its prefix to `CMAKE_PREFIX_PATH`.
 
 ## API
@@ -33,33 +39,86 @@ The exported target is `wpilib::expression`. A consumer uses `find_package(wpili
 #include <wpi/units/length.hpp>
 
 wpilib::expression::EvaluationContext context;
-auto length = wpilib::expression::MeasurementDimension(
-    wpilib::expression::From(1.0, "m"));
+auto length = wpilib::expression::From(1.0, units::precise::m).units();
 auto distance = context.Evaluate("2 m + 3 ft", length);
-double meters = wpilib::expression::In(distance, "m");
+auto meters = wpilib::expression::In(distance, units::precise::m);
+if (meters) {
+  double valueInMeters = *meters;
+}
 ```
 
-Contexts register scalar and native WPILib geometry values with `SetVariable`. Translation arrays can be registered as `std::vector<wpi::math::Translation2d>` and indexed with `[index]`; they also work with `Nearest`. `Evaluate` returns an LLNL `units::precise_measurement` and can check an expected `Dimension`; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
+Contexts register scalar and native WPILib geometry values with `SetVariable`. Translation arrays can be registered as `std::vector<wpi::math::Translation2d>` and indexed with `[index]`; they also work with `Nearest`. A variable's first value establishes its declared type: quantities are fixed to their base dimension, and geometry values to their concrete geometry type. Replacing a value through `SetVariable` or a later `SetSetupScript` call must preserve that type; a rejected update leaves the prior context value intact. Namespace members follow the same rule by their qualified name. `Evaluate` returns an LLNL `units::precise_measurement` and can check an expected LLNL base unit; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
 
-`SetSetupScript` atomically replaces context variables using initialized top-level `var`, `auto`, `const`, or `global` declarations. Initializers may use read-only expressions and previously declared variables. Values must be quantities, numbers, supported geometry objects, or arrays containing only `Translation2d` values; numbers become dimensionless quantities. A failed setup leaves the previous variables unchanged. Other statements, user-defined functions, external scripts, module loading, and I/O are not permitted. Evaluation is not resource-limited.
+`SetSetupScript` atomically replaces context variables using initialized top-level `var`, `auto`, `const`, or `global` declarations. Initializers may use read-only expressions and refer to other top-level variables regardless of declaration order; dependency cycles are rejected. Values must be quantities, numbers, supported geometry objects, or arrays containing only `Translation2d` values; numbers become dimensionless quantities. A failed setup leaves the previous variables unchanged. Other statements, user-defined functions, external scripts, module loading, and I/O are not permitted. Evaluation is not resource-limited.
+
+For setup variables stored without an ordering, `SetSetupVariables` accepts a
+span of `{id, name, initializer}` records. IDs must be unique non-empty strings;
+names must be unique valid expression identifiers. Initializers may refer to other
+setup variables in any input order. The library resolves dependencies and rejects
+unknown names and cycles. `SetupVariableError`, derived from `std::invalid_argument`,
+provides the associated ID through `Id()`. A failed replacement leaves the context
+unchanged.
+
+```cpp
+std::vector<wpilib::expression::SetupVariable> variables{
+  {"distance-id", "distance", "width * 2"},
+  {"width-id", "width", "3 m"},
+};
+context.SetSetupVariables(variables);
+auto result = context.Evaluate("distance");
+```
+
+After changing an initializer, build a replacement context with the updated
+records. To rename a variable, `RenameSetupVariable` returns a new collection
+with the matching ID renamed and references in all setup initializers rewritten.
+Apply `RenameVariableReferences` to every expression stored in both application
+trees, using the old and new names:
+
+```cpp
+auto renamedVariables = wpilib::expression::RenameSetupVariable(
+  variables, "width-id", "trackWidth");
+auto renamedExpression = wpilib::expression::RenameVariableReferences(
+  "width * 2", "width", "trackWidth");
+wpilib::expression::EvaluationContext renamedContext;
+renamedContext.SetSetupVariables(renamedVariables);
+```
+
+These operations return new values and do not traverse or modify application
+trees. The caller must rewrite every affected expression in both trees, validate
+the replacement setup and expressions, then publish the new roots and context
+together. A name collision is rejected; an existing unresolved reference to the
+new name can acquire a meaning after the rename, so validate the resulting trees.
+The source rewrite preserves whitespace, comments, strings, member names and
+function names, and can operate on incomplete expressions. It is lexical and
+does not validate the expression; only top-level setup variable names are
+supported, not renaming individual namespace members.
+
+Copied contexts share their engine cache, but their variables are copy-on-write:
+changing one copy does not change the other. Concurrent evaluation of copies is
+serialized through the shared engine cache. Do not mutate a context concurrently
+with other accesses to that same context object.
 
 Setup supports nested namespace blocks and the `namespace("name")` form. Namespace members are frozen after setup and can be accessed with `.` or `::`. Initializers referencing earlier members must use their qualified names.
 
+Variables with stable caller-provided IDs, names, expressions, and optional namespace paths are declared with `SetVariables`. Expressions can reference one another regardless of input order; dependencies are evaluated first and cycles are rejected. Namespaces are metadata, and expressions refer to members by their qualified dotted names. Replacing definitions is atomic: an expression must retain the original variable's type (quantity base dimension or concrete geometry type), and a failed replacement leaves the prior values intact. `GetVariables` returns definitions, declared types, dimensions, and cached values. `FindReferences` returns the IDs of dependent variables, and `RenameVariable` updates a variable's name and rewrites references while preserving its ID and declared type.
+
+`SetVariable` remains available for context values supplied directly by callers; those values do not have structured IDs or expressions. `Evaluate` returns an LLNL `units::precise_measurement` and can check an expected LLNL base unit; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
+
 ```cpp
-context.SetSetupScript(R"(
-  namespace field::starting {
-    var origin = Pose2d(0 m, 0 m, 0 deg);
-  }
-  namespace field::target {
-    var position = field.starting.origin.Translation();
-  }
-)");
+context.SetVariables({
+    {"origin-id", "field.starting", "origin", "Pose2d(0 m, 0 m, 0 deg)"},
+    {"position-id", "field.target", "position",
+     "field.starting.origin.Translation()"},
+    {"distance-id", "", "distance", "2 m"},
+    {"target-id", "", "target", "Pose2d(3 m, 4 m, 90 deg)"},
+});
 auto origin = context.EvaluatePose2d("field.starting.origin");
+auto result = context.Evaluate("distance + target.X()");
 ```
 
 ```cpp
-context.SetSetupScript("var distance = 2 m; var target = Pose2d(3 m, 4 m, 90 deg);");
-auto result = context.Evaluate("distance + target.X()");
+context.RenameVariable("distance-id", "length");
+auto references = context.FindReferences("distance-id");
 ```
 
 `TryAs<UnitValue>(measurement)` converts to a compatible linear WPILib `unit_t` container and returns `std::optional<UnitValue>`; the output-parameter overload returns `false` on incompatibility:
@@ -75,6 +134,8 @@ bool converted = wpilib::expression::TryAs(context.Evaluate("90 deg"), angle);
 ```
 
 The conversion checks the full WPILib base-dimension signature. Non-linear WPI scales, unsupported runtime dimensions, and dimension mismatches are not converted.
+
+`In` returns `std::expected<double, Error>`; an incompatible dimension returns `IncompatibleDimensionError`. Use `ErrorMessage` to format an error.
 
 ## Expression Support
 

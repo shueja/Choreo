@@ -17,7 +17,7 @@ set(WPILIB_USE_SYSTEM_EIGEN ON CACHE BOOL "Use fetched Eigen")
 set(EIGEN_BUILD_CMAKE_PACKAGE TRUE)
 FetchContent_Declare(
     Eigen3
-    GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+    GIT_REPOSITORY https://github.com/eigen-mirror/eigen.git
     GIT_TAG b7f6aed1b9974fd56cce651b4ff059c3bfc67782
     SYSTEM
     OVERRIDE_FIND_PACKAGE
@@ -55,7 +55,7 @@ add_test(
     NAME expression_sample_repl
     COMMAND ${CMAKE_COMMAND}
         -DSAMPLE=$<TARGET_FILE:expression_sample>
-        -DSETUP=${CMAKE_CURRENT_SOURCE_DIR}/example-setup.chai
+        -DVARIABLES=${CMAKE_CURRENT_SOURCE_DIR}/example-variables.txt
         -DTEST_DIR=${CMAKE_CURRENT_BINARY_DIR}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/repl-test.cmake
 )

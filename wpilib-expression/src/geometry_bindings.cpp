@@ -11,9 +11,9 @@
 #include <wpi/math/shape/Rectangle2d.hpp>
 
 #include <cmath>
+#include <numbers>
 #include <span>
 #include <stdexcept>
-#include <string_view>
 #include <typeinfo>
 #include <vector>
 
@@ -31,7 +31,8 @@ using wpi::units::meter_t;
 using wpi::units::radian_t;
 
 template <typename UnitValue>
-void RegisterMeasurementConversion(chaiscript::ChaiScript& engine, std::string_view unit) {
+void RegisterMeasurementConversion(chaiscript::ChaiScript& engine,
+                                   const units::precise_unit& unit) {
   engine.add(chaiscript::type_conversion<units::precise_measurement, UnitValue>([](const units::precise_measurement& value) {
     if (!std::isfinite(SiValue(value))) {
       throw chaiscript::exception::bad_boxed_cast(
@@ -70,10 +71,10 @@ double GeometryScalar(double value) {
 }
 
 double GeometryScalar(const units::precise_measurement& value) {
-  if (MeasurementDimension(value) != Dimension{}) {
+  if (value.units().base_units() != units::precise::one.base_units()) {
     throw std::invalid_argument("geometry scalar must be dimensionless");
   }
-  return GeometryScalar(SiValue(value));
+  return GeometryScalar(wpilib::expression::detail::SiValue(value));
 }
 
 double GeometryDivisor(double value) {
@@ -140,10 +141,11 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
   engine.add(chaiscript::user_type<wpi::util::array<Translation2d, 2>>(), "EllipseFocalPoints");
   engine.add(chaiscript::user_type<std::vector<Translation2d>>(), "Translation2dArray");
 
-  RegisterMeasurementConversion<wpi::units::meter_t>(engine, "m");
-  RegisterMeasurementConversion<wpi::units::radian_t>(engine, "rad");
-  RegisterMeasurementConversion<wpi::units::degree_t>(engine, "deg");
-  RegisterMeasurementConversion<wpi::units::square_meter_t>(engine, "m^2");
+  RegisterMeasurementConversion<wpi::units::meter_t>(engine, units::precise::m);
+  RegisterMeasurementConversion<wpi::units::radian_t>(engine, units::precise::rad);
+  RegisterMeasurementConversion<wpi::units::degree_t>(
+      engine, units::precise_unit(std::numbers::pi / 180.0, units::precise::rad));
+  RegisterMeasurementConversion<wpi::units::square_meter_t>(engine, units::precise::m.pow(2));
 
   BIND_LAMBDA(Pose2d, [](meter_t x, meter_t y, radian_t angle) {
     return Pose2d{x, y, Rotation2d{angle}};

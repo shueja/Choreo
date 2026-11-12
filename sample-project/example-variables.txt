@@ -1,0 +1,6 @@
+# id namespace name = expression
+offset - offset = 3 ft
+target - target = Pose2d(3 m, 4 m, 90 deg)
+origin field.points origin = Pose2d(0 m, 0 m, 0 deg)
+center-box field.points center_box = [Translation2d(-1 m, -1 m), Translation2d(1 m, -1 m), Translation2d(1 m, 1 m)]
+box field.points box = Rectangle2d(field.points.origin, 2 m, 2 m)

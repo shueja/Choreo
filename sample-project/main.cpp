@@ -4,91 +4,115 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <print>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 using wpilib::expression::EvaluationContext;
 using wpilib::expression::From;
 using wpilib::expression::In;
-using wpilib::expression::MeasurementDimension;
-using wpilib::expression::SiValue;
+using wpilib::expression::VariableDefinition;
 
 namespace {
 
 int RunSmokeTest() {
   EvaluationContext context;
-  context.SetSetupScript("var offset = 3 ft;");
-  auto length = MeasurementDimension(From(1.0, "m"));
+  context.SetVariables({{"offset", "", "offset", "3 ft"}});
+  auto length = From(1.0, units::precise::m).units();
   auto result = context.Evaluate("2 m + offset", length);
-  if (std::abs(In(result, "m") - 2.9144) > 1e-10) {
-    std::cerr << "expression library smoke test failed\n";
+  if (auto meters = In(result, units::precise::m);
+      !meters || std::abs(*meters - 2.9144) > 1e-10) {
+    std::println(stderr, "expression library smoke test failed");
     return 1;
   }
 
   auto pose = context.EvaluatePose2d("Pose2d(3 m, 4 m, 90 deg)");
   if (std::abs(pose.X().value() - 3.0) > 1e-10 ||
       std::abs(pose.Y().value() - 4.0) > 1e-10) {
-    std::cerr << "WPILib geometry smoke test failed\n";
+    std::println(stderr, "WPILib geometry smoke test failed");
     return 1;
   }
   return 0;
 }
 
-bool LoadSetup(EvaluationContext& context, const char* setupPath) {
-  if (setupPath == nullptr) {
-    std::cerr << "No setup file specified; start with --setup <file>.\n";
-    return false;
-  }
-  std::ifstream setupFile(setupPath, std::ios::binary);
+bool LoadVariables(EvaluationContext& context, const char* variablesPath) {
+  std::ifstream setupFile(variablesPath, std::ios::binary);
   if (!setupFile) {
-    std::cerr << "Could not open setup file: " << setupPath << '\n';
-    return false;
-  }
-  std::ostringstream setup;
-  setup << setupFile.rdbuf();
-  if (setupFile.bad() || setup.bad()) {
-    std::cerr << "Could not read setup file: " << setupPath << '\n';
+    std::println(stderr, "Could not open variables file: {}", variablesPath);
     return false;
   }
   try {
-    context.SetSetupScript(setup.str());
+    std::vector<VariableDefinition> definitions;
+    std::string line;
+    std::size_t lineNumber = 0;
+    while (std::getline(setupFile, line)) {
+      ++lineNumber;
+      if (line.empty() || line.front() == '#') {
+        continue;
+      }
+      auto separator = line.find('=');
+      if (separator == std::string::npos) {
+        throw std::invalid_argument("expected '=' on line " + std::to_string(lineNumber));
+      }
+      std::istringstream fields(line.substr(0, separator));
+      VariableDefinition definition;
+      fields >> definition.id >> definition.namespacePath >> definition.name;
+      std::string extra;
+      if (!fields || (fields >> extra)) {
+        throw std::invalid_argument("expected id, namespace, and name on line " +
+                                    std::to_string(lineNumber));
+      }
+      if (definition.namespacePath == "-") {
+        definition.namespacePath.clear();
+      }
+      auto expression = line.substr(separator + 1);
+      auto first = expression.find_first_not_of(" \t");
+      if (first == std::string::npos) {
+        throw std::invalid_argument("missing expression on line " +
+                                    std::to_string(lineNumber));
+      }
+      definition.expression = expression.substr(first);
+      definitions.push_back(std::move(definition));
+    }
+    if (setupFile.bad()) {
+      throw std::runtime_error("could not read variables file");
+    }
+    context.SetVariables(std::move(definitions));
   } catch (const std::exception& error) {
-    std::cerr << "Invalid setup file " << setupPath << ": " << error.what() << '\n';
+    std::println(stderr, "Invalid variables file {}: {}", variablesPath, error.what());
     return false;
   }
   return true;
 }
 
-int RunRepl(const char* setupPath) {
+int RunRepl(const char* variablesPath) {
   EvaluationContext context;
-  if (setupPath != nullptr && !LoadSetup(context, setupPath)) {
+  if (variablesPath != nullptr && !LoadVariables(context, variablesPath)) {
     return 1;
   }
   std::string source;
-  while (std::cout << "> " && std::getline(std::cin, source)) {
+  while (std::print("> "), std::getline(std::cin, source)) {
     if (source == ":quit") {
       break;
     }
     if (source == ":reload") {
-      if (LoadSetup(context, setupPath)) {
-        std::cout << "Setup reloaded.\n";
+      if (variablesPath != nullptr && LoadVariables(context, variablesPath)) {
+        std::println("Variables reloaded.");
+      } else if (variablesPath == nullptr) {
+        std::println(stderr, "No variables file specified.");
       }
       continue;
     }
     try {
       auto result = context.Evaluate(source);
-      auto dimension = MeasurementDimension(result);
-      std::cout << SiValue(result) << " SI [";
-      for (std::size_t index = 0; index < dimension.exponents.size(); ++index) {
-        if (index != 0) {
-          std::cout << ", ";
-        }
-        std::cout << dimension.exponents[index];
-      }
-      std::cout << "]\n";
+      std::println("{} {}", result.value() * result.units().multiplier(),
+                   units::to_string(result.units()));
     } catch (const std::exception& error) {
-      std::cerr << error.what() << '\n';
+      std::println(stderr, "{}", error.what());
     }
   }
   return 0;
@@ -103,9 +127,9 @@ int main(int argc, char** argv) {
   if (argc == 1) {
     return RunRepl(nullptr);
   }
-  if (argc == 3 && std::string_view(argv[1]) == "--setup") {
+  if (argc == 3 && std::string_view(argv[1]) == "--variables") {
     return RunRepl(argv[2]);
   }
-  std::cerr << "Usage: expression_sample [--setup <file> | --smoke]\n";
+  std::println(stderr, "Usage: expression_sample [--variables <file> | --smoke]");
   return 1;
 }

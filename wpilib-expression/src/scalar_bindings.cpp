@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <stdexcept>
 #include <string>
 
@@ -13,8 +14,39 @@ namespace wpilib::expression::detail {
 namespace {
 
 using Measurement = units::precise_measurement;
+using Dimension = units::precise_unit;
 
-Dimension AngleDimension() { return MakeDimension(0, 0, 0, 0, 1); }
+Dimension MeasurementDimension(const Measurement& value) {
+  return Dimension{value.units().base_units()};
+}
+
+bool IsDimensionless(const Measurement& value) {
+  return value.units().base_units() == units::precise::one.base_units();
+}
+
+Dimension Combine(const Dimension& left, const Dimension& right, int sign) {
+  auto combined = sign > 0 ? left * right : left / right;
+  return Dimension{combined.base_units()};
+}
+
+Dimension AngleDimension() { return units::precise::rad; }
+
+template <auto Function, bool Inverse>
+Measurement BindTrig(const Measurement& value) {
+  const auto dimension = value.units().base_units();
+  if constexpr (Inverse) {
+    if (dimension != units::precise::one.base_units()) {
+      throw std::invalid_argument(
+          "inverse trigonometric functions require a dimensionless value");
+    }
+  } else if (dimension != units::precise::rad.base_units() &&
+             dimension != units::precise::one.base_units()) {
+    throw std::invalid_argument(
+        "trigonometric functions require an angle or dimensionless value");
+  }
+  const auto resultUnit = Inverse ? units::precise::rad : units::precise::one;
+  return Measurement{Function(SiValue(value)), resultUnit};
+}
 
 Measurement Power(const Measurement& value, double exponent) {
   if (!std::isfinite(exponent) || std::trunc(exponent) != exponent ||
@@ -76,108 +108,106 @@ bool GreaterEqual(const Measurement& left, const Measurement& right) {
 }
 
 Measurement Absolute(const Measurement& value) {
-  return MakeMeasurement(std::abs(SiValue(value)), MeasurementDimension(value));
+  return Measurement{std::abs(SiValue(value)), MeasurementDimension(value)};
 }
 Measurement Minimum(const Measurement& left, const Measurement& right) {
   RequireComparable(left, right);
-  return MakeMeasurement(std::min(SiValue(left), SiValue(right)), MeasurementDimension(left));
+  return Measurement{std::min(SiValue(left), SiValue(right)), MeasurementDimension(left)};
 }
 Measurement Maximum(const Measurement& left, const Measurement& right) {
   RequireComparable(left, right);
-  return MakeMeasurement(std::max(SiValue(left), SiValue(right)), MeasurementDimension(left));
+  return Measurement{std::max(SiValue(left), SiValue(right)), MeasurementDimension(left)};
 }
 
 Measurement DimensionlessMath(const Measurement& value, double (*function)(double)) {
-  if (MeasurementDimension(value) != Dimension{}) {
+  if (!IsDimensionless(value)) {
     throw std::invalid_argument("math function requires a dimensionless quantity");
   }
-  return MakeMeasurement(function(SiValue(value)), {});
+  return Measurement{function(SiValue(value)), units::precise::one};
 }
 Measurement PreserveDimensionMath(const Measurement& value, double (*function)(double)) {
-  return MakeMeasurement(function(SiValue(value)), MeasurementDimension(value));
+  return Measurement{function(SiValue(value)), MeasurementDimension(value)};
 }
 Measurement IntegerDimensionlessMath(const Measurement& value, int (*function)(double)) {
-  if (MeasurementDimension(value) != Dimension{}) {
+  if (!IsDimensionless(value)) {
     throw std::invalid_argument("math function requires a dimensionless quantity");
   }
-  return MakeMeasurement(static_cast<double>(function(SiValue(value))), {});
+  return Measurement{static_cast<double>(function(SiValue(value))), units::precise::one};
 }
 
 Dimension RootDimension(const Dimension& dimension, int degree) {
-  Dimension result;
-  for (std::size_t index = 0; index < dimension.exponents.size(); ++index) {
-    if (dimension.exponents[index] % degree != 0) {
-      throw std::invalid_argument("quantity dimension is not divisible by the root degree");
-    }
-    result.exponents[index] = dimension.exponents[index] / degree;
+  const auto baseUnits = dimension.base_units();
+  const auto rootUnits = baseUnits.root(degree);
+  if (rootUnits == units::detail::unit_data(nullptr)) {
+    throw std::invalid_argument("quantity dimension is not divisible by the root degree");
   }
-  return result;
+  return Dimension{std::pow(dimension.multiplier(), 1.0 / degree), rootUnits};
 }
 Measurement SquareRoot(const Measurement& value) {
-  return MakeMeasurement(std::sqrt(SiValue(value)), RootDimension(MeasurementDimension(value), 2));
+  return Measurement{std::sqrt(SiValue(value)), RootDimension(MeasurementDimension(value), 2)};
 }
 Measurement CubeRoot(const Measurement& value) {
-  return MakeMeasurement(std::cbrt(SiValue(value)), RootDimension(MeasurementDimension(value), 3));
+  return Measurement{std::cbrt(SiValue(value)), RootDimension(MeasurementDimension(value), 3)};
 }
 Measurement Hypotenuse(const Measurement& left, const Measurement& right) {
   RequireComparable(left, right);
-  return MakeMeasurement(std::hypot(SiValue(left), SiValue(right)), MeasurementDimension(left));
+  return Measurement{std::hypot(SiValue(left), SiValue(right)), MeasurementDimension(left)};
 }
 Measurement Atan2(const Measurement& y, const Measurement& x) {
   RequireComparable(y, x);
-  return MakeMeasurement(std::atan2(SiValue(y), SiValue(x)), AngleDimension());
+  return Measurement{std::atan2(SiValue(y), SiValue(x)), AngleDimension()};
 }
 Measurement MathPower(const Measurement& value, const Measurement& exponent) {
-  if (MeasurementDimension(exponent) != Dimension{}) {
+  if (!IsDimensionless(exponent)) {
     throw std::invalid_argument("power exponent must be dimensionless");
   }
-  if (MeasurementDimension(value) != Dimension{}) {
+  if (!IsDimensionless(value)) {
     return Power(value, SiValue(exponent));
   }
-  return MakeMeasurement(std::pow(SiValue(value), SiValue(exponent)), {});
+  return Measurement{std::pow(SiValue(value), SiValue(exponent)), units::precise::one};
 }
 Measurement MathFma(const Measurement& left, const Measurement& right, const Measurement& addend) {
   auto dimension = Combine(MeasurementDimension(left), MeasurementDimension(right), 1);
   if (dimension != MeasurementDimension(addend)) {
     throw std::invalid_argument("fma product and addend dimensions must match");
   }
-  return MakeMeasurement(std::fma(SiValue(left), SiValue(right), SiValue(addend)), dimension);
+  return Measurement{std::fma(SiValue(left), SiValue(right), SiValue(addend)), dimension};
 }
 Measurement CopySign(const Measurement& value, const Measurement& sign) {
   RequireComparable(value, sign);
-  return MakeMeasurement(std::copysign(SiValue(value), SiValue(sign)), MeasurementDimension(value));
+  return Measurement{std::copysign(SiValue(value), SiValue(sign)), MeasurementDimension(value)};
 }
 Measurement ScalePowerOfTwo(const Measurement& value, int exponent) {
-  return MakeMeasurement(std::scalbn(SiValue(value), exponent), MeasurementDimension(value));
+  return Measurement{std::scalbn(SiValue(value), exponent), MeasurementDimension(value)};
 }
 Measurement ScalePowerOfTwoLong(const Measurement& value, long exponent) {
-  return MakeMeasurement(std::scalbln(SiValue(value), exponent), MeasurementDimension(value));
+  return Measurement{std::scalbln(SiValue(value), exponent), MeasurementDimension(value)};
 }
 Measurement NextToward(const Measurement& value, const Measurement& direction) {
   RequireComparable(value, direction);
-  return MakeMeasurement(
+  return Measurement{
       std::nexttoward(SiValue(value), static_cast<long double>(SiValue(direction))),
-      MeasurementDimension(value));
+      MeasurementDimension(value)};
 }
 Measurement SameDimensionMath(const Measurement& left, const Measurement& right,
                               double (*function)(double, double)) {
   RequireComparable(left, right);
-  return MakeMeasurement(function(SiValue(left), SiValue(right)), MeasurementDimension(left));
+  return Measurement{function(SiValue(left), SiValue(right)), MeasurementDimension(left)};
 }
 Measurement IntegerRounding(const Measurement& value, long long (*function)(double)) {
-  if (MeasurementDimension(value) != Dimension{}) {
+  if (!IsDimensionless(value)) {
     throw std::invalid_argument("integer rounding requires a dimensionless quantity");
   }
-  return MakeMeasurement(static_cast<double>(function(SiValue(value))), {});
+  return Measurement{static_cast<double>(function(SiValue(value))), units::precise::one};
 }
 Measurement LongRounding(const Measurement& value, long (*function)(double)) {
-  if (MeasurementDimension(value) != Dimension{}) {
+  if (!IsDimensionless(value)) {
     throw std::invalid_argument("integer rounding requires a dimensionless quantity");
   }
-  return MakeMeasurement(static_cast<double>(function(SiValue(value))), {});
+  return Measurement{static_cast<double>(function(SiValue(value))), units::precise::one};
 }
 Measurement Classify(const Measurement& value) {
-  return MakeMeasurement(static_cast<double>(std::fpclassify(SiValue(value))), {});
+  return Measurement{static_cast<double>(std::fpclassify(SiValue(value))), units::precise::one};
 }
 
 bool IsFinite(const Measurement& value) { return std::isfinite(SiValue(value)); }
@@ -202,17 +232,54 @@ bool IsLessEqual(const Measurement& left, const Measurement& right) {
   return std::islessequal(SiValue(left), SiValue(right));
 }
 Measurement TrigInput(const Measurement& value, double (*function)(double)) {
-  auto dimension = MeasurementDimension(value);
-  if (dimension != AngleDimension() && dimension != Dimension{}) {
+  auto dimension = value.units().base_units();
+  if (dimension != units::precise::rad.base_units() &&
+      dimension != units::precise::one.base_units()) {
     throw std::invalid_argument("trigonometric functions require an angle or dimensionless value");
   }
-  return MakeMeasurement(function(SiValue(value)), {});
+  return Measurement{function(SiValue(value)), units::precise::one};
 }
 Measurement InverseTrigInput(const Measurement& value, double (*function)(double)) {
-  if (MeasurementDimension(value) != Dimension{}) {
+  if (!IsDimensionless(value)) {
     throw std::invalid_argument("inverse trigonometric functions require a dimensionless value");
   }
-  return MakeMeasurement(function(SiValue(value)), AngleDimension());
+  return Measurement{function(SiValue(value)), units::precise::rad};
+}
+
+units::precise_measurement DivideMeasurements(
+    const units::precise_measurement& numerator,
+    const units::precise_measurement& denominator) {
+  if (SiValue(denominator) == 0.0) {
+    throw std::domain_error("division by zero");
+  }
+  return numerator / denominator;
+}
+
+void RequireMatchingDimensions(const units::precise_measurement& left,
+                               const units::precise_measurement& right) {
+  if (left.units().base_units() != right.units().base_units()) {
+    throw std::invalid_argument("quantity dimensions do not match");
+  }
+}
+
+units::precise_measurement AddMeasurements(const units::precise_measurement& left,
+                                          const units::precise_measurement& right) {
+  RequireMatchingDimensions(left, right);
+  return left + right;
+}
+
+units::precise_measurement SubtractMeasurements(const units::precise_measurement& left,
+                                                const units::precise_measurement& right) {
+  RequireMatchingDimensions(left, right);
+  return left - right;
+}
+
+template <typename Comparison>
+bool CompareMeasurements(const units::precise_measurement& left,
+                         const units::precise_measurement& right,
+                         Comparison comparison) {
+  RequireMatchingDimensions(left, right);
+  return comparison(left, right);
 }
 
 }  // namespace
@@ -236,7 +303,11 @@ void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
     return Measurement{static_cast<double>(value), units::precise::one};
   }));
   engine.add(chaiscript::fun([](double value, const std::string& unit) {
-    return From(value, unit);
+    auto parsed = detail::ParseUnit(unit);
+    if (!parsed) {
+      throw chaiscript::exception::eval_error(ErrorMessage(parsed.error()));
+    }
+    return From(value, *parsed);
   }), "quantity");
   engine.add(chaiscript::fun(&Add), "+");
   engine.add(chaiscript::fun(&Subtract), "-");
@@ -273,7 +344,6 @@ void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
   ADD_DIMENSIONLESS_MATH(acosh);
   ADD_DIMENSIONLESS_MATH(atanh);
   ADD_DIMENSIONLESS_MATH(exp);
-  ADD_DIMENSIONLESS_MATH(exp2);
   ADD_DIMENSIONLESS_MATH(expm1);
   ADD_DIMENSIONLESS_MATH(log);
   ADD_DIMENSIONLESS_MATH(log10);
@@ -363,24 +433,12 @@ void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
   engine.add(chaiscript::fun([](const Measurement& value) {
     return IntegerRounding(value, static_cast<long long (*)(double)>(std::llround));
   }), "llround");
-  engine.add(chaiscript::fun([](const Measurement& value) {
-    return TrigInput(value, static_cast<double (*)(double)>(std::sin));
-  }), "sin");
-  engine.add(chaiscript::fun([](const Measurement& value) {
-    return TrigInput(value, static_cast<double (*)(double)>(std::cos));
-  }), "cos");
-  engine.add(chaiscript::fun([](const Measurement& value) {
-    return TrigInput(value, static_cast<double (*)(double)>(std::tan));
-  }), "tan");
-  engine.add(chaiscript::fun([](const Measurement& value) {
-    return InverseTrigInput(value, static_cast<double (*)(double)>(std::asin));
-  }), "asin");
-  engine.add(chaiscript::fun([](const Measurement& value) {
-    return InverseTrigInput(value, static_cast<double (*)(double)>(std::acos));
-  }), "acos");
-  engine.add(chaiscript::fun([](const Measurement& value) {
-    return InverseTrigInput(value, static_cast<double (*)(double)>(std::atan));
-  }), "atan");
+  engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::sin), false>), "sin");
+  engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::cos), false>), "cos");
+  engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::tan), false>), "tan");
+  engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::asin), true>), "asin");
+  engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::acos), true>), "acos");
+  engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::atan), true>), "atan");
   engine.add(chaiscript::fun([](double value, const Measurement& quantity) {
     return quantity * value;
   }), "*");
@@ -393,6 +451,7 @@ void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
     }
     return quantity / value;
   }), "/");
+#undef BIND_MEASUREMENT_OPERATOR
 }
 
 }  // namespace wpilib::expression::detail
