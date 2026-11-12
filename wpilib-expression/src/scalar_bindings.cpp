@@ -18,43 +18,35 @@ Quantity Power(const Quantity& value, double exponent) {
     throw std::invalid_argument("quantity powers must be integers with magnitude at most 16");
   }
   int integerExponent = static_cast<int>(exponent);
-  Quantity result{std::pow(value.siValue, exponent),
+  return Quantity{pow(value.measurement(), integerExponent),
                   ScaleDimension(value.dimension, integerExponent)};
-  RequireFinite(result);
-  return result;
 }
 
 Quantity Add(const Quantity& left, const Quantity& right) {
   if (left.dimension != right.dimension) {
     throw std::invalid_argument("addition requires matching dimensions");
   }
-  Quantity result{left.siValue + right.siValue, left.dimension};
-  RequireFinite(result);
-  return result;
+  return Quantity{left.measurement() + right.measurement(), left.dimension};
 }
 
 Quantity Subtract(const Quantity& left, const Quantity& right) {
   if (left.dimension != right.dimension) {
     throw std::invalid_argument("subtraction requires matching dimensions");
   }
-  Quantity result{left.siValue - right.siValue, left.dimension};
-  RequireFinite(result);
-  return result;
+  return Quantity{left.measurement() - right.measurement(), left.dimension};
 }
 
 Quantity Multiply(const Quantity& left, const Quantity& right) {
-  Quantity result{left.siValue * right.siValue, Combine(left.dimension, right.dimension, 1)};
-  RequireFinite(result);
-  return result;
+  return Quantity{left.measurement() * right.measurement(),
+                  Combine(left.dimension, right.dimension, 1)};
 }
 
 Quantity Divide(const Quantity& left, const Quantity& right) {
   if (right.siValue == 0.0) {
     throw std::domain_error("division by zero");
   }
-  Quantity result{left.siValue / right.siValue, Combine(left.dimension, right.dimension, -1)};
-  RequireFinite(result);
-  return result;
+  return Quantity{left.measurement() / right.measurement(),
+                  Combine(left.dimension, right.dimension, -1)};
 }
 
 void RequireComparable(const Quantity& left, const Quantity& right) {
@@ -65,27 +57,27 @@ void RequireComparable(const Quantity& left, const Quantity& right) {
 
 bool Equal(const Quantity& left, const Quantity& right) {
   RequireComparable(left, right);
-  return left.siValue == right.siValue;
+  return left.measurement() == right.measurement();
 }
 
 bool Less(const Quantity& left, const Quantity& right) {
   RequireComparable(left, right);
-  return left.siValue < right.siValue;
+  return left.measurement() < right.measurement();
 }
 
 bool LessEqual(const Quantity& left, const Quantity& right) {
   RequireComparable(left, right);
-  return left.siValue <= right.siValue;
+  return left.measurement() <= right.measurement();
 }
 
 bool Greater(const Quantity& left, const Quantity& right) {
   RequireComparable(left, right);
-  return left.siValue > right.siValue;
+  return left.measurement() > right.measurement();
 }
 
 bool GreaterEqual(const Quantity& left, const Quantity& right) {
   RequireComparable(left, right);
-  return left.siValue >= right.siValue;
+  return left.measurement() >= right.measurement();
 }
 
 Quantity TrigInput(const Quantity& value, double (*function)(double)) {
@@ -93,9 +85,7 @@ Quantity TrigInput(const Quantity& value, double (*function)(double)) {
     throw std::invalid_argument(
         "trigonometric functions require an angle or dimensionless value");
   }
-  Quantity result{function(value.siValue), Dimension{}};
-  RequireFinite(result);
-  return result;
+  return Quantity{function(value.measurement().value()), Dimension{}};
 }
 
 Quantity InverseTrigInput(const Quantity& value, double (*function)(double)) {
@@ -103,9 +93,7 @@ Quantity InverseTrigInput(const Quantity& value, double (*function)(double)) {
     throw std::invalid_argument(
         "inverse trigonometric functions require a dimensionless value");
   }
-  Quantity result{function(value.siValue), AngleDimension()};
-  RequireFinite(result);
-  return result;
+  return Quantity{function(value.measurement().value()), AngleDimension()};
 }
 
 }  // namespace
@@ -147,22 +135,16 @@ void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
     return InverseTrigInput(value, static_cast<double (*)(double)>(std::atan));
   }), "atan");
   engine.add(chaiscript::fun([](double value, const Quantity& quantity) {
-    Quantity result{value * quantity.siValue, quantity.dimension};
-    RequireFinite(result);
-    return result;
+    return Quantity{quantity.measurement() * value, quantity.dimension};
   }), "*");
   engine.add(chaiscript::fun([](const Quantity& quantity, double value) {
-    Quantity result{quantity.siValue * value, quantity.dimension};
-    RequireFinite(result);
-    return result;
+    return Quantity{quantity.measurement() * value, quantity.dimension};
   }), "*");
   engine.add(chaiscript::fun([](const Quantity& quantity, double value) {
     if (value == 0.0) {
       throw std::domain_error("division by zero");
     }
-    Quantity result{quantity.siValue / value, quantity.dimension};
-    RequireFinite(result);
-    return result;
+    return Quantity{quantity.measurement() / value, quantity.dimension};
   }), "/");
 }
 
