@@ -11,17 +11,9 @@
           "$ref": "./shared.schema.json#/$defs/UUID",
           "description": "Stable UUID for this waypoint."
         },
-        "x": {
-          "$ref": "./shared.schema.json#/$defs/Expr",
-          "description": "X position (m)"
-        },
-        "y": {
-          "$ref": "./shared.schema.json#/$defs/Expr",
-          "description": "Y position (m)"
-        },
-        "heading": {
-          "$ref": "./shared.schema.json#/$defs/Expr",
-          "description": "Heading (rad)"
+        "pose": {
+          "$ref": "./shared.schema.json#/$defs/Pose2e",
+          "description": "Position and heading (m, rad)"
         },
         "intervals": {
           "type": "integer",
@@ -47,9 +39,7 @@
       },
       "required": [
         "uuid",
-        "x",
-        "y",
-        "heading",
+        "pose",
         "intervals",
         "split",
         "fixTranslation",

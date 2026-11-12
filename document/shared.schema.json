@@ -20,6 +20,112 @@
       "required": ["exp", "val"],
       "additionalProperties": false
     },
+    "Translation2d": {
+      "$ref": "./wpi.schema.json#/$defs/WpiTranslation2d"
+    },
+    "Rotation2d": {
+      "$ref": "./wpi.schema.json#/$defs/WpiRotation2d"
+    },
+    "Pose2d": {
+      "$ref": "./wpi.schema.json#/$defs/WpiPose2d"
+    },
+    "Region2d": {
+      "$ref": "./wpi.schema.json#/$defs/WpiRectangle2d"
+    },
+    "Polygon2d": {
+      "type": "object",
+      "description": "An evaluated convex polygon with counter-clockwise vertices in metres.",
+      "properties": {
+        "vertices": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Translation2d" },
+          "minItems": 3
+        }
+      },
+      "required": ["vertices"],
+      "additionalProperties": false
+    },
+    "Circle2d": {
+      "type": "object",
+      "description": "An evaluated circle with centre and radius in metres.",
+      "properties": {
+        "center": { "$ref": "#/$defs/Translation2d" },
+        "radius": { "type": "number", "minimum": 0 }
+      },
+      "required": ["center", "radius"],
+      "additionalProperties": false
+    },
+    "TranslationExpr": {
+      "type": "object",
+      "description": "A MathJS geometry expression evaluated to a 2D translation.",
+      "properties": {
+        "exp": { "type": "string" },
+        "val": { "$ref": "#/$defs/Translation2d" }
+      },
+      "required": ["exp", "val"],
+      "additionalProperties": false
+    },
+    "RotationExpr": {
+      "type": "object",
+      "description": "A MathJS geometry expression evaluated to a 2D rotation.",
+      "properties": {
+        "exp": { "type": "string" },
+        "val": { "$ref": "#/$defs/Rotation2d" }
+      },
+      "required": ["exp", "val"],
+      "additionalProperties": false
+    },
+    "PoseExpr": {
+      "type": "object",
+      "description": "A MathJS geometry expression evaluated to a 2D pose.",
+      "properties": {
+        "exp": { "type": "string" },
+        "val": { "$ref": "#/$defs/Pose2d" }
+      },
+      "required": ["exp", "val"],
+      "additionalProperties": false
+    },
+    "RegionExpr": {
+      "type": "object",
+      "description": "A MathJS geometry expression evaluated to an oriented rectangular region.",
+      "properties": {
+        "exp": { "type": "string" },
+        "val": { "$ref": "#/$defs/Region2d" }
+      },
+      "required": ["exp", "val"],
+      "additionalProperties": false
+    },
+    "PolygonExpr": {
+      "type": "object",
+      "description": "A MathJS geometry expression evaluated to a convex polygon.",
+      "properties": {
+        "exp": { "type": "string" },
+        "val": { "$ref": "#/$defs/Polygon2d" }
+      },
+      "required": ["exp", "val"],
+      "additionalProperties": false
+    },
+    "CircleExpr": {
+      "type": "object",
+      "description": "A MathJS geometry expression evaluated to a circle.",
+      "properties": {
+        "exp": { "type": "string" },
+        "val": { "$ref": "#/$defs/Circle2d" }
+      },
+      "required": ["exp", "val"],
+      "additionalProperties": false
+    },
+    "GeometryExpr": {
+      "description": "A MathJS expression whose result is a supported geometry value.",
+      "oneOf": [
+        { "$ref": "#/$defs/TranslationExpr" },
+        { "$ref": "#/$defs/RotationExpr" },
+        { "$ref": "#/$defs/PoseExpr" },
+        { "$ref": "#/$defs/RegionExpr" },
+        { "$ref": "#/$defs/PolygonExpr" },
+        { "$ref": "#/$defs/CircleExpr" }
+      ]
+    },
     "DriveType": {
       "description": "The drive topology of the robot.",
       "type": "string",
@@ -128,6 +234,16 @@
         }
       },
       "required": ["vertices"],
+      "additionalProperties": false
+    },
+    "Circle2e": {
+      "type": "object",
+      "description": "A 2D circle parameterized by Expr values.",
+      "properties": {
+        "center": { "$ref": "#/$defs/Translation2e" },
+        "radius": { "$ref": "#/$defs/Expr" }
+      },
+      "required": ["center", "radius"],
       "additionalProperties": false
     }
   }

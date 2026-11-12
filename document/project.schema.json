@@ -74,6 +74,16 @@
       "required": ["name", "value"],
       "additionalProperties": false
     },
+    "CircleVariableEntry": {
+      "type": "object",
+      "description": "Named circle variable keyed by UUID in variables.circles.",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "./shared.schema.json#/$defs/Circle2e" }
+      },
+      "required": ["name", "value"],
+      "additionalProperties": false
+    },
     "Variables": {
       "type": "object",
       "description": "All document-level variables keyed by UUID, grouped by variable kind.",
@@ -109,6 +119,12 @@
           "propertyNames": { "$ref": "./shared.schema.json#/$defs/UUID" },
           "additionalProperties": { "$ref": "#/$defs/PolygonVariableEntry" },
           "description": "2D convex polygon variables keyed by UUID."
+        },
+        "circles": {
+          "type": "object",
+          "propertyNames": { "$ref": "./shared.schema.json#/$defs/UUID" },
+          "additionalProperties": { "$ref": "#/$defs/CircleVariableEntry" },
+          "description": "2D circle variables keyed by UUID."
         }
       },
       "additionalProperties": false

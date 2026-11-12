@@ -44,10 +44,10 @@ The `val` is the value of the expression string in a base SI unit which is usage
 }
 ```
 * `Region2e`:
-Based on WPILib's Rectangle2d structure, but called Region2e because it's also used to specify the ellipse that's defined by the same center and width/height.
+Based on WPILib's Rectangle2d structure, but called Region2e because it's sometimes interpreted as the ellipse inscribed in that rectangle.
 ```json
 {
-    "center": {
+    "center": { // a Pose2e
         "translation": {
             "x": { "exp": "2 m", "val": 2.0 },
             "y": { "exp": "1 m", "val": 1.0 }
@@ -77,7 +77,7 @@ Structure
 ```json
 {
     "uuid": string,
-    "name": "filename", //without .traj
+    "name": "filename", //without .traj or directory
     "version": 4,
     "config": null,// copy of the robot config from last generation. null if never generated.
     "snapshot": null,//copy of parameters from last generation. null if never generated.
@@ -86,15 +86,15 @@ Structure
     "events": []
 }
 ```
-  When non-null, `output` has this structure. The only way to change it is via regeneration:
-  ```json
-  {
-    "sampleType": "Swerve" | "Differential",
-    "waypoints": [0.0, timeOfIntermediateWaypoints..., timeOfFinalWaypoint],
-    "splits": [0, indexOfNextSplitStartWaypoint],
-    "trajectory": HolonomicTrajectory | DifferentialTrajectory
-  }
-  ```
+When non-null, `output` has this structure. The only way to change it is via regeneration:
+```json
+{
+  "sampleType": "Swerve" | "Differential",
+  "waypoints": [0.0, timeOfIntermediateWaypoints..., timeOfFinalWaypoint],
+  "splits": [0, indexOfNextSplitStartWaypoint],
+  "trajectory": HolonomicTrajectory | DifferentialTrajectory
+}
+```
 Note:
 1. Trajectory total time should be accessed via the last element of `output.waypoints`.
 2. Number of segments is `length(output.splits)`
@@ -119,7 +119,9 @@ Note:
 
 * Sample forces are removed, to be calculated dynamically if needed.
 * Differential samples additionally contain `leftVelocity` and `rightVelocity`.
-
+### Waypoints
+* Waypoints have `x`, `y`, and `heading` removed and replaced with a `pose: Pose2e` property.
+* Waypoints with `fixHeading` true and `fixTranslation` false are now valid, allowing the heading to be fixed independently of the translation.
 ### Event Markers
 Structure:
 ```json
@@ -172,10 +174,6 @@ A full Constraint is therefore serialized as:
 ```
 The v4 constraint variants are `MaxLinearVelocity`, `MaxAngularVelocity`, `KeepInCircle`,
 and `Heading`, with more to be added as part of v4 before it is finalized.
-
-### Waypoints
-Waypoints are unchanged apart from the required persistent `uuid`.
-
 
 ## Project
 

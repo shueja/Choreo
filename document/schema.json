@@ -11,10 +11,25 @@
     },
     "UUID": { "$ref": "./shared.schema.json#/$defs/UUID" },
     "WaypointID": { "$ref": "./shared.schema.json#/$defs/WaypointID" },
+    "Translation2d": { "$ref": "./shared.schema.json#/$defs/Translation2d" },
+    "Rotation2d": { "$ref": "./shared.schema.json#/$defs/Rotation2d" },
+    "Pose2d": { "$ref": "./shared.schema.json#/$defs/Pose2d" },
+    "Region2d": { "$ref": "./shared.schema.json#/$defs/Region2d" },
+    "Polygon2d": { "$ref": "./shared.schema.json#/$defs/Polygon2d" },
+    "Circle2d": { "$ref": "./shared.schema.json#/$defs/Circle2d" },
+    "TranslationExpr": { "$ref": "./shared.schema.json#/$defs/TranslationExpr" },
+    "RotationExpr": { "$ref": "./shared.schema.json#/$defs/RotationExpr" },
+    "PoseExpr": { "$ref": "./shared.schema.json#/$defs/PoseExpr" },
+    "RegionExpr": { "$ref": "./shared.schema.json#/$defs/RegionExpr" },
+    "PolygonExpr": { "$ref": "./shared.schema.json#/$defs/PolygonExpr" },
+    "CircleExpr": { "$ref": "./shared.schema.json#/$defs/CircleExpr" },
+    "GeometryExpr": { "$ref": "./shared.schema.json#/$defs/GeometryExpr" },
     "Translation2e": { "$ref": "./shared.schema.json#/$defs/Translation2e" },
     "Rotation2e": { "$ref": "./shared.schema.json#/$defs/Rotation2e" },
     "Pose2e": { "$ref": "./shared.schema.json#/$defs/Pose2e" },
     "Region2e": { "$ref": "./shared.schema.json#/$defs/Region2e" },
+    "Polygon2e": { "$ref": "./shared.schema.json#/$defs/Polygon2e" },
+    "Circle2e": { "$ref": "./shared.schema.json#/$defs/Circle2e" },
     "Dimension": { "$ref": "./project.schema.json#/$defs/Dimension" },
     "ExpressionVariableEntry": {
       "$ref": "./project.schema.json#/$defs/ExpressionVariableEntry"
@@ -27,6 +42,9 @@
     },
     "RegionVariableEntry": {
       "$ref": "./project.schema.json#/$defs/RegionVariableEntry"
+    },
+    "CircleVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/CircleVariableEntry"
     },
     "Variables": { "$ref": "./project.schema.json#/$defs/Variables" },
     "MotorConfig": { "$ref": "./project.schema.json#/$defs/MotorConfig" },

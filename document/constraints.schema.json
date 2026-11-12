@@ -34,20 +34,12 @@
       "description": "Constraint: keep the robot within a circular field region.",
       "properties": {
         "type": { "type": "string", "const": "KeepInCircle" },
-        "x": {
-          "$ref": "./shared.schema.json#/$defs/Expr",
-          "description": "Circle center X (m)"
-        },
-        "y": {
-          "$ref": "./shared.schema.json#/$defs/Expr",
-          "description": "Circle center Y (m)"
-        },
-        "r": {
-          "$ref": "./shared.schema.json#/$defs/Expr",
-          "description": "Circle radius (m)"
+        "circle": {
+          "$ref": "./shared.schema.json#/$defs/CircleExpr",
+          "description": "Circle geometry expression (centre and radius in metres)"
         }
       },
-      "required": ["type", "x", "y", "r"],
+      "required": ["type", "circle"],
       "additionalProperties": false
     },
     "HeadingConstraint": {
@@ -56,8 +48,8 @@
       "properties": {
         "type": { "type": "string", "const": "Heading" },
         "heading": {
-          "$ref": "./shared.schema.json#/$defs/Expr",
-          "description": "Target heading (rad)"
+          "$ref": "./shared.schema.json#/$defs/RotationExpr",
+          "description": "Target heading geometry expression (rad)"
         },
         "tolerance": {
           "$ref": "./shared.schema.json#/$defs/Expr",
