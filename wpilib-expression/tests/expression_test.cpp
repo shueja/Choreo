@@ -42,11 +42,11 @@ bool EvaluatesTo(const EvaluationContext& context, std::string_view expression,
                  double expected, std::string_view unit, double tolerance = 1e-10) {
   auto dimension = unit.empty() ? units::precise::one : From(1.0, unit).units();
   auto result = context.Evaluate(expression, dimension);
-  auto converted = unit.empty() ? std::expected<double, std::string>{
+  auto converted = unit.empty() ? std::expected<double, Error>{
                                       result.value() * result.units().multiplier()}
                                 : In(result, unit);
   if (!converted) {
-    std::println(stderr, "Conversion failed: {}", converted.error());
+    std::println(stderr, "Conversion failed: {}", ErrorMessage(converted.error()));
     return false;
   }
   auto value = *converted;

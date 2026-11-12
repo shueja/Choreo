@@ -77,6 +77,8 @@ bool converted = wpilib::expression::TryAs(context.Evaluate("90 deg"), angle);
 
 The conversion checks the full WPILib base-dimension signature. Non-linear WPI scales, unsupported runtime dimensions, and dimension mismatches are not converted.
 
+`In` returns `std::expected<double, Error>`. The error variant distinguishes incompatible dimensions from malformed or unknown unit expressions; use `ErrorMessage` to format an error.
+
 ## Expression Support
 
 Bare unit suffixes include `2 m`, `90 deg`, `6000 RPM`, `2 m/s^2`, and `0.018 N*m/A`. Parentheses, scientific notation, explicit multiplication, division, and integer powers are supported. Addition, subtraction, comparisons, and powers validate dimensions. Trigonometric functions accept angle or dimensionless inputs; inverse trigonometric functions return angles.

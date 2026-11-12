@@ -26,11 +26,10 @@ const std::map<std::string, units::precise_unit>& UnitRegistry() {
   return units;
 }
 
-std::expected<units::precise_unit, std::string> ParseUnit(std::string_view expression) {
+std::expected<units::precise_unit, Error> ParseUnit(std::string_view expression) {
   auto unit = units::unit_from_string(std::string(expression));
   if (units::is_error(unit)) {
-    return std::unexpected(std::string{"unknown or malformed unit: "} +
-                           std::string(expression));
+    return std::unexpected(InvalidUnitError{std::string(expression)});
   }
   return unit;
 }

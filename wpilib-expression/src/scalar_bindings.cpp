@@ -47,7 +47,7 @@ void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
   engine.add(chaiscript::fun([](double value, const std::string& unit) {
     auto parsed = detail::ParseUnit(unit);
     if (!parsed) {
-      throw chaiscript::exception::eval_error(parsed.error());
+      throw chaiscript::exception::eval_error(ErrorMessage(parsed.error()));
     }
     return From(value, *parsed);
   }), "quantity");
