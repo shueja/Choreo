@@ -20,26 +20,29 @@ units::precise_unit UnitForDimension(const Dimension& dimension) {
 
 }  // namespace
 
-Quantity Quantity::From(double value, std::string_view unit) {
+units::precise_measurement From(double value, std::string_view unit) {
   auto parsed = detail::ParseUnit(unit);
-  return Quantity{units::precise_measurement{value, parsed.unit}, parsed.dimension};
+  return units::precise_measurement{value, parsed.unit};
 }
 
-double Quantity::In(std::string_view unit) const {
+double In(const units::precise_measurement& measurement, std::string_view unit) {
   auto parsed = detail::ParseUnit(unit);
-  if (dimension != parsed.dimension) {
+  if (MeasurementDimension(measurement) != parsed.dimension) {
     throw std::invalid_argument("requested unit has incompatible dimension");
   }
-  return measurement_.value_as(parsed.unit);
+  return measurement.value_as(parsed.unit);
 }
 
-Quantity::Quantity(double value, Dimension dimension)
-    : siValue(value), dimension(dimension),
-      measurement_{value, UnitForDimension(dimension)} {}
+Dimension MeasurementDimension(const units::precise_measurement& measurement) {
+  return detail::DimensionFor(measurement.units());
+}
 
-Quantity::Quantity(units::precise_measurement measurement, Dimension dimension)
-    : siValue(measurement.value() * measurement.units().multiplier()),
-      dimension(dimension),
-      measurement_(std::move(measurement)) {}
+double SiValue(const units::precise_measurement& measurement) {
+  return measurement.value() * measurement.units().multiplier();
+}
+
+units::precise_measurement MakeMeasurement(double value, const Dimension& dimension) {
+  return units::precise_measurement{value, UnitForDimension(dimension)};
+}
 
 }  // namespace wpilib::expression

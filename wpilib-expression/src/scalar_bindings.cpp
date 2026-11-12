@@ -12,101 +12,94 @@ namespace {
 Dimension LengthDimension() { return MakeDimension(1, 0, 0, 0, 0); }
 Dimension AngleDimension() { return MakeDimension(0, 0, 0, 0, 1); }
 
-Quantity Power(const Quantity& value, double exponent) {
+units::precise_measurement Power(const units::precise_measurement& value, double exponent) {
   if (!std::isfinite(exponent) || std::trunc(exponent) != exponent ||
       std::abs(exponent) > 16.0) {
     throw std::invalid_argument("quantity powers must be integers with magnitude at most 16");
   }
   int integerExponent = static_cast<int>(exponent);
-  return Quantity{pow(value.measurement(), integerExponent),
-                  ScaleDimension(value.dimension, integerExponent)};
+  return pow(value, integerExponent);
 }
 
-Quantity Add(const Quantity& left, const Quantity& right) {
-  if (left.dimension != right.dimension) {
+units::precise_measurement Add(const units::precise_measurement& left, const units::precise_measurement& right) {
+  if (MeasurementDimension(left) != MeasurementDimension(right)) {
     throw std::invalid_argument("addition requires matching dimensions");
   }
-  return Quantity{left.measurement() + right.measurement(), left.dimension};
+  return left + right;
 }
 
-Quantity Subtract(const Quantity& left, const Quantity& right) {
-  if (left.dimension != right.dimension) {
+units::precise_measurement Subtract(const units::precise_measurement& left, const units::precise_measurement& right) {
+  if (MeasurementDimension(left) != MeasurementDimension(right)) {
     throw std::invalid_argument("subtraction requires matching dimensions");
   }
-  return Quantity{left.measurement() - right.measurement(), left.dimension};
+  return left - right;
 }
 
-Quantity Multiply(const Quantity& left, const Quantity& right) {
-  return Quantity{left.measurement() * right.measurement(),
-                  Combine(left.dimension, right.dimension, 1)};
+units::precise_measurement Multiply(const units::precise_measurement& left, const units::precise_measurement& right) {
+  return left * right;
 }
 
-Quantity Divide(const Quantity& left, const Quantity& right) {
-  if (right.siValue == 0.0) {
+units::precise_measurement Divide(const units::precise_measurement& left, const units::precise_measurement& right) {
+  if (SiValue(right) == 0.0) {
     throw std::domain_error("division by zero");
   }
-  return Quantity{left.measurement() / right.measurement(),
-                  Combine(left.dimension, right.dimension, -1)};
+  return left / right;
 }
 
-void RequireComparable(const Quantity& left, const Quantity& right) {
-  if (left.dimension != right.dimension) {
+void RequireComparable(const units::precise_measurement& left, const units::precise_measurement& right) {
+  if (MeasurementDimension(left) != MeasurementDimension(right)) {
     throw std::invalid_argument("comparison requires matching dimensions");
   }
 }
 
-bool Equal(const Quantity& left, const Quantity& right) {
+bool Equal(const units::precise_measurement& left, const units::precise_measurement& right) {
   RequireComparable(left, right);
-  return left.measurement() == right.measurement();
+  return left == right;
 }
 
-bool Less(const Quantity& left, const Quantity& right) {
+bool Less(const units::precise_measurement& left, const units::precise_measurement& right) {
   RequireComparable(left, right);
-  return left.measurement() < right.measurement();
+  return left < right;
 }
 
-bool LessEqual(const Quantity& left, const Quantity& right) {
+bool LessEqual(const units::precise_measurement& left, const units::precise_measurement& right) {
   RequireComparable(left, right);
-  return left.measurement() <= right.measurement();
+  return left <= right;
 }
 
-bool Greater(const Quantity& left, const Quantity& right) {
+bool Greater(const units::precise_measurement& left, const units::precise_measurement& right) {
   RequireComparable(left, right);
-  return left.measurement() > right.measurement();
+  return left > right;
 }
 
-bool GreaterEqual(const Quantity& left, const Quantity& right) {
+bool GreaterEqual(const units::precise_measurement& left, const units::precise_measurement& right) {
   RequireComparable(left, right);
-  return left.measurement() >= right.measurement();
+  return left >= right;
 }
 
-Quantity TrigInput(const Quantity& value, double (*function)(double)) {
-  if (value.dimension != AngleDimension() && value.dimension != Dimension{}) {
+units::precise_measurement TrigInput(const units::precise_measurement& value, double (*function)(double)) {
+  auto dimension = MeasurementDimension(value);
+  if (dimension != AngleDimension() && dimension != Dimension{}) {
     throw std::invalid_argument(
         "trigonometric functions require an angle or dimensionless value");
   }
-  return Quantity{function(value.measurement().value()), Dimension{}};
+  return MakeMeasurement(function(SiValue(value)), Dimension{});
 }
 
-Quantity InverseTrigInput(const Quantity& value, double (*function)(double)) {
-  if (value.dimension != Dimension{}) {
+units::precise_measurement InverseTrigInput(const units::precise_measurement& value, double (*function)(double)) {
+  if (MeasurementDimension(value) != Dimension{}) {
     throw std::invalid_argument(
         "inverse trigonometric functions require a dimensionless value");
   }
-  return Quantity{function(value.measurement().value()), AngleDimension()};
+  return MakeMeasurement(function(SiValue(value)), AngleDimension());
 }
 
 }  // namespace
 
 void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
-  engine.add(chaiscript::user_type<Quantity>(), "Quantity");
   engine.add(chaiscript::user_type<units::precise_measurement>(), "precise_measurement");
-  engine.add(chaiscript::type_conversion<units::precise_measurement, Quantity>(
-      [](const units::precise_measurement& value) {
-        return Quantity{value, DimensionFor(value.units())};
-      }));
   engine.add(chaiscript::fun([](double value, const std::string& unit) {
-    return Quantity::From(value, unit);
+    return From(value, unit);
   }), "quantity");
   engine.add(chaiscript::fun(&Add), "+");
   engine.add(chaiscript::fun(&Subtract), "-");
@@ -114,42 +107,42 @@ void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
   engine.add(chaiscript::fun(&Divide), "/");
   engine.add(chaiscript::fun(&Power), "^");
   engine.add(chaiscript::fun(&Equal), "==");
-  engine.add(chaiscript::fun([](const Quantity& left, const Quantity& right) {
+  engine.add(chaiscript::fun([](const units::precise_measurement& left, const units::precise_measurement& right) {
     return !Equal(left, right);
   }), "!=");
   engine.add(chaiscript::fun(&Less), "<");
   engine.add(chaiscript::fun(&LessEqual), "<=");
   engine.add(chaiscript::fun(&Greater), ">");
   engine.add(chaiscript::fun(&GreaterEqual), ">=");
-  engine.add(chaiscript::fun([](const Quantity& value) {
+  engine.add(chaiscript::fun([](const units::precise_measurement& value) {
     return TrigInput(value, static_cast<double (*)(double)>(std::sin));
   }), "sin");
-  engine.add(chaiscript::fun([](const Quantity& value) {
+  engine.add(chaiscript::fun([](const units::precise_measurement& value) {
     return TrigInput(value, static_cast<double (*)(double)>(std::cos));
   }), "cos");
-  engine.add(chaiscript::fun([](const Quantity& value) {
+  engine.add(chaiscript::fun([](const units::precise_measurement& value) {
     return TrigInput(value, static_cast<double (*)(double)>(std::tan));
   }), "tan");
-  engine.add(chaiscript::fun([](const Quantity& value) {
+  engine.add(chaiscript::fun([](const units::precise_measurement& value) {
     return InverseTrigInput(value, static_cast<double (*)(double)>(std::asin));
   }), "asin");
-  engine.add(chaiscript::fun([](const Quantity& value) {
+  engine.add(chaiscript::fun([](const units::precise_measurement& value) {
     return InverseTrigInput(value, static_cast<double (*)(double)>(std::acos));
   }), "acos");
-  engine.add(chaiscript::fun([](const Quantity& value) {
+  engine.add(chaiscript::fun([](const units::precise_measurement& value) {
     return InverseTrigInput(value, static_cast<double (*)(double)>(std::atan));
   }), "atan");
-  engine.add(chaiscript::fun([](double value, const Quantity& quantity) {
-    return Quantity{quantity.measurement() * value, quantity.dimension};
+  engine.add(chaiscript::fun([](double value, const units::precise_measurement& quantity) {
+    return quantity * value;
   }), "*");
-  engine.add(chaiscript::fun([](const Quantity& quantity, double value) {
-    return Quantity{quantity.measurement() * value, quantity.dimension};
+  engine.add(chaiscript::fun([](const units::precise_measurement& quantity, double value) {
+    return quantity * value;
   }), "*");
-  engine.add(chaiscript::fun([](const Quantity& quantity, double value) {
+  engine.add(chaiscript::fun([](const units::precise_measurement& quantity, double value) {
     if (value == 0.0) {
       throw std::domain_error("division by zero");
     }
-    return Quantity{quantity.measurement() / value, quantity.dimension};
+    return quantity / value;
   }), "/");
 }
 

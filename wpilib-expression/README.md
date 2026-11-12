@@ -32,12 +32,13 @@ The exported target is `wpilib::expression`. A consumer uses `find_package(wpili
 #include <wpi/units/length.hpp>
 
 wpilib::expression::EvaluationContext context;
-auto length = wpilib::expression::Quantity::From(1.0, "m").dimension;
+auto length = wpilib::expression::MeasurementDimension(
+    wpilib::expression::From(1.0, "m"));
 auto distance = context.Evaluate("2 m + 3 ft", length);
-double meters = distance.In("m");
+double meters = wpilib::expression::In(distance, "m");
 ```
 
-Contexts register scalar and native WPILib geometry values with `SetVariable`. `Evaluate` returns a `Quantity` and can check an expected `Dimension`; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
+Contexts register scalar and native WPILib geometry values with `SetVariable`. `Evaluate` returns an LLNL `units::precise_measurement` and can check an expected `Dimension`; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
 
 `SetSetupScript` atomically replaces context variables using initialized top-level `var`, `auto`, `const`, or `global` declarations. Initializers may use read-only expressions and previously declared variables. Values must be quantities, numbers, or supported geometry objects; numbers become dimensionless quantities. A failed setup leaves the previous variables unchanged. Other statements, user-defined functions, external scripts, module loading, and I/O are not permitted. Evaluation is not resource-limited.
 
@@ -60,16 +61,16 @@ context.SetSetupScript("var distance = 2 m; var target = Pose2d(3 m, 4 m, 90 deg
 auto result = context.Evaluate("distance + target.X()");
 ```
 
-`Quantity::TryAs<UnitValue>()` converts to a compatible linear WPILib `unit_t` container and returns `std::optional<UnitValue>`; the output-parameter overload returns `false` on incompatibility:
+`TryAs<UnitValue>(measurement)` converts to a compatible linear WPILib `unit_t` container and returns `std::optional<UnitValue>`; the output-parameter overload returns `false` on incompatibility:
 
 ```cpp
 auto distance = context.Evaluate("1 m");
-if (auto feet = distance.TryAs<wpi::units::foot_t>()) {
+if (auto feet = wpilib::expression::TryAs<wpi::units::foot_t>(distance)) {
   double valueInFeet = feet->value();
 }
 
 wpi::units::radian_t angle;
-bool converted = context.Evaluate("90 deg").TryAs(angle);
+bool converted = wpilib::expression::TryAs(context.Evaluate("90 deg"), angle);
 ```
 
 The conversion checks the full WPILib base-dimension signature. Non-linear WPI scales, unsupported runtime dimensions, and dimension mismatches are not converted.

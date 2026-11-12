@@ -25,7 +25,7 @@ class EvaluationContext {
   EvaluationContext(EvaluationContext&& other) noexcept;
   EvaluationContext& operator=(EvaluationContext&& other) noexcept;
   void SetSetupScript(std::string_view source);
-  void SetVariable(std::string name, Quantity value);
+  void SetVariable(std::string name, units::precise_measurement value);
   void SetVariable(std::string name, wpi::math::Pose2d value);
   void SetVariable(std::string name, wpi::math::Translation2d value);
   void SetVariable(std::string name, wpi::math::Rotation2d value);
@@ -33,7 +33,7 @@ class EvaluationContext {
   void SetVariable(std::string name, wpi::math::Twist2d value);
   void SetVariable(std::string name, wpi::math::Rectangle2d value);
   void SetVariable(std::string name, wpi::math::Ellipse2d value);
-  Quantity Evaluate(
+  units::precise_measurement Evaluate(
       std::string_view source,
       std::optional<Dimension> expectedDimension = std::nullopt) const;
   bool EvaluateBoolean(std::string_view source) const;

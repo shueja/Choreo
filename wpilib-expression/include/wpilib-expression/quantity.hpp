@@ -38,52 +38,38 @@ constexpr bool MatchesDimension(const Dimension& dimension) {
 
 }  // namespace detail
 
-class Quantity {
- public:
-  double siValue{};
-  Dimension dimension{};
+units::precise_measurement From(double value, std::string_view unit);
+double In(const units::precise_measurement& measurement, std::string_view unit);
+Dimension MeasurementDimension(const units::precise_measurement& measurement);
+double SiValue(const units::precise_measurement& measurement);
+units::precise_measurement MakeMeasurement(double value, const Dimension& dimension);
 
-  static Quantity From(double value, std::string_view unit);
-  double In(std::string_view unit) const;
-  const units::precise_measurement& measurement() const { return measurement_; }
-
-  template <typename UnitValue>
-  std::optional<UnitValue> TryAs() const {
-    static_assert(wpi::units::traits::is_unit_t<UnitValue>::value,
-                  "TryAs requires a WPILib unit_t container type");
-    if constexpr (!wpi::units::traits::has_linear_scale<UnitValue>::value) {
+template <typename UnitValue>
+std::optional<UnitValue> TryAs(const units::precise_measurement& measurement) {
+  static_assert(wpi::units::traits::is_unit_t<UnitValue>::value,
+                "TryAs requires a WPILib unit_t container type");
+  if constexpr (!wpi::units::traits::has_linear_scale<UnitValue>::value) {
+    return std::nullopt;
+  } else {
+    using UnitTag = typename wpi::units::traits::unit_t_traits<UnitValue>::unit_type;
+    using BaseUnit = typename wpi::units::traits::base_unit_of<
+        typename wpi::units::traits::unit_traits<UnitTag>::base_unit_type>;
+    using SiUnit = wpi::units::unit<std::ratio<1>, BaseUnit>;
+    if (!detail::MatchesDimension<BaseUnit>(MeasurementDimension(measurement))) {
       return std::nullopt;
-    } else {
-      using UnitTag = typename wpi::units::traits::unit_t_traits<UnitValue>::unit_type;
-      using BaseUnit = typename wpi::units::traits::base_unit_of<
-          typename wpi::units::traits::unit_traits<UnitTag>::base_unit_type>;
-      using SiUnit = wpi::units::unit<std::ratio<1>, BaseUnit>;
-
-      if (!detail::MatchesDimension<BaseUnit>(dimension)) {
-        return std::nullopt;
-      }
-
-      double converted = wpi::units::convert<SiUnit, UnitTag>(siValue);
-      return UnitValue{converted};
     }
+    return UnitValue{wpi::units::convert<SiUnit, UnitTag>(SiValue(measurement))};
   }
+}
 
-  template <typename UnitValue>
-  bool TryAs(UnitValue& result) const {
-    auto converted = TryAs<UnitValue>();
-    if (!converted) {
-      return false;
-    }
-    result = *converted;
-    return true;
+template <typename UnitValue>
+bool TryAs(const units::precise_measurement& measurement, UnitValue& result) {
+  auto converted = TryAs<UnitValue>(measurement);
+  if (!converted) {
+    return false;
   }
-
-  Quantity() = default;
-  Quantity(double value, Dimension dimension);
-  Quantity(units::precise_measurement measurement, Dimension dimension);
-
- private:
-  units::precise_measurement measurement_{};
-};
+  result = *converted;
+  return true;
+}
 
 }  // namespace wpilib::expression

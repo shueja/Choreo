@@ -29,7 +29,7 @@ using Rectangle2d = wpi::math::Rectangle2d;
 using Ellipse2d = wpi::math::Ellipse2d;
 struct NamespaceValues;
 using NamespacePtr = std::shared_ptr<const NamespaceValues>;
-using VariableValue = std::variant<Quantity, Pose2d, Translation2d, Rotation2d,
+using VariableValue = std::variant<units::precise_measurement, Pose2d, Translation2d, Rotation2d,
                                    Transform2d, Twist2d, Rectangle2d, Ellipse2d, NamespacePtr>;
 using Variables = std::map<std::string, VariableValue>;
 

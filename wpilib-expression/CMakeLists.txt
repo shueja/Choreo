@@ -116,7 +116,7 @@ if(WPILIB_EXPRESSION_BUILD_TESTS)
         context_copies
         unit_expressions
         identifiers
-        quantity_math
+        measurement_math
         geometry_constructors
         geometry_operations
         shapes
