@@ -23,6 +23,12 @@ ctest --test-dir .\wpilib-expression\build --output-on-failure
 cmake --install .\wpilib-expression\build --prefix C:\path\to\expression-install
 ```
 
+To build and run the setup-replacement benchmark, configure with
+`-DWPILIB_EXPRESSION_BUILD_BENCHMARKS=ON`, build the
+`wpilib_expression_setup_replacement_benchmark` target, then run that executable.
+It reports setup replacement and evaluation times for batches of 100, 500, and
+1,000 expressions over three setup changes.
+
 The exported target is `wpilib::expression`. A consumer uses `find_package(wpilib-expression CONFIG REQUIRED)` and links that target. The consumer must also make WPILib's `wpimath::wpimath` target available or install WPILib and add its prefix to `CMAKE_PREFIX_PATH`.
 
 ## API

@@ -2,12 +2,14 @@
 
 #include <atomic>
 #include <cmath>
+#include <cstddef>
 #include <exception>
 #include <functional>
 #include <print>
 #include <limits>
 #include <numbers>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <utility>
@@ -209,6 +211,42 @@ int TestSetup() {
   if (!oldSetupRejected || !EvaluatesTo(setup, "replacement", 5.0, "m")) {
     std::println(stderr, "setup did not replace previous variables");
     return 1;
+  }
+  return 0;
+}
+
+int TestSetupReplacementWithManyExpressions() {
+  constexpr std::size_t expressionCount = 512;
+  auto makeSetup = [](int offset) {
+    std::string script;
+    for (std::size_t i = 0; i < expressionCount; ++i) {
+      script += "var value" + std::to_string(i) + " = " +
+                std::to_string(offset + static_cast<int>(i)) + " m; ";
+    }
+    return script;
+  };
+
+  EvaluationContext context;
+  context.SetSetupScript(makeSetup(0));
+  for (std::size_t i = 0; i < expressionCount; ++i) {
+    if (!EvaluatesTo(context, "value" + std::to_string(i),
+                     static_cast<double>(i), "m")) {
+      std::println(stderr,
+                   "initial setup returned the wrong value for expression {}",
+                   i);
+      return 1;
+    }
+  }
+
+  context.SetSetupScript(makeSetup(1000));
+  for (std::size_t i = 0; i < expressionCount; ++i) {
+    if (!EvaluatesTo(context, "value" + std::to_string(i),
+                     static_cast<double>(1000 + i), "m")) {
+      std::println(
+          stderr,
+          "replacement setup returned the wrong value for expression {}", i);
+      return 1;
+    }
   }
   return 0;
 }
@@ -785,6 +823,8 @@ struct TestCase {
 constexpr TestCase tests[]{
     {"namespaces", TestNamespaces},
     {"setup", TestSetup},
+    {"setup_replacement_many_expressions",
+     TestSetupReplacementWithManyExpressions},
     {"arithmetic_and_variables", TestArithmeticAndVariables},
     {"read_only_expressions", TestReadOnlyExpressions},
     {"error_messages", TestErrorMessages},
