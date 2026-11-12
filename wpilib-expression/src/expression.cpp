@@ -276,7 +276,7 @@ void ValidateSetup(const chaiscript::AST_Node& root,
       throw std::invalid_argument("invalid or duplicate setup variable: " + name->text);
     }
     ValidateExpression(children[1].get(), variables, namespacePaths);
-    detail::StoreVariable(variables, name->text, Quantity{});
+    detail::StoreVariable(variables, name->text, units::precise_measurement{});
   }
 }
 
@@ -308,9 +308,6 @@ Result EvaluateResult(Cache& engineCache, const detail::Variables& variables,
       throw SyntaxError(error);
     }
   }();
-  if constexpr (std::is_same_v<Result, Quantity>) {
-    detail::RequireFinite(result);
-  }
   return result;
 }
 
@@ -383,9 +380,8 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
       }
       activeNamespaces.erase(&object);
       save(std::move(result));
-    } else if (type.bare_equal(chaiscript::user_type<Quantity>())) {
-      auto quantity = chaiscript::boxed_cast<Quantity>(value);
-      detail::RequireFinite(quantity);
+    } else if (type.bare_equal(chaiscript::user_type<units::precise_measurement>())) {
+      auto quantity = chaiscript::boxed_cast<units::precise_measurement>(value);
       save(quantity);
     } else if (type.bare_equal(chaiscript::user_type<Pose2d>())) {
       save(chaiscript::boxed_cast<Pose2d>(value));
@@ -402,21 +398,19 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
     } else if (type.bare_equal(chaiscript::user_type<Ellipse2d>())) {
       save(chaiscript::boxed_cast<Ellipse2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<double>())) {
-      auto quantity = Quantity{chaiscript::boxed_cast<double>(value), {}};
-      detail::RequireFinite(quantity);
+      auto quantity = units::precise_measurement{chaiscript::boxed_cast<double>(value), {}};
       save(quantity);
     } else if (type.bare_equal(chaiscript::user_type<int>())) {
-      save(Quantity{static_cast<double>(chaiscript::boxed_cast<int>(value)), {}});
+      save(units::precise_measurement{static_cast<double>(chaiscript::boxed_cast<int>(value)), {}});
     } else if (type.bare_equal(chaiscript::user_type<std::int64_t>())) {
-      save(Quantity{static_cast<double>(chaiscript::boxed_cast<std::int64_t>(value)), {}});
+      save(units::precise_measurement{static_cast<double>(chaiscript::boxed_cast<std::int64_t>(value)), {}});
     } else {
-      Quantity quantity;
+      units::precise_measurement quantity;
       try {
-        quantity = engine.boxed_cast<Quantity>(value);
+        quantity = engine.boxed_cast<units::precise_measurement>(value);
       } catch (const chaiscript::exception::bad_boxed_cast&) {
         throw std::invalid_argument("unsupported setup variable type: " + name);
       }
-      detail::RequireFinite(quantity);
       save(quantity);
     }
   };
@@ -433,7 +427,7 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
   impl_ = std::move(replacement);
 }
 
-void EvaluationContext::SetVariable(std::string name, Quantity value) {
+void EvaluationContext::SetVariable(std::string name, units::precise_measurement value) {
   if (!impl_) {
     impl_ = std::make_shared<Impl>();
   }
@@ -489,12 +483,13 @@ void EvaluationContext::SetVariable(std::string name, Ellipse2d value) {
   detail::StoreVariable(impl_->variables, std::move(name), std::move(value));
 }
 
-Quantity EvaluationContext::Evaluate(
-    std::string_view source, std::optional<Dimension> expectedDimension) const {
+units::precise_measurement EvaluationContext::Evaluate(
+    std::string_view source, std::optional<units::precise_unit> expectedDimension) const {
   static const detail::Variables emptyVariables;
-  auto result = EvaluateResult<Quantity>(*engineCache_,
+  auto result = EvaluateResult<units::precise_measurement>(*engineCache_,
                                          impl_ ? impl_->variables : emptyVariables, source);
-  if (expectedDimension && result.dimension != *expectedDimension) {
+  if (expectedDimension &&
+      result.units().base_units() != expectedDimension->base_units()) {
     throw std::invalid_argument("expression result has unexpected dimension");
   }
   return result;

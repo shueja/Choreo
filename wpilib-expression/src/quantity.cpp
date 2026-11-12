@@ -5,20 +5,15 @@
 #include <stdexcept>
 
 namespace wpilib::expression {
-
-Quantity Quantity::From(double value, std::string_view unit) {
-  auto parsed = detail::ParseUnit(unit);
-  Quantity result{value * parsed.scale, parsed.dimension};
-  detail::RequireFinite(result);
-  return result;
+units::precise_measurement From(double value, const units::precise_unit& unit) {
+  return units::precise_measurement{value, unit};
 }
 
-double Quantity::In(std::string_view unit) const {
-  auto parsed = detail::ParseUnit(unit);
-  if (dimension != parsed.dimension) {
+double In(const units::precise_measurement& measurement, const units::precise_unit& unit) {
+  if (measurement.units().base_units() != unit.base_units()) {
     throw std::invalid_argument("requested unit has incompatible dimension");
   }
-  return siValue / parsed.scale;
+  return measurement.value_as(unit);
 }
 
 }  // namespace wpilib::expression

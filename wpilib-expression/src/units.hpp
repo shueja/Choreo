@@ -8,16 +8,7 @@
 
 namespace wpilib::expression::detail {
 
-struct Unit {
-  double scale;
-  Dimension dimension;
-};
-
-Dimension MakeDimension(int length, int mass, int time, int current, int angle);
-Dimension Combine(const Dimension& left, const Dimension& right, int sign);
-Dimension ScaleDimension(const Dimension& dimension, int exponent);
-const std::map<std::string, Unit>& UnitRegistry();
-Unit ParseUnit(std::string_view expression);
-void RequireFinite(const Quantity& quantity);
+const std::map<std::string, units::precise_unit>& UnitRegistry();
+units::precise_unit ParseUnit(std::string_view expression);
 
 }  // namespace wpilib::expression::detail

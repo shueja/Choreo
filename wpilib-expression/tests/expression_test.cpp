@@ -6,6 +6,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <numbers>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
@@ -15,17 +16,18 @@
 #include <wpi/units/length.hpp>
 
 using wpilib::expression::EvaluationContext;
-using wpilib::expression::Quantity;
+using wpilib::expression::From;
+using wpilib::expression::In;
+using wpilib::expression::TryAs;
 using wpi::math::Pose2d;
 
 namespace {
 
 bool EvaluatesTo(const EvaluationContext& context, std::string_view expression,
                  double expected, std::string_view unit, double tolerance = 1e-10) {
-  auto dimension = unit.empty() ? wpilib::expression::Dimension{}
-                                : Quantity::From(1.0, unit).dimension;
+  auto dimension = unit.empty() ? units::precise::one : From(1.0, unit).units();
   auto result = context.Evaluate(expression, dimension);
-  auto value = unit.empty() ? result.siValue : result.In(unit);
+  auto value = unit.empty() ? result.value() * result.units().multiplier() : In(result, unit);
   if (std::abs(value - expected) <= tolerance) {
     return true;
   }
@@ -108,7 +110,7 @@ int TestNamespaces() {
 
 int TestSetup() {
   EvaluationContext setup;
-  setup.SetVariable("old", Quantity::From(1.0, "m"));
+  setup.SetVariable("old", From(1.0, units::precise::m));
   setup.SetSetupScript("// 2 unknown_units\nvar base = 2 m; /* 3 unknown_units */ "
                "var offset = 3 ft; var total = base + offset; "
                        "var pose = Pose2d(3 m, 4 m, 90 deg); var gain = 2; "
@@ -179,7 +181,7 @@ int TestSetup() {
   for (const char* name : {"Cos", "Degrees"}) {
     bool methodNameRejected = false;
     try {
-      setup.SetVariable(name, Quantity::From(1.0, "m"));
+      setup.SetVariable(name, From(1.0, units::precise::m));
     } catch (const std::invalid_argument&) {
       methodNameRejected = true;
     }
@@ -204,9 +206,9 @@ int TestSetup() {
 
 int TestArithmeticAndVariables() {
   EvaluationContext context;
-  auto length = Quantity::From(1.0, "m").dimension;
+  auto length = From(1.0, units::precise::m).units();
   auto mixedLength = context.Evaluate("2 * m + 3 * ft", length);
-  if (std::abs(mixedLength.In("m") - 2.9144) > 1e-10) {
+  if (std::abs(In(mixedLength, units::precise::m) - 2.9144) > 1e-10) {
     std::cerr << "mixed-unit addition returned the wrong value\n";
     return 1;
   }
@@ -233,13 +235,13 @@ int TestArithmeticAndVariables() {
     return 1;
   }
 
-  context.SetVariable("offset", Quantity::From(3.0, "ft"));
+  context.SetVariable("offset", From(3.0, (units::precise::m * 0.3048)));
   auto withVariable = context.Evaluate("2 * m + offset", length);
-  if (std::abs(withVariable.In("m") - 2.9144) > 1e-10) {
+  if (std::abs(In(withVariable, units::precise::m) - 2.9144) > 1e-10) {
     std::cerr << "registered variable returned the wrong value\n";
     return 1;
   }
-  context.SetVariable("offset", Quantity::From(1.0, "m"));
+  context.SetVariable("offset", From(1.0, units::precise::m));
   if (!EvaluatesTo(context, "offset", 1.0, "m")) {
     std::cerr << "updated variable returned the wrong value\n";
     return 1;
@@ -249,7 +251,7 @@ int TestArithmeticAndVariables() {
 
 int TestReadOnlyExpressions() {
   EvaluationContext context;
-  context.SetVariable("offset", Quantity::From(1.0, "m"));
+  context.SetVariable("offset", From(1.0, units::precise::m));
   for (const char* expression : {"var temporary = 2; 2 * m", "offset = 5 * m",
                                  "def temporaryFunction() { return 2 * m; } temporaryFunction()",
                                  "eval(\"1 * m\")", "++offset", "set_global(2 * m, \"offset\")",
@@ -319,8 +321,8 @@ int TestErrorMessages() {
 int TestContextCopies() {
   EvaluationContext first;
   EvaluationContext second = first;
-  first.SetVariable("distance", Quantity::From(1.0, "m"));
-  second.SetVariable("distance", Quantity::From(2.0, "m"));
+  first.SetVariable("distance", From(1.0, units::precise::m));
+  second.SetVariable("distance", From(2.0, units::precise::m));
   std::atomic<bool> concurrentFailed{false};
   auto evaluateRepeatedly = [&](const EvaluationContext& current, double expected) {
     try {
@@ -389,22 +391,22 @@ int TestUnitExpressions() {
     std::cerr << "derived power or pressure units returned the wrong value\n";
     return 1;
   }
-  auto feet = Quantity::From(1.0, "m").TryAs<wpi::units::foot_t>();
+  auto feet = TryAs<wpi::units::foot_t>(From(1.0, units::precise::m));
   if (!feet || std::abs(feet->value() - (1.0 / 0.3048)) > 1e-10) {
     std::cerr << "WPILib foot conversion returned the wrong value\n";
     return 1;
   }
-  auto radians = Quantity::From(90.0, "deg").TryAs<wpi::units::radian_t>();
+  auto radians = TryAs<wpi::units::radian_t>(From(90.0, (units::precise::rad * (std::numbers::pi / 180.0))));
   if (!radians || std::abs(radians->value() - std::acos(-1.0) / 2.0) > 1e-10) {
     std::cerr << "WPILib radian conversion returned the wrong value\n";
     return 1;
   }
-  if (Quantity::From(1.0, "s").TryAs<wpi::units::meter_t>()) {
+  if (TryAs<wpi::units::meter_t>(From(1.0, units::precise::s))) {
     std::cerr << "incompatible WPILib unit conversion succeeded\n";
     return 1;
   }
   wpi::units::meter_t output;
-  if (!Quantity::From(2.0, "m").TryAs(output) || std::abs(output.value() - 2.0) > 1e-10) {
+  if (!TryAs(From(2.0, units::precise::m), output) || std::abs(output.value() - 2.0) > 1e-10) {
     std::cerr << "WPILib output-parameter conversion returned the wrong value\n";
     return 1;
   }
@@ -438,7 +440,7 @@ int TestIdentifiers() {
 
   bool unitNameCollisionRejected = false;
   try {
-    context.SetVariable("m", Quantity::From(1.0, "m"));
+    context.SetVariable("m", From(1.0, units::precise::m));
   } catch (const std::invalid_argument&) {
     unitNameCollisionRejected = true;
   }
@@ -448,7 +450,7 @@ int TestIdentifiers() {
   }
   bool constructorNameCollisionRejected = false;
   try {
-    context.SetVariable("Pose2d", Quantity::From(1.0, "m"));
+    context.SetVariable("Pose2d", From(1.0, units::precise::m));
   } catch (const std::invalid_argument&) {
     constructorNameCollisionRejected = true;
   }
@@ -459,10 +461,10 @@ int TestIdentifiers() {
   return 0;
 }
 
-int TestQuantityMath() {
+int TestMeasurementMath() {
   EvaluationContext context;
   auto area = context.Evaluate("(2 m)^2");
-  if (std::abs(area.In("m^2") - 4.0) > 1e-10) {
+  if (std::abs(In(area, units::precise::m.pow(2)) - 4.0) > 1e-10) {
     std::cerr << "integer quantity power returned the wrong value\n";
     return 1;
   }
@@ -495,7 +497,7 @@ int TestQuantityMath() {
 
 int TestGeometryConstructors() {
   EvaluationContext context;
-  auto length = Quantity::From(1.0, "m").dimension;
+  auto length = From(1.0, units::precise::m).units();
   Pose2d pose;
   try {
     pose = context.EvaluatePose2d("Pose2d(3 m, 4 m, 90 deg)");
@@ -543,7 +545,7 @@ int TestGeometryConstructors() {
     return 1;
   }
   context.SetVariable("nonfiniteLength",
-                      Quantity{std::numeric_limits<double>::infinity(), length});
+                      units::precise_measurement{std::numeric_limits<double>::infinity(), units::precise::m});
   context.SetVariable("nonfinitePose",
                       Pose2d{wpi::units::meter_t{std::numeric_limits<double>::infinity()},
                              wpi::units::meter_t{0.0}, wpi::math::Rotation2d{}});
@@ -569,11 +571,11 @@ int TestGeometryConstructors() {
 
 int TestGeometryOperations() {
   EvaluationContext context;
-  auto length = Quantity::From(1.0, "m").dimension;
+  auto length = From(1.0, units::precise::m).units();
   auto pose = context.EvaluatePose2d("Pose2d(3 m, 4 m, 90 deg)");
   context.SetVariable("pose", pose);
   context.SetVariable("nonfiniteLength",
-                      Quantity{std::numeric_limits<double>::infinity(), length});
+                      units::precise_measurement{std::numeric_limits<double>::infinity(), units::precise::m});
   auto origin = context.EvaluatePose2d("Pose2d(0 m, 0 m, 0 deg)");
   context.SetVariable("origin", origin);
   auto rotation = context.EvaluateRotation2d("Rotation2d(90 deg)");
@@ -622,8 +624,8 @@ int TestGeometryOperations() {
     std::cerr << "undefined translation angle was accepted\n";
     return 1;
   }
-  context.SetVariable("factor", Quantity{2.0, {}});
-  context.SetVariable("nonfiniteFactor", Quantity{std::numeric_limits<double>::infinity(), {}});
+  context.SetVariable("factor", units::precise_measurement{2.0, units::precise::one});
+  context.SetVariable("nonfiniteFactor", units::precise_measurement{std::numeric_limits<double>::infinity(), units::precise::one});
   if (!EvaluatesTo(context, "(translation + Translation2d(1 m, 2 m)).X()", 4.0, "m") ||
       !EvaluatesTo(context, "(translation - Translation2d(1 m, 2 m)).Y()", 2.0, "m") ||
       !EvaluatesTo(context, "(-translation).X()", -(3.0), "m") ||
@@ -768,7 +770,7 @@ constexpr TestCase tests[]{
     {"context_copies", TestContextCopies},
     {"unit_expressions", TestUnitExpressions},
     {"identifiers", TestIdentifiers},
-    {"quantity_math", TestQuantityMath},
+    {"measurement_math", TestMeasurementMath},
     {"geometry_constructors", TestGeometryConstructors},
     {"geometry_operations", TestGeometryOperations},
     {"shapes", TestShapes},
