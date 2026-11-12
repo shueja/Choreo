@@ -11,6 +11,7 @@
 #include <wpi/math/shape/Rectangle2d.hpp>
 
 #include <cmath>
+#include <numbers>
 #include <span>
 #include <stdexcept>
 #include <typeinfo>
@@ -123,7 +124,8 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
 
   RegisterMeasurementConversion<wpi::units::meter_t>(engine, units::precise::m);
   RegisterMeasurementConversion<wpi::units::radian_t>(engine, units::precise::rad);
-  RegisterMeasurementConversion<wpi::units::degree_t>(engine, detail::ParseUnit("deg"));
+  RegisterMeasurementConversion<wpi::units::degree_t>(
+      engine, units::precise::rad * (std::numbers::pi / 180.0));
   RegisterMeasurementConversion<wpi::units::square_meter_t>(engine, units::precise::m.pow(2));
 
   BIND_LAMBDA(Pose2d, [](meter_t x, meter_t y, radian_t angle) {
