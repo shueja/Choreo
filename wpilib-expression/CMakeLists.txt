@@ -110,6 +110,7 @@ if(WPILIB_EXPRESSION_BUILD_TESTS)
     foreach(test_case IN ITEMS
         namespaces
         setup
+        setup_replacement_many_expressions
         arithmetic_and_variables
         read_only_expressions
         error_messages
@@ -123,6 +124,18 @@ if(WPILIB_EXPRESSION_BUILD_TESTS)
     )
         add_test(NAME wpilib_expression.${test_case} COMMAND wpilib_expression_test ${test_case})
     endforeach()
+endif()
+
+option(WPILIB_EXPRESSION_BUILD_BENCHMARKS "Build expression library benchmarks" OFF)
+if(WPILIB_EXPRESSION_BUILD_BENCHMARKS)
+    add_executable(
+        wpilib_expression_setup_replacement_benchmark
+        benchmarks/setup_replacement_benchmark.cpp
+    )
+    target_link_libraries(
+        wpilib_expression_setup_replacement_benchmark
+        PRIVATE wpilib::expression
+    )
 endif()
 
 install(
