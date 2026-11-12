@@ -7,10 +7,15 @@
 #include <wpi/math/geometry/Transform2d.hpp>
 #include <wpi/math/geometry/Translation2d.hpp>
 #include <wpi/math/geometry/Twist2d.hpp>
+#include <wpi/math/shape/Ellipse2d.hpp>
+#include <wpi/math/shape/Rectangle2d.hpp>
 
+#include <cmath>
+#include <span>
 #include <stdexcept>
-#include <string>
-#include <utility>
+#include <string_view>
+#include <typeinfo>
+#include <vector>
 
 namespace wpilib::expression::detail {
 namespace {
@@ -20,130 +25,242 @@ using Translation2d = wpi::math::Translation2d;
 using Rotation2d = wpi::math::Rotation2d;
 using Transform2d = wpi::math::Transform2d;
 using Twist2d = wpi::math::Twist2d;
+using Ellipse2d = wpi::math::Ellipse2d;
+using Rectangle2d = wpi::math::Rectangle2d;
+using wpi::units::meter_t;
+using wpi::units::radian_t;
 
-Dimension LengthDimension() { return MakeDimension(1, 0, 0, 0, 0); }
-Dimension AngleDimension() { return MakeDimension(0, 0, 0, 0, 1); }
+template <typename UnitValue>
+void RegisterQuantityConversion(chaiscript::ChaiScript& engine, std::string_view unit) {
+  engine.add(chaiscript::type_conversion<Quantity, UnitValue>([](const Quantity& value) {
+    auto converted = value.TryAs<UnitValue>();
+    if (!converted) {
+      throw chaiscript::exception::bad_boxed_cast(
+          chaiscript::user_type<Quantity>(), typeid(UnitValue),
+          "quantity has an incompatible dimension or non-finite value");
+    }
+    return *converted;
+  }));
+  engine.add(chaiscript::type_conversion<UnitValue, Quantity>([unit](const UnitValue& value) {
+    try {
+      return Quantity::From(value.value(), unit);
+    } catch (const std::domain_error&) {
+      throw chaiscript::exception::bad_boxed_cast(
+          chaiscript::user_type<UnitValue>(), typeid(Quantity),
+          "unit value cannot be converted to a finite quantity");
+    }
+  }));
+}
 
-void RequireDimension(const Quantity& value, const Dimension& expected,
-                      std::string_view argument) {
-  if (value.dimension != expected) {
-    throw std::invalid_argument(std::string(argument) + " has an incompatible dimension");
+double GeometryScalar(double value) {
+  if (!std::isfinite(value)) {
+    throw std::domain_error("geometry scalar must be finite");
   }
+  return value;
 }
 
-wpi::units::meter_t ToMeters(const Quantity& value, std::string_view argument) {
-  RequireDimension(value, LengthDimension(), argument);
-  return wpi::units::meter_t{value.siValue};
+double GeometryScalar(const Quantity& value) {
+  if (value.dimension != Dimension{}) {
+    throw std::invalid_argument("geometry scalar must be dimensionless");
+  }
+  return GeometryScalar(value.siValue);
 }
 
-Rotation2d ToRotation(const Quantity& value, std::string_view argument) {
-  RequireDimension(value, AngleDimension(), argument);
-  return Rotation2d{wpi::units::radian_t{value.siValue}};
+double GeometryDivisor(double value) {
+  if (GeometryScalar(value) == 0.0) {
+    throw std::domain_error("division by zero");
+  }
+  return value;
 }
 
-Quantity FromMeters(wpi::units::meter_t value) {
-  return {value.value(), LengthDimension()};
+double GeometryDivisor(const Quantity& value) {
+  return GeometryDivisor(GeometryScalar(value));
 }
 
-Quantity FromRadians(wpi::units::radian_t value) {
-  return {value.value(), AngleDimension()};
+template <typename Geometry>
+Geometry NearestGeometry(const Geometry& origin,
+                         const std::vector<chaiscript::Boxed_Value>& values) {
+  if (values.empty()) {
+    throw std::invalid_argument("nearest requires a non-empty collection");
+  }
+  std::vector<Geometry> candidates;
+  candidates.reserve(values.size());
+  for (const auto& value : values) {
+    candidates.push_back(chaiscript::boxed_cast<Geometry>(value));
+  }
+  return origin.Nearest(std::span<const Geometry>{candidates});
 }
 
 }  // namespace
 
 void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
+#define BIND_METHOD(type, method) engine.add(chaiscript::fun(&type::method), #method)
+#define BIND_CONSTRUCTOR(type, ...) engine.add(chaiscript::constructor<type(__VA_ARGS__)>(), #type)
+#define BIND_LAMBDA(name, ...) engine.add(chaiscript::fun(__VA_ARGS__), #name)
+// Implicitly copies are used for methods and accessors that return objects by value rather than by reference.
+// This ensures that ChaiScript receives a copy of the object, preventing dangling references and maintaining value semantics within the scripting environment.
+#define BIND_COPY_METHOD(type, method) \
+  BIND_LAMBDA(method, [](const type& object) { return object.method(); })
+#define BIND_COPY_ACCESS(type, member) \
+  BIND_LAMBDA(member, [](const type& object) { return object.member; })
+#define BIND_EQUALITY(type) \
+  BIND_LAMBDA(==, [](const type& left, const type& right) { return left == right; }); \
+  BIND_LAMBDA(!=, [](const type& left, const type& right) { return left != right; })
+#define BIND_SCALING(type) \
+  BIND_LAMBDA(*, [](const type& object, double scalar) { return object * GeometryScalar(scalar); }); \
+  BIND_LAMBDA(*, [](const type& object, const Quantity& scalar) { return object * GeometryScalar(scalar); }); \
+  BIND_LAMBDA(/, [](const type& object, double scalar) { return object / GeometryDivisor(scalar); }); \
+  BIND_LAMBDA(/, [](const type& object, const Quantity& scalar) { return object / GeometryDivisor(scalar); })
+
   engine.add(chaiscript::user_type<Pose2d>(), "Pose2d");
   engine.add(chaiscript::user_type<Translation2d>(), "Translation2d");
   engine.add(chaiscript::user_type<Rotation2d>(), "Rotation2d");
   engine.add(chaiscript::user_type<Transform2d>(), "Transform2d");
   engine.add(chaiscript::user_type<Twist2d>(), "Twist2d");
+  engine.add(chaiscript::user_type<Rectangle2d>(), "Rectangle2d");
+  engine.add(chaiscript::user_type<Ellipse2d>(), "Ellipse2d");
+  engine.add(chaiscript::user_type<wpi::util::array<Translation2d, 2>>(), "EllipseFocalPoints");
 
-  engine.add(chaiscript::fun([](Quantity x, Quantity y, Quantity angle) {
-    return Pose2d{ToMeters(x, "x"), ToMeters(y, "y"), ToRotation(angle, "rotation")};
-  }), "Pose2d");
-  engine.add(chaiscript::fun([](Translation2d translation, Rotation2d rotation) {
-    return Pose2d{std::move(translation), std::move(rotation)};
-  }), "Pose2d");
-  engine.add(chaiscript::fun([] { return Pose2d{}; }), "Pose2d");
-  engine.add(chaiscript::fun([](const Pose2d& pose) { return FromMeters(pose.X()); }), "X");
-  engine.add(chaiscript::fun([](const Pose2d& pose) { return FromMeters(pose.Y()); }), "Y");
-  engine.add(chaiscript::fun([](const Pose2d& pose) { return pose.Translation(); }), "Translation");
-  engine.add(chaiscript::fun([](const Pose2d& pose) { return pose.Rotation(); }), "Rotation");
-  engine.add(chaiscript::fun(&Pose2d::RotateBy), "RotateBy");
-  engine.add(chaiscript::fun(&Pose2d::RelativeTo), "RelativeTo");
-  engine.add(chaiscript::fun(&Pose2d::TransformBy), "TransformBy");
+  RegisterQuantityConversion<wpi::units::meter_t>(engine, "m");
+  RegisterQuantityConversion<wpi::units::radian_t>(engine, "rad");
+  RegisterQuantityConversion<wpi::units::degree_t>(engine, "deg");
+  RegisterQuantityConversion<wpi::units::square_meter_t>(engine, "m^2");
 
-  engine.add(chaiscript::fun([](Quantity x, Quantity y) {
-    return Translation2d{ToMeters(x, "x"), ToMeters(y, "y")};
-  }), "Translation2d");
-  engine.add(chaiscript::fun([] { return Translation2d{}; }), "Translation2d");
-  engine.add(chaiscript::fun([](const Translation2d& translation) {
-    return FromMeters(translation.X());
-  }), "X");
-  engine.add(chaiscript::fun([](const Translation2d& translation) {
-    return FromMeters(translation.Y());
-  }), "Y");
-  engine.add(chaiscript::fun([](const Translation2d& translation,
-                                const Translation2d& other) {
-    return FromMeters(translation.Distance(other));
-  }), "Distance");
-  engine.add(chaiscript::fun(&Translation2d::RotateBy), "RotateBy");
-  engine.add(chaiscript::fun([](const Translation2d& translation) {
-    return FromMeters(translation.Norm());
-  }), "Norm");
+  BIND_LAMBDA(Pose2d, [](meter_t x, meter_t y, radian_t angle) {
+    return Pose2d{x, y, Rotation2d{angle}};
+  });
+  BIND_CONSTRUCTOR(Pose2d, meter_t, meter_t, Rotation2d);
+  BIND_CONSTRUCTOR(Pose2d, Translation2d, Rotation2d);
+  BIND_CONSTRUCTOR(Pose2d);
+  BIND_METHOD(Pose2d, X);
+  BIND_METHOD(Pose2d, Y);
+  // These make copies instead of references.
+  BIND_COPY_METHOD(Pose2d, Translation);
+  BIND_COPY_METHOD(Pose2d, Rotation);
+  BIND_METHOD(Pose2d, RotateBy);
+  BIND_METHOD(Pose2d, RotateAround);
+  BIND_METHOD(Pose2d, RelativeTo);
+  BIND_METHOD(Pose2d, TransformBy);
+  BIND_LAMBDA(Nearest, &NearestGeometry<Pose2d>);
+  BIND_LAMBDA(+, [](const Pose2d& pose, const Transform2d& transform) { return pose + transform; });
+  BIND_LAMBDA(-, [](const Pose2d& left, const Pose2d& right) { return left - right; });
+  BIND_EQUALITY(Pose2d);
+  BIND_SCALING(Pose2d);
 
-  engine.add(chaiscript::fun([](Quantity angle) { return ToRotation(angle, "angle"); }),
-             "Rotation2d");
-  engine.add(chaiscript::fun([](double x, double y) { return Rotation2d{x, y}; }),
-             "Rotation2d");
-  engine.add(chaiscript::fun([] { return Rotation2d{}; }), "Rotation2d");
-  engine.add(chaiscript::fun([](const Rotation2d& rotation) {
-    return FromRadians(rotation.Radians());
-  }), "Radians");
-  engine.add(chaiscript::fun([](const Rotation2d& rotation) {
-    return FromRadians(wpi::units::radian_t{rotation.Degrees()});
-  }), "Degrees");
-  engine.add(chaiscript::fun(&Rotation2d::RotateBy), "RotateBy");
-  engine.add(chaiscript::fun(&Rotation2d::RelativeTo), "RelativeTo");
-  engine.add(chaiscript::fun(&Rotation2d::Cos), "Cos");
-  engine.add(chaiscript::fun(&Rotation2d::Sin), "Sin");
-  engine.add(chaiscript::fun(&Rotation2d::Tan), "Tan");
+  BIND_CONSTRUCTOR(Translation2d, meter_t, meter_t);
+  BIND_CONSTRUCTOR(Translation2d, meter_t, const Rotation2d&);
+  BIND_CONSTRUCTOR(Translation2d);
+  BIND_METHOD(Translation2d, X);
+  BIND_METHOD(Translation2d, Y);
+  BIND_METHOD(Translation2d, Distance);
+  BIND_METHOD(Translation2d, SquaredDistance);
+  BIND_METHOD(Translation2d, RotateBy);
+  BIND_METHOD(Translation2d, RotateAround);
+  BIND_METHOD(Translation2d, Norm);
+  BIND_METHOD(Translation2d, SquaredNorm);
+  BIND_METHOD(Translation2d, Dot);
+  BIND_METHOD(Translation2d, Cross);
+  BIND_LAMBDA(Nearest, &NearestGeometry<Translation2d>);
+  BIND_LAMBDA(Angle, [](const Translation2d& translation) {
+    auto angle = translation.Angle();
+    if (!angle) {
+      throw std::domain_error("translation angle is undefined");
+    }
+    return *angle;
+  });
+  BIND_LAMBDA(+, [](const Translation2d& left, const Translation2d& right) { return left + right; });
+  BIND_LAMBDA(-, [](const Translation2d& left, const Translation2d& right) { return left - right; });
+  BIND_LAMBDA(-, [](const Translation2d& value) { return -value; });
+  BIND_EQUALITY(Translation2d);
+  BIND_SCALING(Translation2d);
 
-  engine.add(chaiscript::fun([](Quantity x, Quantity y, Quantity angle) {
-    return Transform2d{ToMeters(x, "x"), ToMeters(y, "y"),
-                       ToRotation(angle, "rotation")};
-  }), "Transform2d");
-  engine.add(chaiscript::fun([](Translation2d translation, Rotation2d rotation) {
-    return Transform2d{std::move(translation), std::move(rotation)};
-  }), "Transform2d");
-  engine.add(chaiscript::fun([](const Pose2d& initial, const Pose2d& final) {
-    return Transform2d{initial, final};
-  }), "Transform2d");
-  engine.add(chaiscript::fun([] { return Transform2d{}; }), "Transform2d");
-  engine.add(chaiscript::fun([](const Transform2d& transform) {
-    return FromMeters(transform.X());
-  }), "X");
-  engine.add(chaiscript::fun([](const Transform2d& transform) {
-    return FromMeters(transform.Y());
-  }), "Y");
-  engine.add(chaiscript::fun([](const Transform2d& transform) {
-    return transform.Translation();
-  }), "Translation");
-  engine.add(chaiscript::fun([](const Transform2d& transform) {
-    return transform.Rotation();
-  }), "Rotation");
-  engine.add(chaiscript::fun(&Transform2d::Inverse), "Inverse");
-  engine.add(chaiscript::fun(&Transform2d::Log), "Log");
+  BIND_CONSTRUCTOR(Rotation2d, radian_t);
+  BIND_CONSTRUCTOR(Rotation2d, double, double);
+  BIND_CONSTRUCTOR(Rotation2d);
+  BIND_METHOD(Rotation2d, Radians);
+  BIND_METHOD(Rotation2d, Degrees);
+  BIND_METHOD(Rotation2d, RotateBy);
+  BIND_METHOD(Rotation2d, RelativeTo);
+  BIND_METHOD(Rotation2d, Cos);
+  BIND_METHOD(Rotation2d, Sin);
+  BIND_METHOD(Rotation2d, Tan);
+  BIND_LAMBDA(+, [](const Rotation2d& left, const Rotation2d& right) { return left + right; });
+  BIND_LAMBDA(-, [](const Rotation2d& left, const Rotation2d& right) { return left - right; });
+  BIND_LAMBDA(-, [](const Rotation2d& value) { return -value; });
+  BIND_EQUALITY(Rotation2d);
+  BIND_SCALING(Rotation2d);
 
-  engine.add(chaiscript::fun([](Quantity dx, Quantity dy, Quantity dtheta) {
-    return Twist2d{ToMeters(dx, "dx"), ToMeters(dy, "dy"),
-                   ToRotation(dtheta, "dtheta").Radians()};
-  }), "Twist2d");
-  engine.add(chaiscript::fun([](const Twist2d& twist) { return FromMeters(twist.dx); }), "dx");
-  engine.add(chaiscript::fun([](const Twist2d& twist) { return FromMeters(twist.dy); }), "dy");
-  engine.add(chaiscript::fun([](const Twist2d& twist) { return FromRadians(twist.dtheta); }),
-             "dtheta");
-  engine.add(chaiscript::fun(&Twist2d::Exp), "Exp");
+  BIND_LAMBDA(Transform2d, [](meter_t x, meter_t y, radian_t angle) {
+    return Transform2d{x, y, Rotation2d{angle}};
+  });
+  BIND_CONSTRUCTOR(Transform2d, meter_t, meter_t, Rotation2d);
+  BIND_CONSTRUCTOR(Transform2d, Translation2d, Rotation2d);
+  BIND_CONSTRUCTOR(Transform2d, const Pose2d&, const Pose2d&);
+  BIND_CONSTRUCTOR(Transform2d);
+  BIND_METHOD(Transform2d, X);
+  BIND_METHOD(Transform2d, Y);
+  BIND_COPY_METHOD(Transform2d, Translation);
+  BIND_COPY_METHOD(Transform2d, Rotation);
+  BIND_METHOD(Transform2d, Inverse);
+  BIND_METHOD(Transform2d, Log);
+  BIND_LAMBDA(+, [](const Transform2d& left, const Transform2d& right) { return left + right; });
+  BIND_EQUALITY(Transform2d);
+  BIND_SCALING(Transform2d);
+
+  BIND_CONSTRUCTOR(Twist2d, meter_t, meter_t, radian_t);
+  BIND_CONSTRUCTOR(Twist2d);
+  BIND_COPY_ACCESS(Twist2d, dx);
+  BIND_COPY_ACCESS(Twist2d, dy);
+  BIND_COPY_ACCESS(Twist2d, dtheta);
+  BIND_METHOD(Twist2d, Exp);
+  BIND_EQUALITY(Twist2d);
+  BIND_LAMBDA(*, [](const Twist2d& twist, double scalar) { return twist * GeometryScalar(scalar); });
+  BIND_LAMBDA(*, [](const Twist2d& twist, const Quantity& scalar) { return twist * GeometryScalar(scalar); });
+
+  BIND_CONSTRUCTOR(Rectangle2d, const Pose2d&, meter_t, meter_t);
+  BIND_CONSTRUCTOR(Rectangle2d, const Translation2d&, const Translation2d&);
+  BIND_COPY_METHOD(Rectangle2d, Center);
+  BIND_COPY_METHOD(Rectangle2d, Rotation);
+  BIND_METHOD(Rectangle2d, XWidth);
+  BIND_METHOD(Rectangle2d, YWidth);
+  BIND_METHOD(Rectangle2d, TransformBy);
+  BIND_METHOD(Rectangle2d, RotateBy);
+  BIND_METHOD(Rectangle2d, Intersects);
+  BIND_METHOD(Rectangle2d, Contains);
+  BIND_METHOD(Rectangle2d, Distance);
+  BIND_METHOD(Rectangle2d, Nearest);
+  BIND_LAMBDA(==, [](const Rectangle2d& left, const Rectangle2d& right) { return left == right; });
+  BIND_LAMBDA(!=, [](const Rectangle2d& left, const Rectangle2d& right) { return left != right; });
+
+  BIND_CONSTRUCTOR(Ellipse2d, const Pose2d&, meter_t, meter_t);
+  BIND_CONSTRUCTOR(Ellipse2d, const Translation2d&, double);
+  BIND_COPY_METHOD(Ellipse2d, Center);
+  BIND_COPY_METHOD(Ellipse2d, Rotation);
+  BIND_METHOD(Ellipse2d, XSemiAxis);
+  BIND_METHOD(Ellipse2d, YSemiAxis);
+  BIND_METHOD(Ellipse2d, FocalPoints);
+  BIND_LAMBDA([], [](const wpi::util::array<Translation2d, 2>& points, int index) {
+    if (index < 0 || index >= 2) {
+      throw std::out_of_range("ellipse focal point index must be 0 or 1");
+    }
+    return points[static_cast<std::size_t>(index)];
+  });
+  BIND_METHOD(Ellipse2d, TransformBy);
+  BIND_METHOD(Ellipse2d, RotateBy);
+  BIND_METHOD(Ellipse2d, Intersects);
+  BIND_METHOD(Ellipse2d, Contains);
+  BIND_METHOD(Ellipse2d, Distance);
+  BIND_METHOD(Ellipse2d, Nearest);
+  BIND_LAMBDA(==, [](const Ellipse2d& left, const Ellipse2d& right) { return left == right; });
+  BIND_LAMBDA(!=, [](const Ellipse2d& left, const Ellipse2d& right) { return left != right; });
+
+#undef BIND_METHOD
+#undef BIND_CONSTRUCTOR
+#undef BIND_LAMBDA
+#undef BIND_COPY_METHOD
+#undef BIND_COPY_ACCESS
+#undef BIND_EQUALITY
+#undef BIND_SCALING
 }
 
 }  // namespace wpilib::expression::detail

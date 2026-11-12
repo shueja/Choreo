@@ -24,9 +24,12 @@ void ValidateVariableName(std::string_view name) {
   }
   static const std::set<std::string> reservedNames{
       "quantity", "Pose2d", "Translation2d", "Rotation2d", "Transform2d", "Twist2d",
+      "Rectangle2d", "Ellipse2d", "EllipseFocalPoints",
       "sin", "cos", "tan", "asin", "acos", "atan", "X", "Y", "Rotation",
       "Translation", "RotateBy", "RelativeTo", "TransformBy", "Distance", "Norm",
-      "Radians", "Degrees", "Cos", "Sin", "Tan", "Inverse", "Log", "dx", "dy", "dtheta", "Exp"};
+      "Radians", "Degrees", "Cos", "Sin", "Tan", "Inverse", "Log", "dx", "dy", "dtheta", "Exp",
+      "Center", "XWidth", "YWidth", "XSemiAxis", "YSemiAxis", "FocalPoints", "Intersects",
+      "Contains", "Nearest", "RotateAround", "SquaredDistance", "SquaredNorm", "Dot", "Cross", "Angle"};
   if (UnitRegistry().contains(std::string(name)) || reservedNames.contains(std::string(name))) {
     throw std::invalid_argument("variable name is reserved by the expression language: " +
                                 std::string(name));
