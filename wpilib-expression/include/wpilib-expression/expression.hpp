@@ -42,6 +42,8 @@ using ExpressionValue =
                  wpi::math::Transform2d, wpi::math::Twist2d,
                  wpi::math::Rectangle2d, wpi::math::Ellipse2d>;
 
+// Shared by SetVariables and SetExpressions; the API determines how the
+// definition is used. Names are unique within their qualified namespace path.
 struct VariableDefinition {
   std::string id;
   std::string namespacePath;
@@ -56,6 +58,7 @@ struct VariableInfo {
   VariableValue value;
 };
 
+// A registered expression's definition and most recently computed typed result.
 struct ExpressionInfo {
   VariableDefinition definition;
   ExpressionValue value;
@@ -68,13 +71,19 @@ class EvaluationContext {
   EvaluationContext& operator=(const EvaluationContext&) = default;
   EvaluationContext(EvaluationContext&& other) noexcept;
   EvaluationContext& operator=(EvaluationContext&& other) noexcept;
+  // Replaces all formula-backed variables atomically and refreshes registered
+  // expression results. Direct values supplied with SetVariable are preserved.
   void SetVariables(std::vector<VariableDefinition> variables);
   std::vector<VariableInfo> GetVariables() const;
   std::vector<std::string> FindReferences(std::string_view variableId) const;
   void RenameVariable(std::string_view variableId, std::string newName);
+  // Replaces the complete registered expression list and evaluates it.
   void SetExpressions(std::vector<VariableDefinition> expressions);
+  // Replaces one expression source and refreshes its transitive dependents.
   void SetExpression(std::string_view expressionId, std::string expression);
+  // Returns registered expressions with their current cached results.
   std::vector<ExpressionInfo> GetExpressions() const;
+  // Updates a direct context value and refreshes affected registered expressions.
   void SetVariable(std::string name, units::precise_measurement value);
   void SetVariable(std::string name, wpi::math::Pose2d value);
   void SetVariable(std::string name, wpi::math::Translation2d value);

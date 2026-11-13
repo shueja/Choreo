@@ -33,6 +33,16 @@ struct RegisteredExpression {
   std::set<std::string> dependencies;
 };
 
+// Keep qualified names, IDs, reverse edges, and topological order together so
+// incremental updates operate on one consistent registry snapshot.
+struct ExpressionRegistry {
+  std::map<std::string, RegisteredExpression> expressions;
+  std::map<std::string, std::string> idsByName;
+  std::set<std::string> namespaces;
+  std::map<std::string, std::set<std::string>> dependents;
+  std::vector<std::string> evaluationOrder;
+};
+
 std::string QualifiedName(const VariableDefinition& definition) {
   return definition.namespacePath.empty()
              ? definition.name
@@ -90,14 +100,6 @@ void StoreExpressionValue(detail::Variables& variables,
   };
   store(store, variables, 0);
 }
-
-struct ExpressionRegistry {
-  std::map<std::string, RegisteredExpression> expressions;
-  std::map<std::string, std::string> idsByName;
-  std::set<std::string> namespaces;
-  std::map<std::string, std::set<std::string>> dependents;
-  std::vector<std::string> evaluationOrder;
-};
 
 struct CachedEngine {
   chaiscript::ChaiScript engine{{},
@@ -619,8 +621,11 @@ void CollectVariableNamespacePaths(const detail::Variables& variables,
   }
 }
 
+// Forward declaration: registry construction uses this to validate cycles.
 std::vector<std::string> ExpressionOrder(const ExpressionRegistry& registry);
 
+// Build replacement indexes by parsing each definition and resolving its
+// qualified references to variables or registered expressions.
 void RebuildExpressionRegistry(
     const detail::Variables& variables,
     const std::vector<VariableDefinition>& definitions,
@@ -775,6 +780,8 @@ std::set<std::string> AllExpressionIds(const ExpressionRegistry& registry) {
   return ids;
 }
 
+// Topological sort considers only expression-to-expression edges; references
+// to context variables are leaves in the graph.
 std::vector<std::string> ExpressionOrder(const ExpressionRegistry& registry) {
   std::map<std::string, std::size_t> dependencyCounts;
   std::map<std::string, std::set<std::string>> dependents;
@@ -811,6 +818,8 @@ std::vector<std::string> ExpressionOrder(const ExpressionRegistry& registry) {
   return order;
 }
 
+// Walk the reverse index from changed variable/expression names to every
+// transitively dependent registered expression.
 std::set<std::string> AffectedExpressions(
     const ExpressionRegistry& registry,
     const std::set<std::string>& changedSymbols) {
@@ -885,6 +894,8 @@ template <typename Cache>
 void EvaluateExpressions(Cache& engineCache, const detail::Variables& variables,
                          ExpressionRegistry& registry,
                          const std::set<std::string>& selected) {
+  // Keep old values for unselected expressions; topological order ensures
+  // selected expressions consume fresh values from selected dependencies.
   std::map<std::string, ExpressionValue> values;
   for (const auto& [name, id] : registry.idsByName) {
     values.emplace(name, registry.expressions.at(id).value);
@@ -920,6 +931,8 @@ struct EvaluationContext::EngineCache {
   std::optional<CachedEngine> cache;
 };
 
+// Mutating operations build a replacement and publish it only after
+// validation/evaluation succeeds, so failures preserve the visible context.
 EvaluationContext::EvaluationContext()
     : engineCache_(std::make_shared<EngineCache>()) {}
 

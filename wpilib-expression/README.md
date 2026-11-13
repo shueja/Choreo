@@ -68,6 +68,23 @@ variables with `SetVariables` revalidates and reevaluates the registered list.
 `SetVariable` remains available for context values supplied directly by callers; those values do not have structured IDs or expressions. `Evaluate` returns an LLNL `units::precise_measurement` and can check an expected LLNL base unit; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
 
 ```cpp
+context.SetVariables({{"origin-id", "field", "origin", "2 m"}});
+context.SetExpressions({
+    {"double-id", "outputs", "doubleOrigin", "field.origin * 2"},
+    {"shifted-id", "outputs", "shifted",
+     "outputs.doubleOrigin + 1 m"},
+});
+
+context.SetVariables({{"origin-id", "field", "origin", "3 m"}});
+for (const auto& expression : context.GetExpressions()) {
+  if (expression.definition.id == "shifted-id") {
+    auto result =
+        std::get<units::precise_measurement>(expression.value);
+  }
+}
+```
+
+```cpp
 context.SetVariables({
     {"origin-id", "field.starting", "origin", "Pose2d(0 m, 0 m, 0 deg)"},
     {"position-id", "field.target", "position",
