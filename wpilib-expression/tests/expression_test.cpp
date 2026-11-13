@@ -58,6 +58,17 @@ int TestNamespaces() {
                        "var result = field.origin.X();");
   setup.SetVariable("target", Pose2d{wpi::units::meter_t{4.0}, wpi::units::meter_t{4.0},
                                      wpi::math::Rotation2d{}});
+  bool geometryTypeChangeRejected = false;
+  try {
+    setup.SetVariable("target", wpi::math::Translation2d{});
+  } catch (const std::invalid_argument&) {
+    geometryTypeChangeRejected = true;
+  }
+  if (!geometryTypeChangeRejected ||
+      std::abs(setup.EvaluatePose2d("target").X().value() - 4.0) > 1e-10) {
+    std::println(stderr, "geometry variable type changed or its cached value was lost");
+    return 1;
+  }
   if (!EvaluatesTo(setup, "field.origin.X() + field.distance", 3.0, "m") ||
       !EvaluatesTo(setup, "result", 1.0, "m") ||
       !EvaluatesTo(setup, "field.deep.goal.X()", 2.0, "ft") ||
@@ -93,6 +104,8 @@ int TestNamespaces() {
   }
   for (const char* script : {"namespace(\"field\"); field.origin = eval(\"1\");",
                              "namespace(\"field\"); field.origin = 1 m; namespace field::origin { var x = 1 m; }",
+                             "namespace field { var origin = 1 m; }",
+                             "namespace field::deep::more { var length = 3 s; }",
                              "namespace field { def run() { return 1; } }",
                              "namespace field { var x = 1 m; var y = x + 1 m; }",
                              "namespace field { var x = 1 m; var y = field.missing; }",
@@ -159,6 +172,26 @@ int TestSetup() {
   }
   if (!setupFailureRejected || !EvaluatesTo(setup, "base", 2.0, "m")) {
     std::println(stderr, "failed setup changed the context");
+    return 1;
+  }
+  bool quantityTypeChangeRejected = false;
+  try {
+    setup.SetSetupScript("var base = 2 s;");
+  } catch (const std::invalid_argument&) {
+    quantityTypeChangeRejected = true;
+  }
+  if (!quantityTypeChangeRejected || !EvaluatesTo(setup, "base", 2.0, "m")) {
+    std::println(stderr, "quantity dimension changed or its cached value was lost");
+    return 1;
+  }
+  bool variableTypeChangeRejected = false;
+  try {
+    setup.SetVariable("base", From(1.0, units::precise::s));
+  } catch (const std::invalid_argument&) {
+    variableTypeChangeRejected = true;
+  }
+  if (!variableTypeChangeRejected || !EvaluatesTo(setup, "base", 2.0, "m")) {
+    std::println(stderr, "SetVariable changed a declared dimension or its cached value");
     return 1;
   }
   bool cyclicSetupRejected = false;

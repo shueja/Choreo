@@ -78,13 +78,41 @@ void CollectNamespacePaths(const detail::Variables& variables, const std::string
   // Record namespace roots and their members from the frozen context snapshot.
   for (const auto& [name, value] : variables) {
     auto path = prefix.empty() ? name : prefix + "." + name;
-    if (!prefix.empty() || std::holds_alternative<detail::NamespacePtr>(value)) {
+    if (!prefix.empty() || std::holds_alternative<detail::NamespacePtr>(value.value)) {
       paths.insert(path);
     }
-    if (const auto* nested = std::get_if<detail::NamespacePtr>(&value)) {
+    if (const auto* nested = std::get_if<detail::NamespacePtr>(&value.value)) {
       CollectNamespacePaths((*nested)->members, path, paths);
     }
   }
+}
+
+const detail::VariableRecord* FindVariableRecord(const detail::Variables& variables,
+                                                 std::string_view path) {
+  const detail::Variables* current = &variables;
+  const detail::VariableRecord* record = nullptr;
+  std::size_t start = 0;
+  while (start < path.size()) {
+    auto separator = path.find('.', start);
+    auto name = path.substr(start, separator == std::string_view::npos
+                                       ? path.size() - start
+                                       : separator - start);
+    auto found = current->find(std::string(name));
+    if (found == current->end()) {
+      return nullptr;
+    }
+    record = &found->second;
+    if (separator == std::string_view::npos) {
+      return record;
+    }
+    const auto* nested = std::get_if<detail::NamespacePtr>(&record->value);
+    if (nested == nullptr || !*nested) {
+      return nullptr;
+    }
+    current = &(*nested)->members;
+    start = separator + 1;
+  }
+  return nullptr;
 }
 
 void ValidateExpression(const chaiscript::AST_Node& node,
@@ -506,14 +534,15 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
 
   auto replacement = std::make_shared<Impl>();
   std::set<const chaiscript::Namespace*> activeNamespaces;
-  std::function<void(detail::Variables&, const std::string&, const chaiscript::Boxed_Value&)> store;
-  store = [&](detail::Variables& destination, const std::string& name, const chaiscript::Boxed_Value& value) {
+  static const detail::Variables emptyVariables;
+  const auto& previousVariables = impl_ ? impl_->variables : emptyVariables;
+  std::function<void(detail::Variables&, const std::string&, const std::string&,
+                     const chaiscript::Boxed_Value&)> store;
+  store = [&](detail::Variables& destination, const std::string& name,
+              const std::string& qualifiedName, const chaiscript::Boxed_Value& value) {
     auto save = [&](detail::VariableValue variable) {
-      if (&destination == &replacement->variables) {
-        detail::StoreVariable(destination, name, std::move(variable));
-      } else {
-        destination.insert_or_assign(name, std::move(variable));
-      }
+      const auto* existing = FindVariableRecord(previousVariables, qualifiedName);
+      detail::StoreVariable(destination, name, std::move(variable), existing);
     };
     auto type = value.get_type_info();
     if (type.bare_equal(chaiscript::user_type<chaiscript::Namespace>())) {
@@ -523,7 +552,7 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
       }
       auto result = std::make_shared<detail::NamespaceValues>();
       for (const auto& [memberName, member] : object.get_attrs()) {
-        store(result->members, memberName, member);
+        store(result->members, memberName, qualifiedName + "." + memberName, member);
       }
       activeNamespaces.erase(&object);
       save(std::move(result));
@@ -563,12 +592,12 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
   };
   for (const auto& [name, value] : engine.get_locals()) {
     if (!initialLocals.contains(name)) {
-      store(replacement->variables, name, value);
+      store(replacement->variables, name, name, value);
     }
   }
   for (const auto& [name, value] : engine.get_scripting_objects()) {
     if (!initialObjects.contains(name) && !replacement->variables.contains(name)) {
-      store(replacement->variables, name, value);
+      store(replacement->variables, name, name, value);
     }
   }
   impl_ = std::move(replacement);
@@ -578,56 +607,72 @@ void EvaluationContext::SetVariable(std::string name, units::precise_measurement
   if (!impl_) {
     impl_ = std::make_shared<Impl>();
   }
-  detail::StoreVariable(impl_->variables, std::move(name), std::move(value));
+  auto existing = impl_->variables.find(name);
+  detail::StoreVariable(impl_->variables, std::move(name), std::move(value),
+                        existing == impl_->variables.end() ? nullptr : &existing->second);
 }
 
 void EvaluationContext::SetVariable(std::string name, Pose2d value) {
   if (!impl_) {
     impl_ = std::make_shared<Impl>();
   }
-  detail::StoreVariable(impl_->variables, std::move(name), std::move(value));
+  auto existing = impl_->variables.find(name);
+  detail::StoreVariable(impl_->variables, std::move(name), std::move(value),
+                        existing == impl_->variables.end() ? nullptr : &existing->second);
 }
 
 void EvaluationContext::SetVariable(std::string name, Translation2d value) {
   if (!impl_) {
     impl_ = std::make_shared<Impl>();
   }
-  detail::StoreVariable(impl_->variables, std::move(name), std::move(value));
+  auto existing = impl_->variables.find(name);
+  detail::StoreVariable(impl_->variables, std::move(name), std::move(value),
+                        existing == impl_->variables.end() ? nullptr : &existing->second);
 }
 
 void EvaluationContext::SetVariable(std::string name, Rotation2d value) {
   if (!impl_) {
     impl_ = std::make_shared<Impl>();
   }
-  detail::StoreVariable(impl_->variables, std::move(name), std::move(value));
+  auto existing = impl_->variables.find(name);
+  detail::StoreVariable(impl_->variables, std::move(name), std::move(value),
+                        existing == impl_->variables.end() ? nullptr : &existing->second);
 }
 
 void EvaluationContext::SetVariable(std::string name, Transform2d value) {
   if (!impl_) {
     impl_ = std::make_shared<Impl>();
   }
-  detail::StoreVariable(impl_->variables, std::move(name), std::move(value));
+  auto existing = impl_->variables.find(name);
+  detail::StoreVariable(impl_->variables, std::move(name), std::move(value),
+                        existing == impl_->variables.end() ? nullptr : &existing->second);
 }
 
 void EvaluationContext::SetVariable(std::string name, Twist2d value) {
   if (!impl_) {
     impl_ = std::make_shared<Impl>();
   }
-  detail::StoreVariable(impl_->variables, std::move(name), std::move(value));
+  auto existing = impl_->variables.find(name);
+  detail::StoreVariable(impl_->variables, std::move(name), std::move(value),
+                        existing == impl_->variables.end() ? nullptr : &existing->second);
 }
 
 void EvaluationContext::SetVariable(std::string name, Rectangle2d value) {
   if (!impl_) {
     impl_ = std::make_shared<Impl>();
   }
-  detail::StoreVariable(impl_->variables, std::move(name), std::move(value));
+  auto existing = impl_->variables.find(name);
+  detail::StoreVariable(impl_->variables, std::move(name), std::move(value),
+                        existing == impl_->variables.end() ? nullptr : &existing->second);
 }
 
 void EvaluationContext::SetVariable(std::string name, Ellipse2d value) {
   if (!impl_) {
     impl_ = std::make_shared<Impl>();
   }
-  detail::StoreVariable(impl_->variables, std::move(name), std::move(value));
+  auto existing = impl_->variables.find(name);
+  detail::StoreVariable(impl_->variables, std::move(name), std::move(value),
+                        existing == impl_->variables.end() ? nullptr : &existing->second);
 }
 
 units::precise_measurement EvaluationContext::Evaluate(
