@@ -102,6 +102,7 @@ class EvaluationContext {
  private:
   struct Impl;
   struct EngineCache;
+  void SetVariableValue(std::string name, VariableValue value);
   std::shared_ptr<Impl> impl_;
   std::shared_ptr<EngineCache> engineCache_;
 };
