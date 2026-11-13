@@ -37,6 +37,7 @@ struct ExpressionRegistry {
   std::map<std::string, RegisteredExpression> expressions;
   std::map<std::string, std::string> idsByName;
   std::map<std::string, std::set<std::string>> dependents;
+  std::vector<std::string> evaluationOrder;
 };
 
 struct CachedEngine {
@@ -542,6 +543,8 @@ void CollectVariableSymbols(const detail::Variables& variables,
   }
 }
 
+std::vector<std::string> ExpressionOrder(const ExpressionRegistry& registry);
+
 void RebuildExpressionRegistry(
     const detail::Variables& variables,
     const std::vector<ExpressionDefinition>& definitions,
@@ -614,6 +617,7 @@ void RebuildExpressionRegistry(
       replacement.dependents[dependency].insert(id);
     }
   }
+  replacement.evaluationOrder = ExpressionOrder(replacement);
   registry = std::move(replacement);
 }
 
@@ -744,18 +748,24 @@ template <typename Cache>
 void EvaluateExpressions(Cache& engineCache, const detail::Variables& variables,
                          ExpressionRegistry& registry,
                          const std::set<std::string>& selected) {
-  auto order = ExpressionOrder(registry);
   std::map<std::string, ExpressionValue> values;
   for (const auto& [name, id] : registry.idsByName) {
     values.emplace(name, registry.expressions.at(id).value);
   }
-  for (const auto& id : order) {
+  for (const auto& id : registry.evaluationOrder) {
     if (!selected.contains(id)) {
       continue;
     }
     auto& expression = registry.expressions.at(id);
+    std::map<std::string, ExpressionValue> dependencyValues;
+    for (const auto& dependency : expression.dependencies) {
+      if (registry.idsByName.contains(dependency)) {
+        dependencyValues.emplace(dependency, values.at(dependency));
+      }
+    }
     auto result = EvaluateResult<chaiscript::Boxed_Value>(
-        engineCache, variables, expression.definition.expression, &values);
+        engineCache, variables, expression.definition.expression,
+        &dependencyValues);
     expression.value = UnboxExpressionValue(engineCache.cache->engine, result);
     values[expression.definition.name] = expression.value;
   }
@@ -987,16 +997,32 @@ void EvaluationContext::RenameVariable(std::string_view variableId,
                         nullptr, {}, {},
                         !target->definition.namespacePath.empty());
   target->definition.name = std::move(newName);
+  const auto renamedName = target->definition.name;
   for (auto& variable : variables) {
     variable.definition.expression = RewriteVariableReferences(
-        variable.definition.expression, oldName, target->definition.name);
+        variable.definition.expression, oldName, renamedName);
   }
   std::vector<VariableDefinition> definitions;
   definitions.reserve(variables.size());
   for (auto& variable : variables) {
     definitions.push_back(std::move(variable.definition));
   }
-  SetVariables(std::move(definitions));
+
+  EvaluationContext replacement = *this;
+  replacement.impl_ =
+      impl_ ? std::make_shared<Impl>(*impl_) : std::make_shared<Impl>();
+  auto expressionDefinitions =
+      ExpressionDefinitions(replacement.impl_->expressions);
+  replacement.impl_->expressions = {};
+  for (auto& definition : expressionDefinitions) {
+    definition.expression =
+        RewriteVariableReferences(definition.expression, oldName, renamedName);
+  }
+  replacement.SetVariables(std::move(definitions));
+  if (!expressionDefinitions.empty()) {
+    replacement.SetExpressions(std::move(expressionDefinitions));
+  }
+  impl_ = std::move(replacement.impl_);
 }
 
 void EvaluationContext::SetExpressions(
@@ -1068,8 +1094,13 @@ void EvaluationContext::SetVariableValue(std::string name,
                                 name);
   }
   auto existing = replacement->variables.find(name);
+  auto detailValue = std::visit(
+      [](auto&& item) -> detail::VariableValue {
+        return detail::VariableValue{std::forward<decltype(item)>(item)};
+      },
+      std::move(value));
   detail::StoreVariable(
-      replacement->variables, name, std::move(value),
+      replacement->variables, name, std::move(detailValue),
       existing == replacement->variables.end() ? nullptr : &existing->second);
   auto affected = AffectedExpressions(replacement->expressions, {name});
   EvaluateExpressions(*engineCache_, replacement->variables,

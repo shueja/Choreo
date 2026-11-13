@@ -401,6 +401,7 @@ int TestVariableReferencesAndRename() {
       Variable("result-id", "", "result", "field.distance + field.twice"),
   };
   context.SetVariables(definitions);
+  context.SetExpressions({{"listed-id", "listed", "field.distance * 3"}});
   auto references = context.FindReferences("distance-id");
   if (references.size() != 2 ||
       std::find(references.begin(), references.end(), "twice-id") ==
@@ -418,7 +419,8 @@ int TestVariableReferencesAndRename() {
   context.RenameVariable("distance-id", "length");
   if (!EvaluatesTo(context, "field.length", 2.0, "m") ||
       !EvaluatesTo(context, "field.twice", 4.0, "m") ||
-      !EvaluatesTo(context, "result", 6.0, "m")) {
+      !EvaluatesTo(context, "result", 6.0, "m") ||
+      !ExpressionEvaluatesTo(context, "listed-id", 6.0, "m")) {
     std::println(stderr,
                  "renaming a namespaced variable did not preserve dependents");
     return 1;
@@ -442,7 +444,8 @@ int TestVariableReferencesAndRename() {
     }
   }
   context.SetVariables(std::move(changed));
-  if (!EvaluatesTo(context, "result", 9.0, "m")) {
+  if (!EvaluatesTo(context, "result", 9.0, "m") ||
+      !ExpressionEvaluatesTo(context, "listed-id", 9.0, "m")) {
     std::println(stderr,
                  "dependency-driven reevaluation returned the wrong value");
     return 1;
@@ -517,6 +520,7 @@ int TestIncrementalExpressionUpdates() {
       {"unrelated-id", "unrelated", "y + 10 m"},
       {"guard-id", "guard", "1 m / divisor"},
       {"boolean-id", "isLong", "x > 1 m"},
+      {"pose-id", "poseResult", "Pose2d(x, 0 m, 0 deg)"},
   });
   if (!ExpressionEvaluatesTo(context, "base-id", 3.0, "m") ||
       !ExpressionEvaluatesTo(context, "twice-id", 6.0, "m") ||
@@ -525,6 +529,15 @@ int TestIncrementalExpressionUpdates() {
     return 1;
   }
   auto cached = context.GetExpressions();
+  auto pose = std::find_if(cached.begin(), cached.end(), [](const auto& info) {
+    return info.definition.id == "pose-id";
+  });
+  if (pose == cached.end() || std::get_if<Pose2d>(&pose->value) == nullptr ||
+      std::abs(std::get<Pose2d>(pose->value).X().value() - 2.0) > 1e-10) {
+    std::println(stderr,
+                 "geometry expression result was not cached with its type");
+    return 1;
+  }
   auto boolean = std::find_if(
       cached.begin(), cached.end(),
       [](const auto& info) { return info.definition.id == "boolean-id"; });
@@ -543,6 +556,16 @@ int TestIncrementalExpressionUpdates() {
     std::println(
         stderr,
         "variable update did not refresh only dependent expression values");
+    return 1;
+  }
+  cached = context.GetExpressions();
+  pose = std::find_if(cached.begin(), cached.end(), [](const auto& info) {
+    return info.definition.id == "pose-id";
+  });
+  if (pose == cached.end() ||
+      std::abs(std::get<Pose2d>(pose->value).X().value() - 4.0) > 1e-10) {
+    std::println(stderr,
+                 "variable update did not refresh a geometry expression");
     return 1;
   }
 
