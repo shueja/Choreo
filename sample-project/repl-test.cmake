@@ -6,8 +6,8 @@ execute_process(
     OUTPUT_VARIABLE output
     ERROR_VARIABLE error
 )
-if(NOT result EQUAL 0 OR NOT output MATCHES "Variables reloaded\\." OR NOT output MATCHES "2\\.9144 SI" OR
-    NOT output MATCHES "1\\.5708 SI" OR NOT output MATCHES "90 SI" OR NOT error STREQUAL "")
+if(NOT result EQUAL 0 OR NOT output MATCHES "Variables reloaded\\." OR NOT output MATCHES "2\\.9144 m" OR
+    NOT output MATCHES "1\\.570[0-9]+ deg" OR NOT output MATCHES "90" OR NOT error STREQUAL "")
     message(FATAL_ERROR "Variables REPL failed (${result}): ${output} ${error}")
 endif()
 
@@ -19,7 +19,7 @@ execute_process(
     OUTPUT_VARIABLE output
     ERROR_VARIABLE error
 )
-if(NOT result EQUAL 0 OR NOT output MATCHES "1 SI" OR NOT error MATCHES "No variables file specified")
+if(NOT result EQUAL 0 OR NOT output MATCHES "1 m" OR NOT error MATCHES "No variables file specified")
     message(FATAL_ERROR "REPL without variables failed (${result}): ${output} ${error}")
 endif()
 

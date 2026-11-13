@@ -31,11 +31,13 @@ namespace {
 
 bool EvaluatesTo(const EvaluationContext& context, std::string_view expression,
                  double expected, std::string_view unit, double tolerance = 1e-10) {
-  auto dimension = unit.empty() ? units::precise::one : From(1.0, unit).units();
+  auto parsedUnit = unit.empty() ? units::precise::one
+                                 : units::unit_from_string(std::string(unit));
+  auto dimension = parsedUnit;
   auto result = context.Evaluate(expression, dimension);
   auto converted = unit.empty() ? std::expected<double, Error>{
                                       result.value() * result.units().multiplier()}
-                                : In(result, unit);
+                                : In(result, parsedUnit);
   if (!converted) {
     std::println(stderr, "Conversion failed: {}", ErrorMessage(converted.error()));
     return false;
@@ -469,7 +471,7 @@ int TestArithmeticAndVariables() {
     return 1;
   }
 
-  context.SetVariable("offset", From(3.0, (units::precise::m * 0.3048)));
+  context.SetVariable("offset", From(3.0, units::precise_unit(0.3048, units::precise::m)));
   auto withVariable = context.Evaluate("2 * m + offset", length);
   if (std::abs(In(withVariable, units::precise::m).value() - 2.9144) > 1e-10) {
     std::println(stderr, "registered variable returned the wrong value");
@@ -631,7 +633,8 @@ int TestUnitExpressions() {
     std::println(stderr, "WPILib foot conversion returned the wrong value");
     return 1;
   }
-  auto radians = TryAs<wpi::units::radian_t>(From(90.0, (units::precise::rad * (std::numbers::pi / 180.0))));
+  auto radians = TryAs<wpi::units::radian_t>(
+      From(90.0, units::precise_unit(std::numbers::pi / 180.0, units::precise::rad)));
   if (!radians || std::abs(radians->value() - std::acos(-1.0) / 2.0) > 1e-10) {
     std::println(stderr, "WPILib radian conversion returned the wrong value");
     return 1;

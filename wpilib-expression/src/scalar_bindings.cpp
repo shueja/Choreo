@@ -3,6 +3,7 @@
 #include "units.hpp"
 
 #include <cmath>
+#include <functional>
 #include <stdexcept>
 #include <string>
 
@@ -44,6 +45,33 @@ units::precise_measurement DivideMeasurements(
   return numerator / denominator;
 }
 
+void RequireMatchingDimensions(const units::precise_measurement& left,
+                               const units::precise_measurement& right) {
+  if (left.units().base_units() != right.units().base_units()) {
+    throw std::invalid_argument("quantity dimensions do not match");
+  }
+}
+
+units::precise_measurement AddMeasurements(const units::precise_measurement& left,
+                                          const units::precise_measurement& right) {
+  RequireMatchingDimensions(left, right);
+  return left + right;
+}
+
+units::precise_measurement SubtractMeasurements(const units::precise_measurement& left,
+                                                const units::precise_measurement& right) {
+  RequireMatchingDimensions(left, right);
+  return left - right;
+}
+
+template <typename Comparison>
+bool CompareMeasurements(const units::precise_measurement& left,
+                         const units::precise_measurement& right,
+                         Comparison comparison) {
+  RequireMatchingDimensions(left, right);
+  return comparison(left, right);
+}
+
 }  // namespace
 
 void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
@@ -60,17 +88,35 @@ void ConfigureScalarBindings(chaiscript::ChaiScript& engine) {
     }
     return From(value, *parsed);
   }), "quantity");
-  BIND_MEASUREMENT_OPERATOR("+", +);
-  BIND_MEASUREMENT_OPERATOR("-", -);
+  engine.add(chaiscript::fun(&AddMeasurements), "+");
+  engine.add(chaiscript::fun(&SubtractMeasurements), "-");
   BIND_MEASUREMENT_OPERATOR("*", *);
   engine.add(chaiscript::fun(&DivideMeasurements), "/");
   engine.add(chaiscript::fun(&Power), "^");
-  BIND_MEASUREMENT_OPERATOR("==", ==);
-  BIND_MEASUREMENT_OPERATOR("!=", !=);
-  BIND_MEASUREMENT_OPERATOR("<", <);
-  BIND_MEASUREMENT_OPERATOR("<=", <=);
-  BIND_MEASUREMENT_OPERATOR(">", >);
-  BIND_MEASUREMENT_OPERATOR(">=", >=);
+  engine.add(chaiscript::fun([](const units::precise_measurement& left,
+                                const units::precise_measurement& right) {
+    return CompareMeasurements(left, right, std::equal_to<>{});
+  }), "==");
+  engine.add(chaiscript::fun([](const units::precise_measurement& left,
+                                const units::precise_measurement& right) {
+    return CompareMeasurements(left, right, std::not_equal_to<>{});
+  }), "!=");
+  engine.add(chaiscript::fun([](const units::precise_measurement& left,
+                                const units::precise_measurement& right) {
+    return CompareMeasurements(left, right, std::less<>{});
+  }), "<");
+  engine.add(chaiscript::fun([](const units::precise_measurement& left,
+                                const units::precise_measurement& right) {
+    return CompareMeasurements(left, right, std::less_equal<>{});
+  }), "<=");
+  engine.add(chaiscript::fun([](const units::precise_measurement& left,
+                                const units::precise_measurement& right) {
+    return CompareMeasurements(left, right, std::greater<>{});
+  }), ">");
+  engine.add(chaiscript::fun([](const units::precise_measurement& left,
+                                const units::precise_measurement& right) {
+    return CompareMeasurements(left, right, std::greater_equal<>{});
+  }), ">=");
   engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::sin), false>), "sin");
   engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::cos), false>), "cos");
   engine.add(chaiscript::fun(&BindTrig<static_cast<double (*)(double)>(std::tan), false>), "tan");

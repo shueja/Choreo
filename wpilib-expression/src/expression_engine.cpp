@@ -13,7 +13,7 @@
 namespace wpilib::expression::detail {
 namespace {
 
-void ValidateVariableName(std::string_view name) {
+void ValidateVariableName(std::string_view name, bool allowReservedName) {
   if (name.empty() ||
       !(std::isalpha(static_cast<unsigned char>(name.front())) || name.front() == '_')) {
     throw std::invalid_argument("variable name must be a non-empty identifier");
@@ -31,7 +31,8 @@ void ValidateVariableName(std::string_view name) {
       "Radians", "Degrees", "Cos", "Sin", "Tan", "Inverse", "Log", "dx", "dy", "dtheta", "Exp",
       "Center", "XWidth", "YWidth", "XSemiAxis", "YSemiAxis", "FocalPoints", "Intersects",
       "Contains", "Nearest", "RotateAround", "SquaredDistance", "SquaredNorm", "Dot", "Cross", "Angle"};
-  if (UnitRegistry().contains(std::string(name)) || reservedNames.contains(std::string(name))) {
+  if (!allowReservedName &&
+      (UnitRegistry().contains(std::string(name)) || reservedNames.contains(std::string(name)))) {
     throw std::invalid_argument("variable name is reserved by the expression language: " +
                                 std::string(name));
   }
@@ -89,8 +90,8 @@ chaiscript::Boxed_Value BoxImmutable(const VariableRecord& record) {
 
 void StoreVariable(Variables& variables, std::string name, VariableValue value,
                    const VariableRecord* existing, std::string id,
-                   std::string expression) {
-  ValidateVariableName(name);
+                   std::string expression, bool allowReservedName) {
+  ValidateVariableName(name, allowReservedName);
   auto declaredType = existing
                           ? existing->declaredType
                           : std::make_shared<const DeclaredType>(GetDeclaredType(value));

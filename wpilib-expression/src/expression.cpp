@@ -148,7 +148,8 @@ void CollectDeclaredPaths(const std::vector<VariableDefinition>& definitions,
     if (!ids.insert(definition.id).second) {
       throw std::invalid_argument("duplicate variable id: " + definition.id);
     }
-    detail::StoreVariable(identifiers, definition.name, units::precise_measurement{});
+    detail::StoreVariable(identifiers, definition.name, units::precise_measurement{}, nullptr, {},
+                          {}, !definition.namespacePath.empty());
     identifiers.clear();
     if (!definition.namespacePath.empty() && definition.namespacePath.back() == '.') {
       throw std::invalid_argument("invalid namespace path");
@@ -162,7 +163,7 @@ void CollectDeclaredPaths(const std::vector<VariableDefinition>& definitions,
       if (part.empty()) {
         throw std::invalid_argument("invalid namespace path");
       }
-      detail::StoreVariable(identifiers, part, units::precise_measurement{});
+      detail::StoreVariable(identifiers, part, units::precise_measurement{}, nullptr, {}, {}, true);
       identifiers.clear();
       path = path.empty() ? part : path + "." + part;
       namespacePrefixes.insert(path);
@@ -244,6 +245,9 @@ std::string RewriteVariableReferences(std::string_view source, std::string_view 
   }
   std::vector<std::pair<std::size_t, std::string>> edits;
   CollectReferenceEdits(*parsed, expanded, target, replacement, edits);
+  if (edits.empty()) {
+    return std::string(source);
+  }
   std::sort(edits.begin(), edits.end(),
             [](const auto& left, const auto& right) { return left.first > right.first; });
   for (const auto& [offset, text] : edits) {
@@ -552,7 +556,7 @@ void EvaluationContext::SetVariables(std::vector<VariableDefinition> definitions
       members = &namespaces.at(parentPath)->members;
     }
     auto value = std::make_shared<detail::NamespaceValues>();
-    detail::StoreVariable(*members, name, detail::NamespacePtr{value});
+    detail::StoreVariable(*members, name, detail::NamespacePtr{value}, nullptr, {}, {}, true);
     namespaces.emplace(path, std::move(value));
   };
   for (const auto& definition : definitions) {
@@ -595,7 +599,8 @@ void EvaluationContext::SetVariables(std::vector<VariableDefinition> definitions
       destination = &namespaces.at(definition.namespacePath)->members;
     }
     detail::StoreVariable(*destination, definition.name, std::move(value), previous,
-                          definition.id, definition.expression);
+                          definition.id, definition.expression,
+                          !definition.namespacePath.empty());
   }
   impl_ = std::move(replacement);
 }
@@ -643,7 +648,8 @@ void EvaluationContext::RenameVariable(std::string_view variableId, std::string 
                      ? target->definition.name
                      : target->definition.namespacePath + "." + target->definition.name;
   detail::Variables validateName;
-  detail::StoreVariable(validateName, newName, units::precise_measurement{});
+  detail::StoreVariable(validateName, newName, units::precise_measurement{}, nullptr, {}, {},
+                        !target->definition.namespacePath.empty());
   target->definition.name = std::move(newName);
   for (auto& variable : variables) {
     variable.definition.expression =

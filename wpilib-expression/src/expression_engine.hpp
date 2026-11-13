@@ -63,7 +63,7 @@ struct NamespaceValues {
 
 void StoreVariable(Variables& variables, std::string name, VariableValue value,
                    const VariableRecord* existing = nullptr, std::string id = {},
-                   std::string expression = {});
+                   std::string expression = {}, bool allowReservedName = false);
 void ConfigureEngine(chaiscript::ChaiScript& engine, const Variables& variables);
 void ConfigureGlobals(chaiscript::ChaiScript& engine, const Variables& variables);
 
