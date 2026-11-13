@@ -89,7 +89,18 @@ void ValidateExpression(const chaiscript::AST_Node& node,
                         const detail::Variables& variables, const NamespacePaths& namespacePaths) {
   // Calls and operators are restricted to the library's read-only expression surface.
   static const std::set<std::string_view> safeFunctions{
-      "quantity", "sin", "cos", "tan", "asin", "acos", "atan", "Pose2d",
+      "quantity", "abs", "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh",
+      "cbrt", "ceil", "copysign", "cos", "cosh", "erf", "erfc", "exp", "exp2",
+      "expm1", "fabs", "fdim", "fma", "floor", "fmax", "fmin", "fmod", "hypot", "ilogb",
+      "isfinite", "isgreater", "isgreaterequal", "isinf", "isless", "islessequal",
+      "islessgreater", "isnan", "isnormal", "isunordered", "ldexp", "lgamma", "llrint",
+      "llround", "log",
+      "log10", "log1p", "log2", "logb", "lrint", "lround", "max", "maximum", "min",
+      "minimum", "nearbyint", "nextafter", "nexttoward", "pow", "quantity", "remainder",
+      "remquo", "rint", "round", "scalbln", "scalbn", "signbit", "sin", "sinh", "sqrt",
+        "rint", "round", "scalbln", "scalbn", "signbit", "sin", "sinh", "sqrt",
+        "lround", "llrint", "llround", "max", "maximum", "min", "minimum", "nearbyint", "nextafter", "nexttoward",
+      "tan", "tanh", "tgamma", "trunc", "Pose2d",
       "Translation2d", "Rotation2d", "Transform2d", "Twist2d", "Rectangle2d", "Ellipse2d",
       "X", "Y",
       "Rotation", "Translation", "RotateBy", "RelativeTo", "TransformBy",
@@ -159,7 +170,7 @@ void ValidateExpression(const chaiscript::AST_Node& node,
 }
 
 void ValidateSetup(const chaiscript::AST_Node& root,
-                   const std::map<std::string, chaiscript::Boxed_Value>& initialObjects) {
+           const std::map<std::string, chaiscript::Boxed_Value>& initialObjects) {
   using Type = chaiscript::AST_Node_Type;
   // Setup is a file of declarations, not an arbitrary executable AST.
   if (root.identifier != Type::File) {
@@ -391,6 +402,18 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
       save(chaiscript::boxed_cast<Pose2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<Translation2d>())) {
       save(chaiscript::boxed_cast<Translation2d>(value));
+    } else if (type.bare_equal(chaiscript::user_type<std::vector<chaiscript::Boxed_Value>>())) {
+      detail::Translation2dArray translations;
+      const auto& values = chaiscript::boxed_cast<const std::vector<chaiscript::Boxed_Value>&>(value);
+      translations.reserve(values.size());
+      for (const auto& item : values) {
+        try {
+          translations.push_back(chaiscript::boxed_cast<Translation2d>(item));
+        } catch (const chaiscript::exception::bad_boxed_cast&) {
+          throw std::invalid_argument("setup arrays must contain only Translation2d values: " + name);
+        }
+      }
+      save(std::move(translations));
     } else if (type.bare_equal(chaiscript::user_type<Rotation2d>())) {
       save(chaiscript::boxed_cast<Rotation2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<Transform2d>())) {
@@ -448,6 +471,14 @@ void EvaluationContext::SetVariable(std::string name, Pose2d value) {
 }
 
 void EvaluationContext::SetVariable(std::string name, Translation2d value) {
+  if (!impl_) {
+    impl_ = std::make_shared<Impl>();
+  }
+  detail::StoreVariable(impl_->variables, std::move(name), std::move(value));
+}
+
+void EvaluationContext::SetVariable(
+    std::string name, std::vector<Translation2d> value) {
   if (!impl_) {
     impl_ = std::make_shared<Impl>();
   }

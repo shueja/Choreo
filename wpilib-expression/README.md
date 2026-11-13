@@ -6,6 +6,7 @@
 
 - WPILib `allwpilib` revision `f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a`
 - ChaiScript revision `f635b51e3f8e95868210edfc66fdbd8e475710f5`
+- ChaiScript Extras revision `dd116d732159e38a70214b8dc9eefd243bab17e5`
 - Eigen revision `b7f6aed1b9974fd56cce651b4ff059c3bfc67782`
 - CMake 3.21 or newer and a C++23 compiler
 
@@ -36,9 +37,9 @@ auto distance = context.Evaluate("2 m + 3 ft", length);
 double meters = distance.In("m");
 ```
 
-Contexts register scalar and native WPILib geometry values with `SetVariable`. `Evaluate` returns a `Quantity` and can check an expected `Dimension`; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
+Contexts register scalar and native WPILib geometry values with `SetVariable`. Translation arrays can be registered as `std::vector<wpi::math::Translation2d>` and indexed with `[index]`; they also work with `Nearest`. `Evaluate` returns a `Quantity` and can check an expected `Dimension`; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
 
-`SetSetupScript` atomically replaces context variables using initialized top-level `var`, `auto`, `const`, or `global` declarations. Initializers may use read-only expressions and previously declared variables. Values must be quantities, numbers, or supported geometry objects; numbers become dimensionless quantities. A failed setup leaves the previous variables unchanged. Other statements, user-defined functions, external scripts, module loading, and I/O are not permitted. Evaluation is not resource-limited.
+`SetSetupScript` atomically replaces context variables using initialized top-level `var`, `auto`, `const`, or `global` declarations. Initializers may use read-only expressions and previously declared variables. Values must be quantities, numbers, supported geometry objects, or arrays containing only `Translation2d` values; numbers become dimensionless quantities. A failed setup leaves the previous variables unchanged. Other statements, user-defined functions, external scripts, module loading, and I/O are not permitted. Evaluation is not resource-limited.
 
 Setup supports nested namespace blocks and the `namespace("name")` form. Namespace members are frozen after setup and can be accessed with `.` or `::`. Initializers referencing earlier members must use their qualified names.
 
@@ -75,7 +76,7 @@ The conversion checks the full WPILib base-dimension signature. Non-linear WPI s
 
 ## Expression Support
 
-Bare unit suffixes include `2 m`, `90 deg`, `6000 RPM`, `2 m/s^2`, and `0.018 N*m/A`. Parentheses, scientific notation, explicit multiplication, division, and integer powers are supported. Addition, subtraction, comparisons, and powers validate dimensions. Trigonometric functions accept angle or dimensionless inputs; inverse trigonometric functions return angles.
+Bare unit suffixes include `2 m`, `90 deg`, `6000 RPM`, `2 m/s^2`, and `0.018 N*m/A`. Parentheses, scientific notation, explicit multiplication, division, and integer powers are supported. Addition, subtraction, comparisons, and powers validate dimensions. The ChaiScript math extra supplies scalar math functions. Quantity overloads preserve dimensions for absolute value, rounding, same-dimension remainders and extrema, and `hypot`; `sqrt` and `cbrt` require exponents divisible by their root degree. Transcendental functions require dimensionless quantities, except trigonometric functions, which also accept angles, and `atan2`, which accepts matching dimensions and returns an angle. `min` and `max` are available through dimension-checking Quantity overloads.
 
 The bounded unit registry includes common Choreo/FRC engineering units: `m`, `mm`, `cm`, `km`, `in`, `ft`, `yd`, `mi`; `s`, `ms`, `us`, `min`, `hr`; `kg`, `g`, `lb`; `A`, `mA`; `rad`, `deg`, `turn`, `rev`; `N`, `lbf`, `V`, `mV`, `kV`, `Hz`, `kHz`, `W`, `kW`, `J`, `kJ`, `C`, `Pa`, `kPa`, `psi`, `ohm`, `Ohm`, `Nm`, and `RPM`/`rpm`. Symbols are case-sensitive. Compound unit expressions accept `*`, `/`, and integer exponents with magnitude up to 16. Unit names are reserved and cannot be reused as variable names. Unknown unit suffixes, incompatible dimensions, divide-by-zero, non-finite results, and invalid geometry dimensions are rejected.
 
@@ -83,4 +84,4 @@ Geometry bindings cover constructors and commonly used properties/methods for WP
 
 For convenience, `Pose2d` supports `Distance(otherPose)` using its translation; this ignores rotation. For a pose's norm, use `pose.Translation().Norm()` or `pose.Translation().SquaredNorm()`.
 
-Planar geometry values support WPILib's arithmetic and equality operators. Scaling accepts finite dimensionless scalars; division by zero is rejected. `Translation2d::Angle()` returns a rotation and rejects translations whose direction is undefined. Pose and translation `Nearest()` accept non-empty inline lists, for example `origin.Nearest([Pose2d(), target])`.
+Planar geometry values support WPILib's arithmetic and equality operators. Scaling accepts finite dimensionless scalars; division by zero is rejected. `Translation2d::Angle()` returns a rotation and rejects translations whose direction is undefined. Pose and translation `Nearest()` accept non-empty inline lists, for example `origin.Nearest([Pose2d(), target])`, or a registered translation array such as `query.Nearest(waypoints)`.

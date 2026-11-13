@@ -59,6 +59,31 @@ std::string ExpandUnitSuffixes(std::string_view source) {
       continue;
     }
     unsigned char current = static_cast<unsigned char>(source[position]);
+    // Support underscores in identifiers.
+    if (std::isalpha(current) || source[position] == '_') {
+      std::size_t identifierEnd = position + 1;
+      while (identifierEnd < source.size() &&
+             (std::isalnum(static_cast<unsigned char>(source[identifierEnd])) ||
+              source[identifierEnd] == '_')) {
+        ++identifierEnd;
+      }
+      // Expand known identifiers like min and max to their full forms to avoid conflicts with user-defined functions.
+      auto identifier = source.substr(position, identifierEnd - position);
+      std::size_t next = identifierEnd;
+      while (next < source.size() &&
+             std::isspace(static_cast<unsigned char>(source[next]))) {
+        ++next;
+      }
+      if (next < source.size() && source[next] == '(' && identifier == "min") {
+        expanded += "minimum";
+      } else if (next < source.size() && source[next] == '(' && identifier == "max") {
+        expanded += "maximum";
+      } else {
+        expanded.append(identifier);
+      }
+      position = identifierEnd;
+      continue;
+    }
     bool followsIdentifier = position > 0 &&
                              (std::isalnum(static_cast<unsigned char>(source[position - 1])) ||
                               source[position - 1] == '_');
@@ -122,6 +147,21 @@ std::string ExpandUnitSuffixes(std::string_view source) {
       }
 
       std::size_t unitEnd = suffixEnd;
+      if (unitEnd < source.size() && source[unitEnd] == '^') {
+        std::size_t exponentEnd = unitEnd + 1;
+        if (exponentEnd < source.size() &&
+            (source[exponentEnd] == '+' || source[exponentEnd] == '-')) {
+          ++exponentEnd;
+        }
+        std::size_t digitsStart = exponentEnd;
+        while (exponentEnd < source.size() &&
+               std::isdigit(static_cast<unsigned char>(source[exponentEnd]))) {
+          ++exponentEnd;
+        }
+        if (exponentEnd > digitsStart) {
+          unitEnd = exponentEnd;
+        }
+      }
       while (unitEnd < source.size()) {
         std::size_t next = unitEnd;
         while (next < source.size() &&

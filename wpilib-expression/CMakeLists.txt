@@ -47,6 +47,16 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(chaiscript)
 set(CHAISCRIPT_INCLUDE_DIR "${chaiscript_SOURCE_DIR}/include")
 
+FetchContent_Declare(
+    chaiscript_extras
+    GIT_REPOSITORY https://github.com/ChaiScript/ChaiScript_Extras.git
+    GIT_TAG dd116d732159e38a70214b8dc9eefd243bab17e5
+    SOURCE_SUBDIR include
+    SYSTEM
+)
+FetchContent_MakeAvailable(chaiscript_extras)
+set(CHAISCRIPT_EXTRAS_INCLUDE_DIR "${chaiscript_extras_SOURCE_DIR}/include")
+
 if(TARGET wpimath AND NOT TARGET wpimath::wpimath)
     add_library(wpimath::wpimath ALIAS wpimath)
 endif()
@@ -85,7 +95,7 @@ target_include_directories(
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-    PRIVATE ${CHAISCRIPT_COMPAT_INCLUDE_DIR}
+    PRIVATE ${CHAISCRIPT_COMPAT_INCLUDE_DIR} ${CHAISCRIPT_EXTRAS_INCLUDE_DIR}
 )
 if(MSVC AND DEFINED ENV{INCLUDE})
     target_include_directories(wpilib_expression SYSTEM PRIVATE $ENV{INCLUDE})
