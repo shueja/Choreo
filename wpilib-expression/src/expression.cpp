@@ -150,6 +150,9 @@ void CollectDeclaredPaths(const std::vector<VariableDefinition>& definitions,
     }
     detail::StoreVariable(identifiers, definition.name, units::precise_measurement{});
     identifiers.clear();
+    if (!definition.namespacePath.empty() && definition.namespacePath.back() == '.') {
+      throw std::invalid_argument("invalid namespace path");
+    }
     std::string path;
     std::size_t start = 0;
     while (start < definition.namespacePath.size()) {

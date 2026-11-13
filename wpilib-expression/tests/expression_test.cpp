@@ -147,6 +147,17 @@ int TestNamespaces() {
     std::println(stderr, "variable/namespace collision changed existing variables");
     return 1;
   }
+  bool invalidNamespaceRejected = false;
+  try {
+    setup.SetVariables({Variable("invalid-namespace-id", "field.", "member", "1 m")});
+  } catch (const std::invalid_argument&) {
+    invalidNamespaceRejected = true;
+  }
+  if (!invalidNamespaceRejected ||
+      !EvaluatesTo(setup, "field.deep.more.length", 2.0, "ft")) {
+    std::println(stderr, "invalid namespace path changed existing variables");
+    return 1;
+  }
   auto copy = setup;
   copy.SetVariables({Variable("replacement-id", "field.deep.third.fourth.fifth.sixth",
                               "replacement", "5 m")});
