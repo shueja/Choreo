@@ -48,7 +48,7 @@ if (meters) {
 
 Contexts register scalar and native WPILib geometry values with `SetVariable`. `Evaluate` returns an LLNL `units::precise_measurement` and can check an expected LLNL base unit; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
 
-`SetSetupScript` atomically replaces context variables using initialized top-level `var`, `auto`, `const`, or `global` declarations. Initializers may use read-only expressions and previously declared variables. Values must be quantities, numbers, or supported geometry objects; numbers become dimensionless quantities. A failed setup leaves the previous variables unchanged. Other statements, user-defined functions, external scripts, module loading, and I/O are not permitted. Evaluation is not resource-limited.
+`SetSetupScript` atomically replaces context variables using initialized top-level `var`, `auto`, `const`, or `global` declarations. Initializers may use read-only expressions and other top-level variables regardless of declaration order; cyclic dependencies are rejected. Values must be quantities, numbers, or supported geometry objects; numbers become dimensionless quantities. A failed setup leaves the previous variables unchanged. Other statements, user-defined functions, external scripts, module loading, and I/O are not permitted. Evaluation is not resource-limited.
 
 Setup supports nested namespace blocks and the `namespace("name")` form. Namespace members are frozen after setup and can be accessed with `.` or `::`. Initializers referencing earlier members must use their qualified names.
 

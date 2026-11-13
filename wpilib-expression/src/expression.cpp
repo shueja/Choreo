@@ -4,6 +4,7 @@
 #include "expression_syntax.hpp"
 #include "units.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <functional>
@@ -13,6 +14,7 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace wpilib::expression {
 namespace {
@@ -86,7 +88,8 @@ void CollectNamespacePaths(const detail::Variables& variables, const std::string
 }
 
 void ValidateExpression(const chaiscript::AST_Node& node,
-                        const detail::Variables& variables, const NamespacePaths& namespacePaths) {
+                        const detail::Variables& variables, const NamespacePaths& namespacePaths,
+                        const std::set<std::string>& declaredVariables) {
   // Calls and operators are restricted to the library's read-only expression surface.
   static const std::set<std::string_view> safeFunctions{
       "quantity", "sin", "cos", "tan", "asin", "acos", "atan", "Pose2d",
@@ -121,7 +124,8 @@ void ValidateExpression(const chaiscript::AST_Node& node,
       break;
     case Type::Id:
       // Bare identifiers must be context values, units, allowed functions, or booleans.
-      if (!variables.contains(node.text) && !detail::UnitRegistry().contains(node.text) &&
+      if (!variables.contains(node.text) && !declaredVariables.contains(node.text) &&
+          !detail::UnitRegistry().contains(node.text) &&
           !safeFunctions.contains(node.text) && node.text != "true" && node.text != "false") {
         throw std::invalid_argument("unknown expression identifier: " + node.text);
       }
@@ -154,8 +158,140 @@ void ValidateExpression(const chaiscript::AST_Node& node,
       throw std::invalid_argument("only read-only expressions are permitted");
   }
   for (const auto& child : children) {
-    ValidateExpression(child.get(), variables, namespacePaths);
+    ValidateExpression(child.get(), variables, namespacePaths, declaredVariables);
   }
+}
+
+const chaiscript::AST_Node* SetupDeclarationName(const chaiscript::AST_Node& node) {
+  using Type = chaiscript::AST_Node_Type;
+  auto children = node.get_children();
+  if (children.size() != 2) {
+    return nullptr;
+  }
+  const auto* name = &children[0].get();
+  if (node.identifier == Type::Equation && node.text == "=" &&
+      name->identifier == Type::Global_Decl) {
+    auto globalChildren = name->get_children();
+    return globalChildren.size() == 1 && globalChildren[0].get().identifier == Type::Id
+               ? &globalChildren[0].get()
+               : nullptr;
+  }
+  if ((node.identifier == Type::Assign_Decl ||
+       node.identifier == Type::Const_Assign_Decl) &&
+      name->identifier == Type::Id) {
+    return name;
+  }
+  return nullptr;
+}
+
+void CollectVariableReferences(const chaiscript::AST_Node& node,
+                               const std::map<std::string, std::size_t>& declarationIndices,
+                               std::set<std::size_t>& dependencies) {
+  if (node.identifier == chaiscript::AST_Node_Type::Id) {
+    if (auto found = declarationIndices.find(node.text); found != declarationIndices.end()) {
+      dependencies.insert(found->second);
+    }
+  }
+  for (const auto& child : node.get_children()) {
+    CollectVariableReferences(child.get(), declarationIndices, dependencies);
+  }
+}
+
+std::size_t SourceOffset(std::string_view source, const chaiscript::File_Position& position) {
+  if (position.line <= 0 || position.column <= 0) {
+    throw std::invalid_argument("invalid setup source location");
+  }
+  std::size_t offset = 0;
+  for (int line = 1; line < position.line; ++line) {
+    auto newline = source.find('\n', offset);
+    if (newline == std::string_view::npos) {
+      throw std::invalid_argument("invalid setup source location");
+    }
+    offset = newline + 1;
+  }
+  offset += static_cast<std::size_t>(position.column - 1);
+  if (offset > source.size()) {
+    throw std::invalid_argument("invalid setup source location");
+  }
+  return offset;
+}
+
+std::string OrderSetupDeclarations(const chaiscript::AST_Node& root, std::string_view source) {
+  const auto statements = root.get_children();
+  if (statements.size() < 2) {
+    return std::string(source);
+  }
+
+  std::map<std::string, std::size_t> declarationIndices;
+  for (std::size_t index = 0; index < statements.size(); ++index) {
+    if (const auto* name = SetupDeclarationName(statements[index].get())) {
+      declarationIndices.try_emplace(name->text, index);
+    }
+  }
+
+  std::vector<std::size_t> offsets;
+  offsets.reserve(statements.size());
+  for (const auto& statement : statements) {
+    offsets.push_back(SourceOffset(source, statement.get().start()));
+  }
+  std::vector<std::size_t> sourceOrder(statements.size());
+  for (std::size_t index = 0; index < sourceOrder.size(); ++index) {
+    sourceOrder[index] = index;
+  }
+  std::sort(sourceOrder.begin(), sourceOrder.end(),
+            [&](std::size_t left, std::size_t right) { return offsets[left] < offsets[right]; });
+
+  std::vector<std::set<std::size_t>> dependents(statements.size());
+  std::vector<std::size_t> dependencyCounts(statements.size());
+  for (std::size_t index = 0; index < statements.size(); ++index) {
+    auto children = statements[index].get().get_children();
+    if (!SetupDeclarationName(statements[index].get()) || children.size() != 2) {
+      continue;
+    }
+    std::set<std::size_t> dependencies;
+    CollectVariableReferences(children[1].get(), declarationIndices, dependencies);
+    dependencyCounts[index] = dependencies.size();
+    for (auto dependency : dependencies) {
+      dependents[dependency].insert(index);
+    }
+  }
+
+  std::set<std::size_t> ready;
+  for (auto index : sourceOrder) {
+    if (dependencyCounts[index] == 0) {
+      ready.insert(index);
+    }
+  }
+  std::vector<std::size_t> evaluationOrder;
+  evaluationOrder.reserve(statements.size());
+  while (!ready.empty()) {
+    auto index = *ready.begin();
+    ready.erase(ready.begin());
+    evaluationOrder.push_back(index);
+    for (auto dependent : dependents[index]) {
+      if (--dependencyCounts[dependent] == 0) {
+        ready.insert(dependent);
+      }
+    }
+  }
+  if (evaluationOrder.size() != statements.size()) {
+    throw std::invalid_argument("cyclic setup variable dependency");
+  }
+
+  std::string ordered;
+  ordered.reserve(source.size());
+  ordered.append(source.substr(0, offsets[sourceOrder.front()]));
+  for (std::size_t position = 0; position < sourceOrder.size(); ++position) {
+    auto index = evaluationOrder[position];
+    auto sourcePosition = std::find(sourceOrder.begin(), sourceOrder.end(), index) -
+                          sourceOrder.begin();
+    auto begin = offsets[index];
+    auto end = sourcePosition + 1 < sourceOrder.size()
+                   ? offsets[sourceOrder[sourcePosition + 1]]
+                   : source.size();
+    ordered.append(source.substr(begin, end - begin));
+  }
+  return ordered;
 }
 
 void ValidateSetup(const chaiscript::AST_Node& root,
@@ -168,6 +304,12 @@ void ValidateSetup(const chaiscript::AST_Node& root,
   detail::Variables variables;
   NamespacePaths namespacePaths;
   NamespacePaths namespaces;
+  std::set<std::string> declaredVariables;
+  for (const auto& statement : root.get_children()) {
+    if (const auto* name = SetupDeclarationName(statement.get())) {
+      declaredVariables.insert(name->text);
+    }
+  }
   auto declareNamespace = [&](std::string_view qualifiedName) {
     // Validate each component and prevent namespaces from replacing existing values.
     std::string path;
@@ -237,7 +379,7 @@ void ValidateSetup(const chaiscript::AST_Node& root,
           throw std::invalid_argument("namespace conflicts with a value: " + member);
         }
         // Initializers may refer only to values declared earlier in the setup.
-        ValidateExpression(parts[1].get(), variables, namespacePaths);
+        ValidateExpression(parts[1].get(), variables, namespacePaths, declaredVariables);
         namespacePaths.insert(member);
       }
       continue;
@@ -255,7 +397,7 @@ void ValidateSetup(const chaiscript::AST_Node& root,
           namespaces.contains(memberPath)) {
         throw std::invalid_argument("invalid namespace member: " + memberPath);
       }
-      ValidateExpression(children[1].get(), variables, namespacePaths);
+      ValidateExpression(children[1].get(), variables, namespacePaths, declaredVariables);
       namespacePaths.insert(memberPath);
       continue;
     }
@@ -275,7 +417,7 @@ void ValidateSetup(const chaiscript::AST_Node& root,
         initialObjects.contains(name->text)) {
       throw std::invalid_argument("invalid or duplicate setup variable: " + name->text);
     }
-    ValidateExpression(children[1].get(), variables, namespacePaths);
+    ValidateExpression(children[1].get(), variables, namespacePaths, declaredVariables);
     detail::StoreVariable(variables, name->text, units::precise_measurement{});
   }
 }
@@ -297,7 +439,11 @@ Result EvaluateResult(Cache& engineCache, const detail::Variables& variables,
   }
   NamespacePaths namespacePaths;
   CollectNamespacePaths(variables, "", namespacePaths);
-  ValidateExpression(*parsed, variables, namespacePaths);
+  std::set<std::string> declaredVariables;
+  for (const auto& [name, _] : variables) {
+    declaredVariables.insert(name);
+  }
+  ValidateExpression(*parsed, variables, namespacePaths, declaredVariables);
   cache.engine.set_state(cache.initialState);
   cache.engine.set_locals(cache.initialLocals);
   detail::ConfigureGlobals(cache.engine, variables);
@@ -351,8 +497,9 @@ void EvaluationContext::SetSetupScript(std::string_view source) {
     throw SyntaxError(error);
   }
   ValidateSetup(*parsed, initialObjects);
+  auto ordered = OrderSetupDeclarations(*parsed, expanded);
   try {
-    engine.eval(expanded);
+    engine.eval(ordered);
   } catch (const chaiscript::exception::eval_error& error) {
     throw SyntaxError(error);
   }

@@ -122,6 +122,17 @@ int TestNamespaces() {
 int TestSetup() {
   EvaluationContext setup;
   setup.SetVariable("old", From(1.0, units::precise::m));
+  EvaluationContext unordered;
+  unordered.SetSetupScript(
+      "var combined = total + extra; var targetX = pose.X(); var total = base + offset; "
+      "var offset = 3 ft; var base = 2 m; var pose = Pose2d(3 m, 4 m, 90 deg); "
+      "const var extra = 1 m;");
+  if (!EvaluatesTo(unordered, "combined", 3.9144, "m") ||
+      !EvaluatesTo(unordered, "targetX", 3.0, "m")) {
+    std::println(stderr, "setup declarations were not evaluated in dependency order");
+    return 1;
+  }
+
   setup.SetSetupScript("// 2 unknown_units\nvar base = 2 m; /* 3 unknown_units */ "
                "var offset = 3 ft; var total = base + offset; "
                        "var pose = Pose2d(3 m, 4 m, 90 deg); var gain = 2; "
@@ -148,6 +159,16 @@ int TestSetup() {
   }
   if (!setupFailureRejected || !EvaluatesTo(setup, "base", 2.0, "m")) {
     std::println(stderr, "failed setup changed the context");
+    return 1;
+  }
+  bool cyclicSetupRejected = false;
+  try {
+    setup.SetSetupScript("var left = right; var right = left;");
+  } catch (const std::invalid_argument&) {
+    cyclicSetupRejected = true;
+  }
+  if (!cyclicSetupRejected || !EvaluatesTo(setup, "base", 2.0, "m")) {
+    std::println(stderr, "cyclic setup dependency was accepted or changed the context");
     return 1;
   }
   bool unsupportedSetupRejected = false;
