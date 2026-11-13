@@ -49,12 +49,15 @@ if (meters) {
 
 Variables with stable caller-provided IDs, names, expressions, and optional namespace paths are declared with `SetVariables`. Expressions can reference one another regardless of input order; dependencies are evaluated first and cycles are rejected. Namespaces are metadata, and expressions refer to members by their qualified dotted names. Replacing definitions is atomic: an expression must retain the original variable's type (quantity base dimension or concrete geometry type), and a failed replacement leaves the prior values intact. `GetVariables` returns definitions, declared types, dimensions, and cached values. `FindReferences` returns the IDs of dependent variables, and `RenameVariable` updates a variable's name and rewrites references while preserving its ID and declared type.
 
-Register separately cached named expressions with `SetExpressions`, using a stable
-ID, an identifier name, and a read-only expression source for each entry.
-`GetExpressions` returns their definitions and typed cached results
-(`ExpressionValue` supports quantities, booleans, and geometry values).
-Registered expressions may refer to context variables and to other registered
-expressions; dependencies are evaluated in order and cycles are rejected.
+`VariableDefinition` is shared by variable and registered-expression APIs; the
+context in which a definition is supplied determines how it is used. It carries
+an ID, name, expression source, and optional namespace path. Register cached
+expressions with `SetExpressions` and retrieve their definitions and typed cached
+results with `GetExpressions` (`ExpressionValue` supports quantities, booleans,
+and geometry values). Expressions can share a namespace with variables and can
+refer to both variables and other registered expressions; dependencies are
+evaluated in order and cycles are rejected.
+
 Changing a variable with `SetVariable` reevaluates only expressions that depend
 on it, including transitive dependents. `SetExpression` replaces an expression
 source, rediscovers its dependencies, and updates that expression and its

@@ -56,14 +56,8 @@ struct VariableInfo {
   VariableValue value;
 };
 
-struct ExpressionDefinition {
-  std::string id;
-  std::string name;
-  std::string expression;
-};
-
 struct ExpressionInfo {
-  ExpressionDefinition definition;
+  VariableDefinition definition;
   ExpressionValue value;
 };
 
@@ -78,7 +72,7 @@ class EvaluationContext {
   std::vector<VariableInfo> GetVariables() const;
   std::vector<std::string> FindReferences(std::string_view variableId) const;
   void RenameVariable(std::string_view variableId, std::string newName);
-  void SetExpressions(std::vector<ExpressionDefinition> expressions);
+  void SetExpressions(std::vector<VariableDefinition> expressions);
   void SetExpression(std::string_view expressionId, std::string expression);
   std::vector<ExpressionInfo> GetExpressions() const;
   void SetVariable(std::string name, units::precise_measurement value);

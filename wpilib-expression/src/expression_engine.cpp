@@ -45,6 +45,8 @@ DeclaredType GetDeclaredType(const VariableValue& value) {
     using Value = std::decay_t<decltype(variable)>;
     if constexpr (std::is_same_v<Value, units::precise_measurement>) {
       return {VariableType::Quantity, variable.units()};
+    } else if constexpr (std::is_same_v<Value, bool>) {
+      return {VariableType::Boolean, units::precise::one};
     } else if constexpr (std::is_same_v<Value, Pose2d>) {
       return {VariableType::Pose2d, units::precise::one};
     } else if constexpr (std::is_same_v<Value, Translation2d>) {

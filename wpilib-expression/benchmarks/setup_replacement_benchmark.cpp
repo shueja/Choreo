@@ -11,10 +11,10 @@
 #include "wpilib-expression/expression.hpp"
 
 using wpilib::expression::EvaluationContext;
-using wpilib::expression::ExpressionDefinition;
 using wpilib::expression::ExpressionInfo;
 using wpilib::expression::From;
 using wpilib::expression::In;
+using wpilib::expression::VariableDefinition;
 
 namespace {
 
@@ -75,11 +75,11 @@ void Benchmark(std::size_t expressionCount, bool dense) {
   SetInitialVariables(incremental);
   SetInitialVariables(full);
   auto sources = MakeExpressions(expressionCount, dense);
-  std::vector<ExpressionDefinition> definitions;
+  std::vector<VariableDefinition> definitions;
   definitions.reserve(expressionCount);
   for (std::size_t index = 0; index < expressionCount; ++index) {
     auto name = "result" + std::to_string(index);
-    definitions.push_back({name, name, sources[index]});
+    definitions.push_back({name, "", name, sources[index]});
   }
   incremental.SetExpressions(std::move(definitions));
 

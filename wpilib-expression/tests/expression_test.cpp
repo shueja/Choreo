@@ -22,7 +22,6 @@ using wpi::math::Pose2d;
 using wpilib::expression::Error;
 using wpilib::expression::ErrorMessage;
 using wpilib::expression::EvaluationContext;
-using wpilib::expression::ExpressionDefinition;
 using wpilib::expression::ExpressionInfo;
 using wpilib::expression::From;
 using wpilib::expression::In;
@@ -401,7 +400,10 @@ int TestVariableReferencesAndRename() {
       Variable("result-id", "", "result", "field.distance + field.twice"),
   };
   context.SetVariables(definitions);
-  context.SetExpressions({{"listed-id", "listed", "field.distance * 3"}});
+  context.SetExpressions({
+      {"listed-id", "field", "listed", "field.distance * 3"},
+      {"nested-id", "field", "nested", "field.listed * 2"},
+  });
   auto references = context.FindReferences("distance-id");
   if (references.size() != 2 ||
       std::find(references.begin(), references.end(), "twice-id") ==
@@ -420,7 +422,8 @@ int TestVariableReferencesAndRename() {
   if (!EvaluatesTo(context, "field.length", 2.0, "m") ||
       !EvaluatesTo(context, "field.twice", 4.0, "m") ||
       !EvaluatesTo(context, "result", 6.0, "m") ||
-      !ExpressionEvaluatesTo(context, "listed-id", 6.0, "m")) {
+      !ExpressionEvaluatesTo(context, "listed-id", 6.0, "m") ||
+      !ExpressionEvaluatesTo(context, "nested-id", 12.0, "m")) {
     std::println(stderr,
                  "renaming a namespaced variable did not preserve dependents");
     return 1;
@@ -445,7 +448,8 @@ int TestVariableReferencesAndRename() {
   }
   context.SetVariables(std::move(changed));
   if (!EvaluatesTo(context, "result", 9.0, "m") ||
-      !ExpressionEvaluatesTo(context, "listed-id", 9.0, "m")) {
+      !ExpressionEvaluatesTo(context, "listed-id", 9.0, "m") ||
+      !ExpressionEvaluatesTo(context, "nested-id", 18.0, "m")) {
     std::println(stderr,
                  "dependency-driven reevaluation returned the wrong value");
     return 1;
@@ -515,17 +519,19 @@ int TestIncrementalExpressionUpdates() {
   context.SetVariable("y", From(3.0, units::precise::m));
   context.SetVariable("divisor", From(1.0, units::precise::one));
   context.SetExpressions({
-      {"base-id", "base", "x + 1 m"},
-      {"twice-id", "twice", "base * 2"},
-      {"unrelated-id", "unrelated", "y + 10 m"},
-      {"guard-id", "guard", "1 m / divisor"},
-      {"boolean-id", "isLong", "x > 1 m"},
-      {"pose-id", "poseResult", "Pose2d(x, 0 m, 0 deg)"},
+      {"base-id", "", "base", "x + 1 m"},
+      {"twice-id", "", "twice", "base * 2"},
+      {"unrelated-id", "", "unrelated", "y + 10 m"},
+      {"guard-id", "", "guard", "1 m / divisor"},
+      {"boolean-id", "", "isLong", "x > 1 m"},
+      {"pose-id", "", "poseResult", "Pose2d(x, 0 m, 0 deg)"},
+      {"qualified-id", "outputs", "derived", "x * 2"},
   });
   if (!ExpressionEvaluatesTo(context, "base-id", 3.0, "m") ||
       !ExpressionEvaluatesTo(context, "twice-id", 6.0, "m") ||
       !ExpressionEvaluatesTo(context, "unrelated-id", 13.0, "m") ||
-      !ExpressionEvaluatesTo(context, "guard-id", 1.0, "m")) {
+      !ExpressionEvaluatesTo(context, "guard-id", 1.0, "m") ||
+      !ExpressionEvaluatesTo(context, "qualified-id", 4.0, "m")) {
     return 1;
   }
   auto cached = context.GetExpressions();
@@ -566,6 +572,10 @@ int TestIncrementalExpressionUpdates() {
       std::abs(std::get<Pose2d>(pose->value).X().value() - 4.0) > 1e-10) {
     std::println(stderr,
                  "variable update did not refresh a geometry expression");
+    return 1;
+  }
+  if (!ExpressionEvaluatesTo(context, "qualified-id", 8.0, "m")) {
+    std::println(stderr, "namespaced expression did not refresh after a variable change");
     return 1;
   }
 
@@ -637,6 +647,17 @@ int TestIncrementalExpressionUpdates() {
     std::println(stderr, "failed variable update was not atomic");
     return 1;
   }
+  bool namespaceConflictRejected = false;
+  try {
+    context.SetVariable("outputs", From(1.0, units::precise::one));
+  } catch (const std::invalid_argument&) {
+    namespaceConflictRejected = true;
+  }
+  if (!namespaceConflictRejected ||
+      !ExpressionEvaluatesTo(context, "qualified-id", 10.0, "m")) {
+    std::println(stderr, "variable update corrupted an expression namespace");
+    return 1;
+  }
   return 0;
 }
 
@@ -647,12 +668,12 @@ int TestIncrementalExpressionScale() {
     sparse.SetVariable("input" + std::to_string(variable),
                        From(static_cast<double>(variable), units::precise::m));
   }
-  std::vector<ExpressionDefinition> definitions;
+  std::vector<VariableDefinition> definitions;
   definitions.reserve(expressionCount);
   for (std::size_t index = 0; index < expressionCount; ++index) {
     auto name = "result" + std::to_string(index);
     auto input = "input" + std::to_string(index % 50);
-    definitions.push_back({name, name, input + " + 1 m"});
+    definitions.push_back({name, "", name, input + " + 1 m"});
   }
   sparse.SetExpressions(definitions);
   sparse.SetVariable("input0", From(100.0, units::precise::m));
@@ -672,7 +693,7 @@ int TestIncrementalExpressionScale() {
   definitions.clear();
   for (std::size_t index = 0; index < expressionCount; ++index) {
     auto name = "dense" + std::to_string(index);
-    definitions.push_back({name, name, "input0 + 1 m"});
+    definitions.push_back({name, "", name, "input0 + 1 m"});
   }
   dense.SetExpressions(std::move(definitions));
   dense.SetVariable("input0", From(2.0, units::precise::m));

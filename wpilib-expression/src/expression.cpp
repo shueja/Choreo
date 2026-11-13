@@ -28,14 +28,73 @@ using detail::Translation2d;
 using detail::Twist2d;
 
 struct RegisteredExpression {
-  ExpressionDefinition definition;
+  VariableDefinition definition;
   ExpressionValue value{units::precise_measurement{}};
   std::set<std::string> dependencies;
 };
 
+std::string QualifiedName(const VariableDefinition& definition) {
+  return definition.namespacePath.empty()
+             ? definition.name
+             : definition.namespacePath + "." + definition.name;
+}
+
+void StoreExpressionValue(detail::Variables& variables,
+                          const VariableDefinition& definition,
+                          const ExpressionValue& value) {
+  auto variableValue = std::visit(
+      [](const auto& item) -> detail::VariableValue { return item; }, value);
+  if (definition.namespacePath.empty()) {
+    detail::StoreVariable(variables, definition.name, std::move(variableValue),
+                          nullptr, {}, {}, false);
+    return;
+  }
+
+  std::vector<std::string> path;
+  std::size_t start = 0;
+  while (start < definition.namespacePath.size()) {
+    auto end = definition.namespacePath.find('.', start);
+    path.push_back(definition.namespacePath.substr(
+        start, end == std::string::npos ? std::string::npos : end - start));
+    if (end == std::string::npos) {
+      break;
+    }
+    start = end + 1;
+  }
+  auto store = [&](auto&& self, detail::Variables& destination,
+                   std::size_t depth) -> void {
+    if (depth == path.size()) {
+      detail::StoreVariable(destination, definition.name,
+                            std::move(variableValue), nullptr, {}, {}, true);
+      return;
+    }
+    const auto& component = path[depth];
+    auto existing = destination.find(component);
+    std::shared_ptr<detail::NamespaceValues> members;
+    if (existing != destination.end()) {
+      const auto* nested =
+          std::get_if<detail::NamespacePtr>(&existing->second.value);
+      if (nested == nullptr || !*nested) {
+        throw std::invalid_argument("expression namespace conflicts with value: " +
+                                    component);
+      }
+      members = std::make_shared<detail::NamespaceValues>(**nested);
+    } else {
+      members = std::make_shared<detail::NamespaceValues>();
+    }
+    self(self, members->members, depth + 1);
+    detail::StoreVariable(destination, component, detail::NamespacePtr{members},
+                          existing == destination.end() ? nullptr
+                                                       : &existing->second,
+                          {}, {}, true);
+  };
+  store(store, variables, 0);
+}
+
 struct ExpressionRegistry {
   std::map<std::string, RegisteredExpression> expressions;
   std::map<std::string, std::string> idsByName;
+  std::set<std::string> namespaces;
   std::map<std::string, std::set<std::string>> dependents;
   std::vector<std::string> evaluationOrder;
 };
@@ -147,7 +206,8 @@ void CollectVariableInfo(const detail::Variables& variables,
     std::visit(
         [&](const auto& value) {
           using Value = std::decay_t<decltype(value)>;
-          if constexpr (!std::is_same_v<Value, detail::NamespacePtr>) {
+          if constexpr (!std::is_same_v<Value, detail::NamespacePtr> &&
+                        !std::is_same_v<Value, bool>) {
             info.value = value;
           }
         },
@@ -489,6 +549,20 @@ Result EvaluateResult(
     engineCache.cache.emplace();
   }
   auto& cache = *engineCache.cache;
+  detail::Variables evaluationVariables = variables;
+  if (expressionValues != nullptr) {
+    for (const auto& [qualifiedName, value] : *expressionValues) {
+      auto separator = qualifiedName.rfind('.');
+      VariableDefinition definition;
+      if (separator == std::string::npos) {
+        definition.name = qualifiedName;
+      } else {
+        definition.namespacePath = qualifiedName.substr(0, separator);
+        definition.name = qualifiedName.substr(separator + 1);
+      }
+      StoreExpressionValue(evaluationVariables, definition, value);
+    }
+  }
   auto expanded = detail::ExpandUnitSuffixes(source);
   chaiscript::AST_NodePtr parsed;
   try {
@@ -497,29 +571,16 @@ Result EvaluateResult(
     throw SyntaxError(error);
   }
   NamespacePaths namespacePaths;
-  CollectNamespacePaths(variables, "", namespacePaths);
+  CollectNamespacePaths(evaluationVariables, "", namespacePaths);
   std::set<std::string> declaredVariables;
-  for (const auto& [name, _] : variables) {
+  for (const auto& [name, _] : evaluationVariables) {
     declaredVariables.insert(name);
   }
-  if (expressionValues != nullptr) {
-    for (const auto& [name, _] : *expressionValues) {
-      declaredVariables.insert(name);
-    }
-  }
-  ValidateExpression(*parsed, variables, namespacePaths, declaredVariables);
+  ValidateExpression(*parsed, evaluationVariables, namespacePaths,
+                     declaredVariables);
   cache.engine.set_state(cache.initialState);
   cache.engine.set_locals(cache.initialLocals);
-  detail::ConfigureGlobals(cache.engine, variables);
-  if (expressionValues != nullptr) {
-    for (const auto& [name, value] : *expressionValues) {
-      std::visit(
-          [&](const auto& result) {
-            cache.engine.set_global(chaiscript::const_var(result), name);
-          },
-          value);
-    }
-  }
+  detail::ConfigureGlobals(cache.engine, evaluationVariables);
   auto result = [&]() -> Result {
     try {
       return cache.engine.template eval<Result>(expanded);
@@ -535,11 +596,26 @@ void CollectVariableSymbols(const detail::Variables& variables,
                             std::set<std::string>& symbols) {
   for (const auto& [name, record] : variables) {
     auto path = prefix.empty() ? name : prefix + "." + name;
-    symbols.insert(path);
     if (const auto* nested = std::get_if<detail::NamespacePtr>(&record.value);
         nested != nullptr && *nested) {
       CollectVariableSymbols((*nested)->members, path, symbols);
+    } else {
+      symbols.insert(path);
     }
+  }
+}
+
+void CollectVariableNamespacePaths(const detail::Variables& variables,
+                                   const std::string& prefix,
+                                   std::set<std::string>& paths) {
+  for (const auto& [name, record] : variables) {
+    const auto* nested = std::get_if<detail::NamespacePtr>(&record.value);
+    if (nested == nullptr || !*nested) {
+      continue;
+    }
+    auto path = prefix.empty() ? name : prefix + "." + name;
+    paths.insert(path);
+    CollectVariableNamespacePaths((*nested)->members, path, paths);
   }
 }
 
@@ -547,11 +623,13 @@ std::vector<std::string> ExpressionOrder(const ExpressionRegistry& registry);
 
 void RebuildExpressionRegistry(
     const detail::Variables& variables,
-    const std::vector<ExpressionDefinition>& definitions,
+    const std::vector<VariableDefinition>& definitions,
     ExpressionRegistry& registry) {
   std::map<std::string, std::size_t> indices;
   std::set<std::string> variableSymbols;
+  std::set<std::string> variableNamespaces;
   CollectVariableSymbols(variables, "", variableSymbols);
+  CollectVariableNamespacePaths(variables, "", variableNamespaces);
 
   ExpressionRegistry replacement;
   for (std::size_t index = 0; index < definitions.size(); ++index) {
@@ -561,20 +639,74 @@ void RebuildExpressionRegistry(
       throw std::invalid_argument(
           "expression id, name, and source must not be empty");
     }
+    if (!definition.namespacePath.empty() &&
+        definition.namespacePath.back() == '.') {
+      throw std::invalid_argument("invalid expression namespace path");
+    }
+    std::size_t pathStart = 0;
+    while (pathStart < definition.namespacePath.size()) {
+      auto pathEnd = definition.namespacePath.find('.', pathStart);
+      auto component = definition.namespacePath.substr(
+          pathStart, pathEnd == std::string::npos
+                         ? std::string::npos
+                         : pathEnd - pathStart);
+      detail::Variables validateNamespace;
+      detail::StoreVariable(validateNamespace, component,
+                            units::precise_measurement{}, nullptr, {}, {}, true);
+      if (pathEnd == std::string::npos) {
+        break;
+      }
+      pathStart = pathEnd + 1;
+    }
+    std::string qualifiedName = QualifiedName(definition);
     if (!replacement.expressions
              .emplace(definition.id, RegisteredExpression{definition})
              .second) {
       throw std::invalid_argument("duplicate expression id: " + definition.id);
     }
-    if (variableSymbols.contains(definition.name) ||
-        !replacement.idsByName.emplace(definition.name, definition.id).second) {
+    if (variableSymbols.contains(qualifiedName) ||
+        variableNamespaces.contains(qualifiedName) ||
+        !replacement.idsByName.emplace(qualifiedName, definition.id).second) {
       throw std::invalid_argument("duplicate expression name: " +
-                                  definition.name);
+                                  qualifiedName);
     }
     detail::Variables validateName;
     detail::StoreVariable(validateName, definition.name,
-                          units::precise_measurement{});
-    indices.emplace(definition.name, index);
+                          units::precise_measurement{}, nullptr, {}, {},
+                          !definition.namespacePath.empty());
+    indices.emplace(qualifiedName, index);
+  }
+  std::set<std::string> expressionNamespaces;
+  for (const auto& definition : definitions) {
+    std::size_t start = 0;
+    while (start < definition.namespacePath.size()) {
+      auto end = definition.namespacePath.find('.', start);
+      expressionNamespaces.insert(definition.namespacePath.substr(
+          0, end == std::string::npos ? definition.namespacePath.size() : end));
+      if (end == std::string::npos) {
+        break;
+      }
+      start = end + 1;
+    }
+  }
+  for (const auto& path : expressionNamespaces) {
+    if (variableSymbols.contains(path) && !variableNamespaces.contains(path)) {
+      throw std::invalid_argument("expression namespace conflicts with variable: " +
+                                  path);
+    }
+  }
+  for (const auto& [qualifiedName, _] : replacement.idsByName) {
+    if (expressionNamespaces.contains(qualifiedName)) {
+      throw std::invalid_argument("expression conflicts with namespace: " +
+                                  qualifiedName);
+    }
+  }
+  replacement.namespaces = expressionNamespaces;
+  for (const auto& symbol : variableSymbols) {
+    if (replacement.idsByName.contains(symbol)) {
+      throw std::invalid_argument("expression name conflicts with variable: " +
+                                  symbol);
+    }
   }
   for (const auto& symbol : variableSymbols) {
     indices.emplace(symbol, indices.size());
@@ -587,9 +719,13 @@ void RebuildExpressionRegistry(
                                 {chaiscript::Library_Options::No_IO}};
   NamespacePaths namespacePaths;
   CollectNamespacePaths(variables, "", namespacePaths);
+  namespacePaths.insert(expressionNamespaces.begin(), expressionNamespaces.end());
   std::set<std::string> declaredVariables = variableSymbols;
-  for (const auto& [name, _] : replacement.idsByName) {
-    declaredVariables.insert(name);
+  for (const auto& [qualifiedName, _] : replacement.idsByName) {
+    namespacePaths.insert(qualifiedName);
+    if (qualifiedName.find('.') == std::string::npos) {
+      declaredVariables.insert(qualifiedName);
+    }
   }
   for (const auto& definition : definitions) {
     auto expanded = detail::ExpandUnitSuffixes(definition.expression);
@@ -621,9 +757,9 @@ void RebuildExpressionRegistry(
   registry = std::move(replacement);
 }
 
-std::vector<ExpressionDefinition> ExpressionDefinitions(
+std::vector<VariableDefinition> ExpressionDefinitions(
     const ExpressionRegistry& registry) {
-  std::vector<ExpressionDefinition> definitions;
+  std::vector<VariableDefinition> definitions;
   definitions.reserve(registry.expressions.size());
   for (const auto& [_, expression] : registry.expressions) {
     definitions.push_back(expression.definition);
@@ -688,7 +824,8 @@ std::set<std::string> AffectedExpressions(
     }
     for (const auto& id : found->second) {
       if (affected.insert(id).second) {
-        pending.push_back(registry.expressions.at(id).definition.name);
+        pending.push_back(
+            QualifiedName(registry.expressions.at(id).definition));
       }
     }
   }
@@ -767,7 +904,7 @@ void EvaluateExpressions(Cache& engineCache, const detail::Variables& variables,
         engineCache, variables, expression.definition.expression,
         &dependencyValues);
     expression.value = UnboxExpressionValue(engineCache.cache->engine, result);
-    values[expression.definition.name] = expression.value;
+    values[QualifiedName(expression.definition)] = expression.value;
   }
 }
 
@@ -1026,7 +1163,7 @@ void EvaluationContext::RenameVariable(std::string_view variableId,
 }
 
 void EvaluationContext::SetExpressions(
-    std::vector<ExpressionDefinition> expressions) {
+    std::vector<VariableDefinition> expressions) {
   auto replacement =
       impl_ ? std::make_shared<Impl>(*impl_) : std::make_shared<Impl>();
   RebuildExpressionRegistry(replacement->variables, expressions,
@@ -1050,7 +1187,7 @@ void EvaluationContext::SetExpression(std::string_view expressionId,
     throw std::invalid_argument("unknown expression id: " +
                                 std::string(expressionId));
   }
-  auto changedName = found->second.definition.name;
+  auto changedName = QualifiedName(found->second.definition);
   const auto previousExpressions = replacement->expressions;
   auto definitions = ExpressionDefinitions(replacement->expressions);
   for (auto& definition : definitions) {
@@ -1089,7 +1226,8 @@ void EvaluationContext::SetVariableValue(std::string name,
                                          VariableValue value) {
   auto replacement =
       impl_ ? std::make_shared<Impl>(*impl_) : std::make_shared<Impl>();
-  if (replacement->expressions.idsByName.contains(name)) {
+  if (replacement->expressions.idsByName.contains(name) ||
+      replacement->expressions.namespaces.contains(name)) {
     throw std::invalid_argument("variable name conflicts with expression: " +
                                 name);
   }
