@@ -35,6 +35,11 @@ using VariableValue =
                  wpi::math::Rotation2d, wpi::math::Transform2d, wpi::math::Twist2d,
                  wpi::math::Rectangle2d, wpi::math::Ellipse2d>;
 
+using ExpressionValue =
+    std::variant<units::precise_measurement, bool, wpi::math::Pose2d,
+                 wpi::math::Translation2d, wpi::math::Rotation2d, wpi::math::Transform2d,
+                 wpi::math::Twist2d, wpi::math::Rectangle2d, wpi::math::Ellipse2d>;
+
 struct VariableDefinition {
   std::string id;
   std::string namespacePath;
@@ -49,6 +54,17 @@ struct VariableInfo {
   VariableValue value;
 };
 
+struct ExpressionDefinition {
+  std::string id;
+  std::string name;
+  std::string expression;
+};
+
+struct ExpressionInfo {
+  ExpressionDefinition definition;
+  ExpressionValue value;
+};
+
 class EvaluationContext {
  public:
   EvaluationContext();
@@ -60,6 +76,9 @@ class EvaluationContext {
   std::vector<VariableInfo> GetVariables() const;
   std::vector<std::string> FindReferences(std::string_view variableId) const;
   void RenameVariable(std::string_view variableId, std::string newName);
+  void SetExpressions(std::vector<ExpressionDefinition> expressions);
+  void SetExpression(std::string_view expressionId, std::string expression);
+  std::vector<ExpressionInfo> GetExpressions() const;
   void SetVariable(std::string name, units::precise_measurement value);
   void SetVariable(std::string name, wpi::math::Pose2d value);
   void SetVariable(std::string name, wpi::math::Translation2d value);
