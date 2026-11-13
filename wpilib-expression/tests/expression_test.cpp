@@ -113,7 +113,10 @@ int TestSetup() {
                "var offset = 3 ft; var total = base + offset; "
                        "var pose = Pose2d(3 m, 4 m, 90 deg); var gain = 2; "
                        "var heading = pose.Rotation().Degrees(); var targetX = pose.X(); "
-                       "global shared = 4 m; const var extra = 1 m; auto combined = total + extra;");
+                       "global shared = 4 m; const var extra = 1 m; auto combined = total + extra; "
+                       "var target_points = [Translation2d(0 m, 0 m), Translation2d(3 m, 4 m)]; "
+                       "var magnitude = abs(-2 m); var shorter = min(3 m, 2 m); "
+                       "var longer = max(3 m, 2 m); var root = sqrt(9 m^2);");
   if (!EvaluatesTo(setup, "base + offset", 2.9144, "m") ||
       !EvaluatesTo(setup, "total", 2.9144, "m") ||
       !EvaluatesTo(setup, "pose.X()", 3.0, "m") ||
@@ -123,7 +126,13 @@ int TestSetup() {
       !EvaluatesTo(setup, "targetX", 3.0, "m") ||
       !EvaluatesTo(setup, "gain", 2.0, "") ||
       !EvaluatesTo(setup, "shared", 4.0, "m") ||
-      !EvaluatesTo(setup, "combined", 3.9144, "m")) {
+      !EvaluatesTo(setup, "combined", 3.9144, "m") ||
+      !EvaluatesTo(setup, "target_points[1].Y()", 4.0, "m") ||
+      !EvaluatesTo(setup, "Translation2d(2 m, 4 m).Nearest(target_points).X()", 3.0, "m") ||
+      !EvaluatesTo(setup, "magnitude", 2.0, "m") ||
+      !EvaluatesTo(setup, "shorter", 2.0, "m") ||
+      !EvaluatesTo(setup, "longer", 3.0, "m") ||
+      !EvaluatesTo(setup, "root", 3.0, "m")) {
     std::cerr << "setup script returned incorrect variables\n";
     return 1;
   }
@@ -154,7 +163,8 @@ int TestSetup() {
                              "var value = (fun() { return 1; })();",
                              "var value = quantity(1, \"${eval(1)}\");",
                              "var value = get_objects();", "var value = 1 / 0; print(\"no\");",
-                             "var value = 1; var value = 2;", "var value;"}) {
+                             "var value = 1; var value = 2;", "var value;",
+                             "var bad = [Translation2d(), Pose2d()];"}) {
     bool rejected = false;
     try {
       setup.SetSetupScript(script);
@@ -476,6 +486,62 @@ int TestQuantityMath() {
     std::cerr << "angle-aware sine returned the wrong value\n";
     return 1;
   }
+  auto mathValueIs = [&](const char* expression, double expected, std::string_view unit) {
+    try {
+      return EvaluatesTo(context, expression, expected, unit);
+    } catch (const std::exception& error) {
+      std::cerr << "Math expression '" << expression << "' failed: " << error.what() << '\n';
+      return false;
+    }
+  };
+  if (!mathValueIs("abs(-2)", 2.0, "") ||
+      !mathValueIs("min(3, 2)", 2.0, "") ||
+      !mathValueIs("max(3, 2)", 3.0, "") ||
+      !mathValueIs("abs(-2 m)", 2.0, "m") ||
+      !mathValueIs("min(3 m, 200 cm)", 2.0, "m") ||
+      !mathValueIs("max(3 m, 200 cm)", 3.0, "m") ||
+      !mathValueIs("sqrt(9)", 3.0, "") ||
+      !mathValueIs("sqrt(9 m^2)", 3.0, "m") ||
+      !mathValueIs("cbrt(8 m^3)", 2.0, "m") ||
+      !mathValueIs("hypot(3 m, 4 m)", 5.0, "m") ||
+      !mathValueIs("atan2(1 m, 1 m)", 45.0, "deg") ||
+      !mathValueIs("exp(1.0)", std::exp(1.0), "") ||
+      !mathValueIs("floor(2.9 m)", 2.0, "m") ||
+      !mathValueIs("fmod(5 m, 2 m)", 1.0, "m") ||
+      !mathValueIs("fmax(2 m, 3 m)", 3.0, "m") ||
+      !mathValueIs("pow(3 m, 2)", 9.0, "m^2") ||
+      !mathValueIs("fma(2 m, 3 m, 4 m^2)", 10.0, "m^2") ||
+      !mathValueIs("copysign(2 m, -1 m)", -2.0, "m") ||
+      !mathValueIs("scalbn(2 m, 2)", 8.0, "m") ||
+      !mathValueIs("llround(2.4)", 2.0, "") ||
+      !mathValueIs("exp(1 m / 1 m)", std::exp(1.0), "") ||
+      !mathValueIs("9 m^2", 9.0, "m^2") ||
+      !context.EvaluateBoolean("isfinite(1 m) && isgreater(2 m, 1 m)")) {
+    std::cerr << "convenience math functions returned incorrect results\n";
+    return 1;
+  }
+  bool incompatibleMinimumRejected = false;
+  try {
+    context.Evaluate("min(1 m, 1 s)");
+  } catch (const std::invalid_argument&) {
+    incompatibleMinimumRejected = true;
+  }
+  if (!incompatibleMinimumRejected) {
+    std::cerr << "minimum across incompatible dimensions was accepted\n";
+    return 1;
+  }
+  for (const char* expression : {"log(1 m)", "sqrt(1 m)", "hypot(1 m, 1 s)"}) {
+    bool invalidMathRejected = false;
+    try {
+      context.Evaluate(expression);
+    } catch (const std::exception&) {
+      invalidMathRejected = true;
+    }
+    if (!invalidMathRejected) {
+      std::cerr << "math function accepted incompatible quantity dimensions\n";
+      return 1;
+    }
+  }
   if (!context.EvaluateBoolean("2 ft < 1 m")) {
     std::cerr << "comparison across compatible units returned the wrong value\n";
     return 1;
@@ -594,10 +660,25 @@ int TestGeometryOperations() {
   auto otherTranslation = context.EvaluateTranslation2d("Translation2d(0 m, 0 m)");
   context.SetVariable("translation", translation);
   context.SetVariable("other", otherTranslation);
+    context.SetVariable("target_points", std::vector<wpi::math::Translation2d>{
+      wpi::math::Translation2d{wpi::units::meter_t{0.0}, wpi::units::meter_t{0.0}},
+      wpi::math::Translation2d{wpi::units::meter_t{3.0}, wpi::units::meter_t{4.0}}});
   if (!EvaluatesTo(context, "translation.Distance(other)", 5.0, "m") ||
       !EvaluatesTo(context, "translation.Norm()", 5.0, "m") ||
-      !EvaluatesTo(context, "translation.Y()", 4.0, "m")) {
+      !EvaluatesTo(context, "translation.Y()", 4.0, "m") ||
+      !EvaluatesTo(context, "target_points[1].Y()", 4.0, "m") ||
+      !EvaluatesTo(context, "Translation2d(2 m, 4 m).Nearest(target_points).X()", 3.0, "m")) {
     std::cerr << "Translation2d::Distance returned the wrong value\n";
+    return 1;
+  }
+  bool arrayIndexRejected = false;
+  try {
+    context.Evaluate("target_points[2].X()");
+  } catch (const std::out_of_range&) {
+    arrayIndexRejected = true;
+  }
+  if (!arrayIndexRejected) {
+    std::cerr << "out-of-range translation array index was accepted\n";
     return 1;
   }
 

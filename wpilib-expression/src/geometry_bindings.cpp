@@ -91,6 +91,14 @@ Geometry NearestGeometry(const Geometry& origin,
   return origin.Nearest(std::span<const Geometry>{candidates});
 }
 
+Translation2d NearestTranslationArray(const Translation2d& origin,
+                                     const std::vector<Translation2d>& values) {
+  if (values.empty()) {
+    throw std::invalid_argument("nearest requires a non-empty collection");
+  }
+  return origin.Nearest(std::span<const Translation2d>{values});
+}
+
 }  // namespace
 
 void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
@@ -120,6 +128,7 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
   engine.add(chaiscript::user_type<Rectangle2d>(), "Rectangle2d");
   engine.add(chaiscript::user_type<Ellipse2d>(), "Ellipse2d");
   engine.add(chaiscript::user_type<wpi::util::array<Translation2d, 2>>(), "EllipseFocalPoints");
+  engine.add(chaiscript::user_type<std::vector<Translation2d>>(), "Translation2dArray");
 
   RegisterQuantityConversion<wpi::units::meter_t>(engine, "m");
   RegisterQuantityConversion<wpi::units::radian_t>(engine, "rad");
@@ -164,6 +173,13 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
   BIND_METHOD(Translation2d, Dot);
   BIND_METHOD(Translation2d, Cross);
   BIND_LAMBDA(Nearest, &NearestGeometry<Translation2d>);
+  BIND_LAMBDA(Nearest, &NearestTranslationArray);
+  BIND_LAMBDA([], [](const std::vector<Translation2d>& values, int index) {
+    if (index < 0 || static_cast<std::size_t>(index) >= values.size()) {
+      throw std::out_of_range("translation array index is out of range");
+    }
+    return values[static_cast<std::size_t>(index)];
+  });
   BIND_LAMBDA(Angle, [](const Translation2d& translation) {
     auto angle = translation.Angle();
     if (!angle) {

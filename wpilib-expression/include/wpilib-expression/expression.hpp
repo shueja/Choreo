@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <wpi/math/geometry/Pose2d.hpp>
 #include <wpi/math/geometry/Rotation2d.hpp>
@@ -28,6 +29,7 @@ class EvaluationContext {
   void SetVariable(std::string name, Quantity value);
   void SetVariable(std::string name, wpi::math::Pose2d value);
   void SetVariable(std::string name, wpi::math::Translation2d value);
+  void SetVariable(std::string name, std::vector<wpi::math::Translation2d> value);
   void SetVariable(std::string name, wpi::math::Rotation2d value);
   void SetVariable(std::string name, wpi::math::Transform2d value);
   void SetVariable(std::string name, wpi::math::Twist2d value);
