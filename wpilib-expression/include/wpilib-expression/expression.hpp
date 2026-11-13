@@ -83,7 +83,8 @@ class EvaluationContext {
   void SetExpression(std::string_view expressionId, std::string expression);
   // Returns registered expressions with their current cached results.
   std::vector<ExpressionInfo> GetExpressions() const;
-  // Updates a direct context value and refreshes affected registered expressions.
+  // Updates a direct context value and refreshes its affected registered
+  // expressions.
   void SetVariable(std::string name, units::precise_measurement value);
   void SetVariable(std::string name, wpi::math::Pose2d value);
   void SetVariable(std::string name, wpi::math::Translation2d value);

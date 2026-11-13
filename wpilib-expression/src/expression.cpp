@@ -931,8 +931,6 @@ struct EvaluationContext::EngineCache {
   std::optional<CachedEngine> cache;
 };
 
-// Mutating operations build a replacement and publish it only after
-// validation/evaluation succeeds, so failures preserve the visible context.
 EvaluationContext::EvaluationContext()
     : engineCache_(std::make_shared<EngineCache>()) {}
 
@@ -948,6 +946,8 @@ EvaluationContext& EvaluationContext::operator=(
   return *this;
 }
 
+// Mutating operations build a replacement and publish it only after
+// validation/evaluation succeeds, so failures preserve the visible context.
 void EvaluationContext::SetVariables(
     std::vector<VariableDefinition> definitions) {
   std::map<std::string, std::size_t> indices;
