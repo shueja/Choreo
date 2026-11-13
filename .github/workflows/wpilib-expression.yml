@@ -26,11 +26,14 @@ jobs:
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 200
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 200
 
-      - run: cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - run: cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWPILIB_EXPRESSION_BUILD_BENCHMARKS=ON
         working-directory: wpilib-expression
 
       - run: cmake --build build --parallel 4
         working-directory: wpilib-expression
 
       - run: ctest --test-dir build --output-on-failure
+        working-directory: wpilib-expression
+
+      - run: ./build/wpilib_expression_setup_replacement_benchmark
         working-directory: wpilib-expression
