@@ -34,6 +34,11 @@ template <typename UnitValue>
 void RegisterMeasurementConversion(chaiscript::ChaiScript& engine,
                                    const units::precise_unit& unit) {
   engine.add(chaiscript::type_conversion<units::precise_measurement, UnitValue>([](const units::precise_measurement& value) {
+    if (!std::isfinite(SiValue(value))) {
+      throw chaiscript::exception::bad_boxed_cast(
+          chaiscript::user_type<units::precise_measurement>(), typeid(UnitValue),
+          "geometry quantity must be finite");
+    }
     auto converted = TryAs<UnitValue>(value);
     if (!converted) {
       throw chaiscript::exception::bad_boxed_cast(
@@ -43,6 +48,11 @@ void RegisterMeasurementConversion(chaiscript::ChaiScript& engine,
     return *converted;
   }));
   engine.add(chaiscript::type_conversion<UnitValue, units::precise_measurement>([unit](const UnitValue& value) {
+    if (!std::isfinite(value.value())) {
+      throw chaiscript::exception::bad_boxed_cast(
+          chaiscript::user_type<UnitValue>(), typeid(units::precise_measurement),
+          "geometry result must be finite");
+    }
     try {
       return From(value.value(), unit);
     } catch (const std::domain_error&) {
@@ -125,7 +135,7 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
   RegisterMeasurementConversion<wpi::units::meter_t>(engine, units::precise::m);
   RegisterMeasurementConversion<wpi::units::radian_t>(engine, units::precise::rad);
   RegisterMeasurementConversion<wpi::units::degree_t>(
-      engine, units::precise::rad * (std::numbers::pi / 180.0));
+      engine, units::precise_unit(std::numbers::pi / 180.0, units::precise::rad));
   RegisterMeasurementConversion<wpi::units::square_meter_t>(engine, units::precise::m.pow(2));
 
   BIND_LAMBDA(Pose2d, [](meter_t x, meter_t y, radian_t angle) {

@@ -11,16 +11,19 @@
 using wpilib::expression::EvaluationContext;
 using wpilib::expression::From;
 using wpilib::expression::In;
+using wpilib::expression::VariableDefinition;
 
 namespace {
 
-std::string MakeSetup(std::size_t expressionCount, int offset) {
-  std::string script;
+std::vector<VariableDefinition> MakeVariables(std::size_t expressionCount, int offset) {
+  std::vector<VariableDefinition> variables;
+  variables.reserve(expressionCount);
   for (std::size_t i = 0; i < expressionCount; ++i) {
-    script += "var value" + std::to_string(i) + " = " +
-              std::to_string(offset + static_cast<int>(i)) + " m; ";
+    auto name = "value" + std::to_string(i);
+    variables.push_back({name, "", name,
+                         std::to_string(offset + static_cast<int>(i)) + " m"});
   }
-  return script;
+  return variables;
 }
 
 void Benchmark(std::size_t expressionCount) {
@@ -38,8 +41,8 @@ void Benchmark(std::size_t expressionCount) {
   double checksum = 0.0;
   for (int round = 0; round < rounds; ++round) {
     auto start = std::chrono::steady_clock::now();
-    context.SetSetupScript(
-        MakeSetup(expressionCount, round * static_cast<int>(expressionCount)));
+    context.SetVariables(
+        MakeVariables(expressionCount, round * static_cast<int>(expressionCount)));
     setupTime += std::chrono::steady_clock::now() - start;
 
     start = std::chrono::steady_clock::now();

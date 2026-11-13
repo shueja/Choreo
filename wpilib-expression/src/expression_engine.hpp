@@ -31,13 +31,39 @@ struct NamespaceValues;
 using NamespacePtr = std::shared_ptr<const NamespaceValues>;
 using VariableValue = std::variant<units::precise_measurement, Pose2d, Translation2d, Rotation2d,
                                    Transform2d, Twist2d, Rectangle2d, Ellipse2d, NamespacePtr>;
-using Variables = std::map<std::string, VariableValue>;
+enum class VariableType {
+  Quantity,
+  Pose2d,
+  Translation2d,
+  Rotation2d,
+  Transform2d,
+  Twist2d,
+  Rectangle2d,
+  Ellipse2d,
+  Namespace
+};
+
+struct DeclaredType {
+  VariableType type;
+  units::precise_unit dimension;
+};
+
+struct VariableRecord {
+  VariableValue value;
+  std::shared_ptr<const DeclaredType> declaredType;
+  std::string id;
+  std::string expression;
+};
+
+using Variables = std::map<std::string, VariableRecord>;
 
 struct NamespaceValues {
     Variables members;
 };
 
-void StoreVariable(Variables& variables, std::string name, VariableValue value);
+void StoreVariable(Variables& variables, std::string name, VariableValue value,
+                   const VariableRecord* existing = nullptr, std::string id = {},
+                   std::string expression = {}, bool allowReservedName = false);
 void ConfigureEngine(chaiscript::ChaiScript& engine, const Variables& variables);
 void ConfigureGlobals(chaiscript::ChaiScript& engine, const Variables& variables);
 

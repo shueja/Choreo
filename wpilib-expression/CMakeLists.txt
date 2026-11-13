@@ -14,12 +14,15 @@ set(WPILIB_WITH_TESTS OFF CACHE INTERNAL "Build WPILib tests")
 set(WPILIB_WITH_WPIMATH ON CACHE INTERNAL "Build WPIMath")
 set(WPILIB_WITH_WPILIB OFF CACHE INTERNAL "Build WPILib")
 set(WPILIB_NO_WERROR ON CACHE INTERNAL "Disable WPILib warnings as errors")
+set(UNITS_ENABLE_TESTS OFF CACHE BOOL "Disable LLNL units tests")
+set(UNITS_INSTALL ON CACHE BOOL "Enable LLNL units install/export targets" FORCE)
+set(UNITS_BUILD_PYTHON_LIBRARY OFF CACHE BOOL "Disable LLNL units Python library")
 
 set(WPILIB_USE_SYSTEM_EIGEN ON CACHE BOOL "Use fetched Eigen")
 set(EIGEN_BUILD_CMAKE_PACKAGE TRUE)
 FetchContent_Declare(
     Eigen3
-    GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+    GIT_REPOSITORY https://github.com/eigen-mirror/eigen.git
     GIT_TAG b7f6aed1b9974fd56cce651b4ff059c3bfc67782
     SYSTEM
     OVERRIDE_FIND_PACKAGE
@@ -51,7 +54,6 @@ FetchContent_Declare(
     llnl_units
     GIT_REPOSITORY https://github.com/LLNL/units.git
     GIT_TAG v0.13.1
-    SOURCE_SUBDIR units
     SYSTEM
 )
 FetchContent_MakeAvailable(llnl_units)
@@ -99,7 +101,10 @@ target_include_directories(
 if(MSVC AND DEFINED ENV{INCLUDE})
     target_include_directories(wpilib_expression SYSTEM PRIVATE $ENV{INCLUDE})
 endif()
-target_link_libraries(wpilib_expression PUBLIC wpimath::wpimath units::units)
+target_link_libraries(
+    wpilib_expression
+    PUBLIC wpimath::wpimath units::units
+)
 set_target_properties(wpilib_expression PROPERTIES EXPORT_NAME expression)
 
 option(WPILIB_EXPRESSION_BUILD_TESTS "Build expression library tests" ON)
@@ -110,6 +115,7 @@ if(WPILIB_EXPRESSION_BUILD_TESTS)
     foreach(test_case IN ITEMS
         namespaces
         setup
+        variable_references_and_rename
         setup_replacement_many_expressions
         arithmetic_and_variables
         read_only_expressions
