@@ -23,11 +23,12 @@ ctest --test-dir .\wpilib-expression\build --output-on-failure
 cmake --install .\wpilib-expression\build --prefix C:\path\to\expression-install
 ```
 
-To build and run the variable-replacement benchmark, configure with
+To build and run the incremental-expression benchmark, configure with
 `-DWPILIB_EXPRESSION_BUILD_BENCHMARKS=ON`, build the
 `wpilib_expression_setup_replacement_benchmark` target, then run that executable.
-It reports variable replacement and evaluation times for batches of 100, 500,
-and 1,000 expressions over three replacements.
+It compares incremental cached-expression updates against evaluating the full
+list for sparse and dense dependencies, using 50 variables, 750 and 1,000
+expressions, and repeated single-variable changes.
 
 The exported target is `wpilib::expression`. A consumer uses `find_package(wpilib-expression CONFIG REQUIRED)` and links that target. The consumer must also make WPILib's `wpimath::wpimath` target available or install WPILib and add its prefix to `CMAKE_PREFIX_PATH`.
 
@@ -47,6 +48,19 @@ if (meters) {
 ```
 
 Variables with stable caller-provided IDs, names, expressions, and optional namespace paths are declared with `SetVariables`. Expressions can reference one another regardless of input order; dependencies are evaluated first and cycles are rejected. Namespaces are metadata, and expressions refer to members by their qualified dotted names. Replacing definitions is atomic: an expression must retain the original variable's type (quantity base dimension or concrete geometry type), and a failed replacement leaves the prior values intact. `GetVariables` returns definitions, declared types, dimensions, and cached values. `FindReferences` returns the IDs of dependent variables, and `RenameVariable` updates a variable's name and rewrites references while preserving its ID and declared type.
+
+Register separately cached named expressions with `SetExpressions`, using a stable
+ID, an identifier name, and a read-only expression source for each entry.
+`GetExpressions` returns their definitions and typed cached results
+(`ExpressionValue` supports quantities, booleans, and geometry values).
+Registered expressions may refer to context variables and to other registered
+expressions; dependencies are evaluated in order and cycles are rejected.
+Changing a variable with `SetVariable` reevaluates only expressions that depend
+on it, including transitive dependents. `SetExpression` replaces an expression
+source, rediscovers its dependencies, and updates that expression and its
+downstream dependents. Failed variable or expression updates are atomic: prior
+definitions, dependency links, and cached results remain unchanged. Replacing
+variables with `SetVariables` revalidates and reevaluates the registered list.
 
 `SetVariable` remains available for context values supplied directly by callers; those values do not have structured IDs or expressions. `Evaluate` returns an LLNL `units::precise_measurement` and can check an expected LLNL base unit; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
 

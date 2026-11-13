@@ -1,7 +1,5 @@
 #pragma once
 
-#include "wpilib-expression/quantity.hpp"
-
 #include <memory>
 #include <optional>
 #include <string>
@@ -17,6 +15,8 @@
 #include <wpi/math/shape/Ellipse2d.hpp>
 #include <wpi/math/shape/Rectangle2d.hpp>
 
+#include "wpilib-expression/quantity.hpp"
+
 namespace wpilib::expression {
 
 enum class VariableType {
@@ -31,14 +31,16 @@ enum class VariableType {
 };
 
 using VariableValue =
-    std::variant<units::precise_measurement, wpi::math::Pose2d, wpi::math::Translation2d,
-                 wpi::math::Rotation2d, wpi::math::Transform2d, wpi::math::Twist2d,
+    std::variant<units::precise_measurement, wpi::math::Pose2d,
+                 wpi::math::Translation2d, wpi::math::Rotation2d,
+                 wpi::math::Transform2d, wpi::math::Twist2d,
                  wpi::math::Rectangle2d, wpi::math::Ellipse2d>;
 
 using ExpressionValue =
     std::variant<units::precise_measurement, bool, wpi::math::Pose2d,
-                 wpi::math::Translation2d, wpi::math::Rotation2d, wpi::math::Transform2d,
-                 wpi::math::Twist2d, wpi::math::Rectangle2d, wpi::math::Ellipse2d>;
+                 wpi::math::Translation2d, wpi::math::Rotation2d,
+                 wpi::math::Transform2d, wpi::math::Twist2d,
+                 wpi::math::Rectangle2d, wpi::math::Ellipse2d>;
 
 struct VariableDefinition {
   std::string id;
@@ -89,7 +91,8 @@ class EvaluationContext {
   void SetVariable(std::string name, wpi::math::Ellipse2d value);
   units::precise_measurement Evaluate(
       std::string_view source,
-      std::optional<units::precise_unit> expectedDimension = std::nullopt) const;
+      std::optional<units::precise_unit> expectedDimension =
+          std::nullopt) const;
   bool EvaluateBoolean(std::string_view source) const;
   wpi::math::Pose2d EvaluatePose2d(std::string_view source) const;
   wpi::math::Translation2d EvaluateTranslation2d(std::string_view source) const;

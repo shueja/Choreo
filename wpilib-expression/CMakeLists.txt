@@ -117,6 +117,8 @@ if(WPILIB_EXPRESSION_BUILD_TESTS)
         setup
         variable_references_and_rename
         setup_replacement_many_expressions
+        incremental_expression_updates
+        incremental_expression_scale
         arithmetic_and_variables
         read_only_expressions
         error_messages
