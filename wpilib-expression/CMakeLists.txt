@@ -110,6 +110,7 @@ if(WPILIB_EXPRESSION_BUILD_TESTS)
     foreach(test_case IN ITEMS
         namespaces
         setup
+        variable_references_and_rename
         setup_replacement_many_expressions
         arithmetic_and_variables
         read_only_expressions

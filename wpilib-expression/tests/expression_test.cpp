@@ -1,5 +1,6 @@
 #include "wpilib-expression/expression.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstddef>
@@ -171,7 +172,7 @@ int TestSetup() {
   });
   if (!EvaluatesTo(unordered, "combined", 3.9144, "m") ||
       !EvaluatesTo(unordered, "targetX", 3.0, "m")) {
-    std::println(stderr, "setup declarations were not evaluated in dependency order");
+    std::println(stderr, "variable definitions were not evaluated in dependency order");
     return 1;
   }
 
@@ -197,7 +198,7 @@ int TestSetup() {
       !EvaluatesTo(setup, "gain", 2.0, "") ||
       !EvaluatesTo(setup, "shared", 4.0, "m") ||
       !EvaluatesTo(setup, "combined", 3.9144, "m")) {
-    std::println(stderr, "setup script returned incorrect variables");
+    std::println(stderr, "variable definitions returned incorrect values");
     return 1;
   }
   bool setupFailureRejected = false;
@@ -209,7 +210,7 @@ int TestSetup() {
     setupFailureRejected = true;
   }
   if (!setupFailureRejected || !EvaluatesTo(setup, "base", 2.0, "m")) {
-    std::println(stderr, "failed setup changed the context");
+    std::println(stderr, "failed variable replacement changed the context");
     return 1;
   }
   bool quantityTypeChangeRejected = false;
@@ -252,7 +253,7 @@ int TestSetup() {
     cyclicSetupRejected = true;
   }
   if (!cyclicSetupRejected || !EvaluatesTo(setup, "base", 2.0, "m")) {
-    std::println(stderr, "cyclic setup dependency was accepted or changed the context");
+    std::println(stderr, "cyclic variable dependency was accepted or changed the context");
     return 1;
   }
   bool unsupportedSetupRejected = false;
@@ -316,6 +317,73 @@ int TestSetup() {
   }
   if (!oldSetupRejected || !EvaluatesTo(setup, "replacement", 5.0, "m")) {
     std::println(stderr, "setup did not replace previous variables");
+    return 1;
+  }
+  return 0;
+}
+
+int TestVariableReferencesAndRename() {
+  EvaluationContext context;
+  auto definitions = std::vector{
+      Variable("distance-id", "field", "distance", "2 m"),
+      Variable("twice-id", "field", "twice", "field.distance * 2"),
+      Variable("result-id", "", "result", "field.distance + field.twice"),
+  };
+  context.SetVariables(definitions);
+  auto references = context.FindReferences("distance-id");
+  if (references.size() != 2 ||
+      std::find(references.begin(), references.end(), "twice-id") == references.end() ||
+      std::find(references.begin(), references.end(), "result-id") == references.end()) {
+    std::println(stderr, "reference scan did not return dependent variable IDs");
+    return 1;
+  }
+  if (!EvaluatesTo(context, "result", 6.0, "m")) {
+    return 1;
+  }
+
+  context.RenameVariable("distance-id", "length");
+  if (!EvaluatesTo(context, "field.length", 2.0, "m") ||
+      !EvaluatesTo(context, "field.twice", 4.0, "m") ||
+      !EvaluatesTo(context, "result", 6.0, "m")) {
+    std::println(stderr, "renaming a namespaced variable did not preserve dependents");
+    return 1;
+  }
+  auto updated = context.GetVariables();
+  auto renamed = std::find_if(updated.begin(), updated.end(), [](const auto& variable) {
+    return variable.definition.id == "distance-id";
+  });
+  if (renamed == updated.end() || renamed->definition.name != "length" ||
+      renamed->definition.expression != "2 m") {
+    std::println(stderr, "rename did not preserve variable identity and expression");
+    return 1;
+  }
+
+  auto changed = Definitions(context);
+  for (auto& definition : changed) {
+    if (definition.id == "distance-id") {
+      definition.expression = "3 m";
+    }
+  }
+  context.SetVariables(std::move(changed));
+  if (!EvaluatesTo(context, "result", 9.0, "m")) {
+    std::println(stderr, "dependency-driven reevaluation returned the wrong value");
+    return 1;
+  }
+
+  bool typeChangeRejected = false;
+  try {
+    changed = Definitions(context);
+    for (auto& definition : changed) {
+      if (definition.id == "distance-id") {
+        definition.expression = "3 s";
+      }
+    }
+    context.SetVariables(std::move(changed));
+  } catch (const std::invalid_argument&) {
+    typeChangeRejected = true;
+  }
+  if (!typeChangeRejected || !EvaluatesTo(context, "result", 9.0, "m")) {
+    std::println(stderr, "incompatible dependency update corrupted cached values");
     return 1;
   }
   return 0;
@@ -458,14 +526,15 @@ int TestErrorMessages() {
       return 1;
     }
   }
-  for (const char* script : {"var value = (", "var value = Translation2d().Distance(Pose2d());"}) {
+  for (const char* expression : {"(", "Translation2d().Distance(Pose2d())"}) {
     try {
-      context.SetSetupScript(script);
-      std::println(stderr, "invalid setup script was accepted");
+      context.SetVariables({Variable("value-id", "", "value", expression)});
+      std::println(stderr, "invalid variable expression was accepted");
       return 1;
     } catch (const std::invalid_argument& error) {
       if (!std::string_view(error.what()).starts_with("Syntax error:")) {
-        std::println(stderr, "invalid setup did not report a syntax error: {}", error.what());
+        std::println(stderr, "invalid variable expression did not report a syntax error: {}",
+                     error.what());
         return 1;
       }
     }
@@ -872,9 +941,11 @@ int TestShapes() {
   }
 
   EvaluationContext shapes;
-  shapes.SetSetupScript("var rect = Rectangle2d(Pose2d(), 4 m, 2 m); "
-                        "var ellipse = Ellipse2d(Pose2d(), 2 m, 1 m); "
-                        "var focus = ellipse.FocalPoints()[0];");
+  shapes.SetVariables({
+      Variable("rect-id", "", "rect", "Rectangle2d(Pose2d(), 4 m, 2 m)"),
+      Variable("ellipse-id", "", "ellipse", "Ellipse2d(Pose2d(), 2 m, 1 m)"),
+      Variable("focus-id", "", "focus", "ellipse.FocalPoints()[0]"),
+  });
   auto rectangle = shapes.EvaluateRectangle2d("rect");
   auto ellipse = shapes.EvaluateEllipse2d("ellipse");
   shapes.SetVariable("otherRect", rectangle);
@@ -931,6 +1002,7 @@ struct TestCase {
 constexpr TestCase tests[]{
     {"namespaces", TestNamespaces},
     {"setup", TestSetup},
+    {"variable_references_and_rename", TestVariableReferencesAndRename},
     {"setup_replacement_many_expressions",
      TestSetupReplacementWithManyExpressions},
     {"arithmetic_and_variables", TestArithmeticAndVariables},
