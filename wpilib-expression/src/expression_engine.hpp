@@ -51,6 +51,8 @@ struct DeclaredType {
 struct VariableRecord {
   VariableValue value;
   std::shared_ptr<const DeclaredType> declaredType;
+  std::string id;
+  std::string expression;
 };
 
 using Variables = std::map<std::string, VariableRecord>;
@@ -60,7 +62,8 @@ struct NamespaceValues {
 };
 
 void StoreVariable(Variables& variables, std::string name, VariableValue value,
-                   const VariableRecord* existing = nullptr);
+                   const VariableRecord* existing = nullptr, std::string id = {},
+                   std::string expression = {});
 void ConfigureEngine(chaiscript::ChaiScript& engine, const Variables& variables);
 void ConfigureGlobals(chaiscript::ChaiScript& engine, const Variables& variables);
 

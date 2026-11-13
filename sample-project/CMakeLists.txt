@@ -55,7 +55,7 @@ add_test(
     NAME expression_sample_repl
     COMMAND ${CMAKE_COMMAND}
         -DSAMPLE=$<TARGET_FILE:expression_sample>
-        -DSETUP=${CMAKE_CURRENT_SOURCE_DIR}/example-setup.chai
+        -DVARIABLES=${CMAKE_CURRENT_SOURCE_DIR}/example-variables.txt
         -DTEST_DIR=${CMAKE_CURRENT_BINARY_DIR}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/repl-test.cmake
 )

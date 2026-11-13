@@ -6,6 +6,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
+#include <vector>
 
 #include <wpi/math/geometry/Pose2d.hpp>
 #include <wpi/math/geometry/Rotation2d.hpp>
@@ -17,6 +19,36 @@
 
 namespace wpilib::expression {
 
+enum class VariableType {
+  Quantity,
+  Pose2d,
+  Translation2d,
+  Rotation2d,
+  Transform2d,
+  Twist2d,
+  Rectangle2d,
+  Ellipse2d
+};
+
+using VariableValue =
+    std::variant<units::precise_measurement, wpi::math::Pose2d, wpi::math::Translation2d,
+                 wpi::math::Rotation2d, wpi::math::Transform2d, wpi::math::Twist2d,
+                 wpi::math::Rectangle2d, wpi::math::Ellipse2d>;
+
+struct VariableDefinition {
+  std::string id;
+  std::string namespacePath;
+  std::string name;
+  std::string expression;
+};
+
+struct VariableInfo {
+  VariableDefinition definition;
+  VariableType type;
+  std::optional<units::precise_unit> dimension;
+  VariableValue value;
+};
+
 class EvaluationContext {
  public:
   EvaluationContext();
@@ -24,7 +56,10 @@ class EvaluationContext {
   EvaluationContext& operator=(const EvaluationContext&) = default;
   EvaluationContext(EvaluationContext&& other) noexcept;
   EvaluationContext& operator=(EvaluationContext&& other) noexcept;
-  void SetSetupScript(std::string_view source);
+  void SetVariables(std::vector<VariableDefinition> variables);
+  std::vector<VariableInfo> GetVariables() const;
+  std::vector<std::string> FindReferences(std::string_view variableId) const;
+  void RenameVariable(std::string_view variableId, std::string newName);
   void SetVariable(std::string name, units::precise_measurement value);
   void SetVariable(std::string name, wpi::math::Pose2d value);
   void SetVariable(std::string name, wpi::math::Translation2d value);

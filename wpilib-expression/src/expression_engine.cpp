@@ -88,16 +88,26 @@ chaiscript::Boxed_Value BoxImmutable(const VariableRecord& record) {
 }
 
 void StoreVariable(Variables& variables, std::string name, VariableValue value,
-                   const VariableRecord* existing) {
+                   const VariableRecord* existing, std::string id,
+                   std::string expression) {
   ValidateVariableName(name);
   auto declaredType = existing
                           ? existing->declaredType
                           : std::make_shared<const DeclaredType>(GetDeclaredType(value));
+  if (existing) {
+    if (id.empty()) {
+      id = existing->id;
+    }
+    if (expression.empty()) {
+      expression = existing->expression;
+    }
+  }
   if (!IsCompatible(*declaredType, GetDeclaredType(value))) {
     throw std::invalid_argument("variable value does not match its declared type: " + name);
   }
   variables.insert_or_assign(std::move(name),
-                             VariableRecord{std::move(value), std::move(declaredType)});
+                             VariableRecord{std::move(value), std::move(declaredType),
+                                            std::move(id), std::move(expression)});
 }
 
 void ConfigureEngine(chaiscript::ChaiScript& engine, const Variables& variables) {

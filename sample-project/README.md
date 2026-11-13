@@ -19,12 +19,11 @@ The sample resolves WPILib through its own pinned `FetchContent` declaration. It
 
 Run `expression_sample.exe` for the REPL. Enter an expression such as `2 m + 3 ft`; results are shown as an SI magnitude and LLNL unit. Enter `:quit` to exit. The `--smoke` option runs a scalar and geometry check.
 
-From the repository root, load context variables from a setup file before starting the REPL:
+From the repository root, load structured variables before starting the REPL:
 
 ```powershell
-.\sample-project\build\expression_sample.exe --setup .\sample-project\example-setup.chai
+.\sample-project\build\expression_sample.exe --variables .\sample-project\example-variables.txt
 ```
 
-The file uses the restricted setup syntax described in the expression library documentation. For example, with the included setup file, evaluate `2 m + offset`.
-Enter `:reload` to reload the setup file. If loading fails, the previous context remains available.
+Each non-comment line contains an ID, namespace path (or `-` for the root), variable name, and expression separated by `=`. For example, evaluate `2 m + offset` with the included file. Enter `:reload` to reload the variables; if loading fails, the previous context remains available.
 Rotation methods such as `target.Rotation().Degrees()` return an angle displayed in SI radians; divide by `deg` to display a dimensionless degree value.
