@@ -23,49 +23,21 @@ Dimension Combine(const Dimension& left, const Dimension& right, int sign) {
 }
 
 const std::map<std::string, Unit>& UnitRegistry() {
-  static const Dimension length = MakeDimension(1, 0, 0, 0, 0);
-  static const Dimension mass = MakeDimension(0, 1, 0, 0, 0);
-  static const Dimension time = MakeDimension(0, 0, 1, 0, 0);
-  static const Dimension current = MakeDimension(0, 0, 0, 1, 0);
-  static const Dimension angle = MakeDimension(0, 0, 0, 0, 1);
-
-  static const Dimension area = ScaleDimension(length, 2);
-  static const Dimension frequency = ScaleDimension(time, -1);
-  static const Dimension force = Combine(Combine(length, mass, 1), ScaleDimension(time, 2), -1);
-  static const Dimension torqueAndEnergy = Combine(force, length, 1);
-  static const Dimension power = Combine(torqueAndEnergy, time, -1);
-  static const Dimension voltage = Combine(power, current, -1);
-  static const Dimension charge = Combine(current, time, 1);
-  static const Dimension pressure = Combine(force, area, -1);
-  static const Dimension resistance = Combine(voltage, current, -1);
-  static const Dimension angularSpeed = Combine(angle, time, -1);
-
   static const std::map<std::string, Unit> units = [] {
-    const std::map<std::string, units::precise_unit> definitions{
-        {"m", units::precise::m}, {"meter", units::precise::m},
-        {"mm", units::milli * units::precise::m}, {"cm", units::centi * units::precise::m},
-        {"km", units::kilo * units::precise::m}, {"in", units::precise::in},
-        {"inch", units::precise::in}, {"ft", units::precise::ft}, {"yd", units::precise::yd},
-        {"mi", units::precise::mi}, {"s", units::precise::s},
-        {"ms", units::milli * units::precise::s}, {"us", units::micro * units::precise::s},
-        {"min", units::precise::min}, {"hr", units::precise::hr}, {"kg", units::precise::kg},
-        {"g", units::gram}, {"lb", units::precise::lb}, {"A", units::precise::A},
-        {"mA", units::milli * units::precise::A}, {"rad", units::precise::radian},
-        {"radian", units::precise::radian},
-        {"deg", units::precise::degree}, {"degree", units::precise::degree},
-        {"turn", units::precise::turn}, {"rev", units::precise::turn},
-        {"N", units::precise::N}, {"lbf", units::precise::lbf}, {"V", units::precise::V},
-        {"mV", units::milli * units::precise::V}, {"kV", units::kilo * units::precise::V},
-        {"Hz", units::precise::Hz}, {"kHz", units::kilo * units::precise::Hz},
-        {"W", units::precise::W}, {"kW", units::kilo * units::precise::W},
-        {"J", units::precise::J}, {"kJ", units::kilo * units::precise::J},
-        {"C", units::precise::C}, {"Pa", units::precise::Pa},
-        {"kPa", units::kilo * units::precise::Pa}, {"psi", units::precise::psi},
-        {"ohm", units::precise::ohm}, {"Ohm", units::precise::ohm},
-        {"Nm", units::precise::N * units::precise::m},
-        {"RPM", units::precise::rpm}, {"rpm", units::precise::rpm}};
+    const std::map<std::string, std::string> definitions{
+        {"m", "m"}, {"meter", "m"}, {"mm", "mm"}, {"cm", "cm"}, {"km", "km"},
+        {"in", "in"}, {"inch", "in"}, {"ft", "ft"}, {"yd", "yd"}, {"mi", "mi"},
+        {"s", "s"}, {"ms", "ms"}, {"us", "us"}, {"min", "min"}, {"hr", "hr"},
+        {"kg", "kg"}, {"g", "g"}, {"lb", "lb"}, {"A", "A"}, {"mA", "mA"},
+        {"rad", "rad"}, {"radian", "rad"}, {"deg", "deg"}, {"degree", "deg"},
+        {"turn", "turn"}, {"rev", "turn"}, {"N", "N"}, {"lbf", "lbf"}, {"V", "V"},
+        {"mV", "mV"}, {"kV", "kV"}, {"Hz", "Hz"}, {"kHz", "kHz"}, {"W", "W"},
+        {"kW", "kW"}, {"J", "J"}, {"kJ", "kJ"}, {"C", "C"}, {"Pa", "Pa"},
+        {"kPa", "kPa"}, {"psi", "psi"}, {"ohm", "ohm"}, {"Ohm", "ohm"},
+        {"Nm", "N*m"}, {"RPM", "rpm"}, {"rpm", "rpm"}};
     std::map<std::string, Unit> result;
-    for (const auto& [name, unit] : definitions) {
+    for (const auto& [name, spelling] : definitions) {
+      auto unit = units::unit_from_string(spelling);
       result.emplace(name, Unit{unit, DimensionFor(unit)});
     }
     return result;
