@@ -48,12 +48,15 @@ one library or executable per item.
 2. **Application server** — owns the active session, accepts commands,
    coordinates persistence and application operations, and publishes committed
    revisions and progress.
-3. **HTTP/WebSocket transport** — serves the UI and API, validates incoming
-   requests, and translates transport messages into application operations.
-   Keep document behavior out of this layer.
+3. **HTTP/WebSocket transport** — exposes the API, validates incoming requests,
+   and translates transport messages into application operations. Whether it
+   also serves the UI assets remains open. Keep document behavior out of this
+   layer.
 4. **Expression service** — evaluate whether the existing standalone
    `wpilib-expression` C++ library should serve the future backend. This is a
-   separate decision; the current UI uses `mathjs`.
+   separate decision; the current UI uses `mathjs`. The library README states
+   evaluation is not resource-limited, so server adoption requires an explicit
+   decision about bounding expression input and execution.
 5. **Persistence** — keep the new format adapter separate from generic
    persistence mechanics such as safe replacement, error reporting, and
    serializing writes.
@@ -123,6 +126,9 @@ before implementation.
 
 ## Current repository observations
 
+- `/home/runner/work/Choreo/Choreo/Cargo.toml` currently defines a Rust workspace;
+  no first-class C++ application server exists. TrajoptLib is currently a
+  separately buildable CMake library, not the application server.
 - `/home/runner/work/Choreo/Choreo/src-tauri/src/api.rs` exposes business
   operations through Tauri commands; the UI calls them through
   `/home/runner/work/Choreo/Choreo/src/document/tauriCommands.ts`.
@@ -130,8 +136,10 @@ before implementation.
   editable document in a MobX-State-Tree model and attaches undo/redo there.
 - `/home/runner/work/Choreo/Choreo/src/document/ExpressionStore.tsx` uses
   `mathjs` for expression evaluation. The standalone C++ experiment is under
-  `/home/runner/work/Choreo/Choreo/wpilib-expression`; its own README says it
-  is an independent library rather than production Choreo integration.
+  `/home/runner/work/Choreo/Choreo/wpilib-expression`; the root
+  `/home/runner/work/Choreo/Choreo/IMPLEMENTATION_PLAN.md` describes it as an
+  independent CMake project and explicitly says not to integrate it into
+  Choreo. Its README says expression evaluation is not resource-limited.
 - `/home/runner/work/Choreo/Choreo/trajoptlib/CMakeLists.txt` builds and tests
   the native TrajoptLib library independently of its Rust FFI adapter. The
   format-dependent generation pipeline is in
@@ -140,9 +148,33 @@ before implementation.
 - `/home/runner/work/Choreo/Choreo/vite.config.ts` builds the web UI, while
   `/home/runner/work/Choreo/Choreo/src-tauri/tauri.conf.json` currently embeds
   it and bundles a CLI sidecar.
+- The current Tauri sidecar is the Rust CLI, not a long-running server.
+  `/home/runner/work/Choreo/Choreo/copy-sidecar.cjs` applies target-triple
+  naming for Tauri packaging, and `/home/runner/work/Choreo/Choreo/src-tauri/build.rs`
+  temporarily disables `externalBin` during the Cargo build.
 - `/home/runner/work/Choreo/Choreo/.github/workflows/choreo.yml` currently
   covers Windows x86_64/ARM64, macOS x86_64/ARM64, and Linux x86_64/ARM64.
   Linux ARM32 is not listed in this matrix.
+
+## Packaging research
+
+- Build the C++ localhost server as a first-class CMake executable, separate
+  from TrajoptLib's library target and from the optional webview launcher.
+- Produce one server binary per supported target, using a stable logical name
+  such as `choreo-server`; let packaging handle platform suffixes and
+  target-triple filenames.
+- Both launch modes should use that same server binary. Standalone mode starts
+  it and opens the browser; Tauri starts/manages it as a sidecar and opens the
+  webview at the reported URL.
+- Existing Tauri external-binary and copy-sidecar configuration may be a useful
+  packaging pattern, but the current Rust CLI sidecar does not provide server
+  readiness, URL/port negotiation, shutdown, or crash-recovery behavior.
+- Add explicit CMake configure/build/test/package steps to CI. The current
+  Choreo workflow builds with Cargo/Tauri and packages both the GUI and CLI;
+  it does not yet build a C++ application server.
+- Prefer an OS-assigned port and a readiness handshake over assuming a fixed
+  port. Decide how the process reports the selected URL and how the embedded
+  launcher coordinates startup, shutdown, and process-tree cleanup.
 
 ## Open research questions
 
@@ -154,20 +186,35 @@ before implementation.
 - How should the webview launcher discover the server URL and coordinate
   startup/shutdown without becoming a second application backend?
 - Does `wpilib-expression` meet Choreo's expression-language, diagnostics, and
-  execution-safety needs, or should expression behavior remain separate?
+  execution-safety needs? In particular, what bounds or isolation are needed
+  given that its documented evaluation is not resource-limited?
 - What write-through and atomic-replacement guarantees can be provided
   consistently on Windows, macOS, and Linux?
 - What API reconnection behavior is sufficient for the single-user UI without
   adding unnecessary event-log complexity?
+- Should the C++ server itself serve the Vite build output, or should the
+  launcher serve assets separately while sharing the same API origin?
+- Which packaging formats should include the standalone server, and should
+  standalone browser mode ship as the server binary alone or with a small
+  launcher?
+- How should Tauri detect server readiness and stop the process reliably on
+  each platform, especially Windows process-tree behavior?
+- Which existing release artifact formats are actually supported and tested
+  for Linux ARM64?
 
 ## Suggested research order
 
-1. Measure the `wpinet` CMake/build/package footprint on representative
-   Windows, macOS, and Linux targets; compare cpp-httplib only if needed.
-2. Specify generic request, event, revision, rejection, and reconnect behavior
+1. Prototype a minimal CMake server target and measure the `wpinet`
+   build/package footprint on representative Windows, macOS, and Linux targets;
+   compare cpp-httplib only if integration cost warrants it.
+2. Define the server startup/readiness/port handoff and webview process-lifecycle
+   contract; verify the standalone browser path uses the same server binary.
+3. Add a dedicated server build/test/package path to CI for all retained
+   targets, then verify the release artifact matrix.
+4. Specify generic request, event, revision, rejection, and reconnect behavior
    without document-specific payloads.
-3. Evaluate expression-service adoption independently of project persistence.
-4. Define write-through failure and safe replacement behavior once the new
+5. Evaluate expression-service adoption independently of project persistence.
+6. Define write-through failure and safe replacement behavior once the new
    format's storage contract is available.
-5. Integrate the user's project-parameter TrajoptLib wrapper only after its
+7. Integrate the user's project-parameter TrajoptLib wrapper only after its
    local interface is available; keep its design outside this plan.
