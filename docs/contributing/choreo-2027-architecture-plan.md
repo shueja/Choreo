@@ -30,6 +30,15 @@ items as local project-format work becomes available.
   dependency, not an optional candidate.
 - Complexity limits are sufficient for expression evaluation; a hard
   evaluation timeout is not required.
+- A per-launch API token is not required. No non-UI API clients are currently
+  planned; do not add special WebSocket authentication without a demonstrated
+  need.
+- In standalone browser mode, the server serves the UI assets. Tauri packages
+  and loads a static copy of the UI while connecting to the server for APIs.
+- Persistence guarantees cover local disks only, not network shares or
+  removable/network filesystems.
+- Retain the current release formats: Windows NSIS and standalone ZIP, macOS
+  DMG and standalone ZIP, and Linux AppImage/deb/rpm and standalone ZIP.
 - Preserve the current platform support matrix except Linux ARM32.
 - Prefer WPILib tooling and avoid unnecessary dependencies.
 
@@ -54,11 +63,10 @@ one library or executable per item.
    coordinates persistence and application operations, and publishes committed
    revisions and progress.
 3. **HTTP/WebSocket transport** — exposes the API, validates incoming requests,
-   and translates transport messages into application operations. Recommended
-   default: serve the production Vite assets from the C++ server as well, so
-   both launch modes use one origin and no separate static-file server is
-   needed. Verify Tauri navigation, CSP, and origin validation on supported
-   platforms before committing to this. Keep document behavior out of this
+   and translates transport messages into application operations. Serve the
+   production Vite assets from the C++ server in standalone browser mode. In
+   Tauri mode, package and load a static copy of those assets; the webview
+   connects to the server's loopback API. Keep document behavior out of this
    layer.
 4. **Expression service** — integrate the existing `wpilib-expression` C++
    library as the server's expression engine. The current UI uses `mathjs`;
@@ -71,9 +79,9 @@ one library or executable per item.
 6. **Web UI** — React/Vite renders server-provided state and submits commands.
    Keep only presentation state (selection, hover, panel layout) in the client;
    do not preserve a second authoritative document model.
-7. **Optional webview launcher** — starts or locates the same C++ server and
-   displays its UI URL. It must not expose a privileged Tauri command API for
-   application business logic.
+7. **Optional webview launcher** — starts the same C++ server, waits for its
+   selected API URL, and supplies that URL to the packaged static UI. It must
+   not expose a privileged Tauri command API for application business logic.
 
 ## API and synchronization direction
 
@@ -123,13 +131,12 @@ Additional `wpinet` integration findings at the pinned revision:
 - The combined `HttpWebSocketServerConnection` supports HTTP and WebSocket
   upgrades on one connection/port. The API remains low-level: request dispatch
   is custom path parsing rather than a declarative router.
-- Recommended default: serve the production Vite assets from the C++ server,
-  alongside REST and WebSocket routes. This keeps standalone and embedded
-  modes on one origin, avoids a second static-file server and cross-origin
-  setup, and aligns the UI lifecycle with the server process. Keep Vite's
-  development server for local frontend development. Verify Tauri can navigate
-  to the server URL with the intended CSP and origin checks before adopting
-  this in production.
+- Serve production Vite assets from the C++ server in standalone browser mode.
+  For Tauri, package and load a static copy of the same assets and connect to
+  the server's loopback API. The embedded mode therefore needs a narrowly
+  configured CORS/Origin policy for the Tauri origin rather than assuming
+  same-origin requests. Keep Vite's dev server for frontend development and
+  verify the packaged webview origin and CSP on supported platforms.
 - `uv::Tcp` exposes `Bind`, `GetSock`, and `AddrToName`, so an ephemeral-port
   flow can bind port `0` and query the selected port afterward. This path was
   inferred from the API and libuv behavior, not built or tested in Choreo.
@@ -157,19 +164,14 @@ address/port as well as validating browser `Origin`. Apply the checks to
 state-changing HTTP requests and WebSocket upgrades; CORS response headers do
 not prevent a request from being sent. Do not use `GET` for mutations.
 
-**Recommended baseline, not yet an implementation decision:** serve the UI and
-API from the same origin; bind only to loopback; reject unexpected Host and
-Origin values; and require a cryptographically random per-launch token in a
-request header for state-changing HTTP requests. Browser WebSocket APIs do not
-allow arbitrary request headers, so authenticate upgrades with a short-lived,
-single-use ticket obtained through an authenticated HTTP request, or another
-browser-compatible mechanism; do not put the long-lived launch token in the
-WebSocket URL. Deliver the launch token through server/launcher bootstrap,
-not an API query parameter. A same-origin deployment avoids needing
-permissive CORS, while the token adds protection against unrelated local
-browser tabs. If the Tauri webview needs a distinct origin, explicitly allow
-only that origin and provide the token through a narrowly scoped startup
-mechanism, not a business-logic Tauri API.
+Bind only to loopback and validate the `Host` header against the actual bound
+loopback address and port. Validate `Origin` on state-changing HTTP requests
+and WebSocket upgrades, including the Tauri webview's origin; allow only the
+origins required by the two launch modes. CORS response headers do not prevent
+a request from being sent, so do not treat them as authorization. Do not use
+`GET` for mutations. The owner has decided not to require a per-launch token;
+the application currently has no non-UI API clients planned. Revisit this
+choice if the trust model or client scope changes.
 This security analysis was not independently checked against external
 standards sources in this environment; verify the threat model against current
 browser and OWASP guidance before implementation.
@@ -179,8 +181,11 @@ browser and OWASP guidance before implementation.
 - A mutation becomes visible as committed only after its write succeeds.
 - Pause new mutations on persistence failure, surface a clear error, and resume
   only after persistence is healthy.
-- Investigate atomic replacement and durability behavior on each supported
-  platform once the new format's serializer and file lifecycle are known.
+- Persistence guarantees target local disks only. Investigate atomic
+  replacement and durability behavior on each supported OS filesystem once
+  the new format's serializer and file lifecycle are known. Write temporary
+  files in the destination directory; network/removable filesystems are out of
+  scope for the guarantee.
 - Do not replace the format-specific reader/writer before the new format work
   is available.
 
@@ -235,6 +240,21 @@ browser and OWASP guidance before implementation.
 
 ## Expression runtime and build integration research
 
+- **Provisional limits proposal (validate against the new format and its largest
+  representative projects before implementation):** cap each source expression
+  at 16 KiB before unit-suffix expansion; cap expanded source at 64 KiB; cap
+  parsed expressions at 4,096 AST nodes and depth 128; cap a context at 4,096
+  expression-backed variables; and cap aggregate expression/setup source at
+  1 MiB per project. Cap the server's JSON request body at 16 MiB, with smaller
+  per-route limits where possible. These are conservative starting points,
+  not measured performance thresholds or immutable product requirements.
+- The eight checked-in legacy sample project files contain 18–19 expression
+  values each, with a maximum expression length of 10 characters; these samples
+  demonstrate only a trivial baseline, not the size of future projects.
+  `wpilib-expression` tests and benchmark exercise replacement contexts with
+  1,000 variables / expressions, so the proposed 4,096-context cap leaves
+  headroom over the current explicit stress-test scale. Benchmark worst-case
+  ASTs and new-format projects before finalizing values.
 - The expression engine deliberately disables ChaiScript module loading,
   external scripts, and I/O. It validates setup and evaluation ASTs against
   restricted forms: project expressions are single read-only expressions,
@@ -247,9 +267,8 @@ browser and OWASP guidance before implementation.
   (`wpilib-expression/src/expression.cpp`, `EvaluateResult`). Copies of a
   context share that cache, so concurrent evaluations through copies serialize.
 - The architecture decision is to use input and expression-complexity limits;
-  no hard evaluation timeout or process isolation is required. Establish
-  concrete bounds before calling the library, including the input bytes
-  permitted before expansion, setup-variable count, and parsed AST complexity.
+  no hard evaluation timeout or process isolation is required. The exact
+  provisional limits above still require validation and implementation.
 - The pinned ChaiScript revision has parser nesting and function-call depth
   guards (defaults 512 and 256, respectively), but no time-based or
   cooperative interruption mechanism. These fixed recursion guards are not a
@@ -285,16 +304,17 @@ browser and OWASP guidance before implementation.
   such as `choreo-server`; let packaging handle platform suffixes and
   target-triple filenames.
 - Both launch modes should use that same server binary. Standalone mode starts
-  it and opens the browser; Tauri starts/manages it as a sidecar and opens the
-  webview at the reported URL.
+  it, serves the UI, and opens the browser. Tauri starts/manages it as a
+  sidecar while loading its packaged static UI copy; the launcher passes the
+  server's selected API URL to the UI through startup configuration.
 - Existing Tauri external-binary and copy-sidecar configuration may be a useful
   packaging pattern, but the current Rust CLI sidecar does not provide server
   readiness, URL/port negotiation, shutdown, or crash-recovery behavior.
 - Recommended startup contract: bind to loopback port `0`, finish initializing,
-  then emit one machine-readable readiness record containing the selected URL.
-  In standalone mode the server opens that URL in the default browser; in
-  Tauri mode the thin launcher starts the same executable with browser opening
-  disabled, reads readiness, and navigates its webview to the URL. Keep
+  then emit one machine-readable readiness record containing the selected API
+  URL. In standalone mode the server opens its UI URL in the default browser;
+  in Tauri mode the thin launcher starts the same executable with browser
+  opening disabled and passes the API URL to the already packaged UI. Keep
   diagnostics on stderr so stdout remains a reliable control channel. Validate
   this flow in the prototype, including startup failure and early child exit.
 - Recommended process ownership: the Tauri launcher directly owns the server
@@ -307,10 +327,10 @@ browser and OWASP guidance before implementation.
   it does not yet build a C++ application server.
 - The current release pipeline provides Windows NSIS plus standalone ZIP,
   macOS DMG plus standalone ZIP, and Linux AppImage/deb/rpm plus standalone
-  ZIP. Recommended starting point is to retain these formats, include the
-  C++ server in GUI installers and include the server with its UI assets in
-  standalone ZIPs. Confirm whether UI assets are embedded or shipped as files
-  and measure their effect on bundle size before finalizing.
+  ZIP. The owner selected retaining these formats. Include the C++ server in
+  GUI installers alongside a static UI copy, and include the server, its
+  browser UI assets, and required runtime files in standalone ZIPs. Measure
+  bundle size and verify packaging on every supported platform.
 
 ## Open research questions
 
@@ -319,21 +339,21 @@ browser and OWASP guidance before implementation.
   and packaged runtime size does enabling NTCore/wpinet add? Static analysis
   suggests it can; configure/build verification is still needed.
 - Does the proposed port-0/readiness-record startup contract work reliably
-  with `wpinet` and Tauri on all supported platforms?
+  with `wpinet` and Tauri on all supported platforms, including passing the
+  dynamic API URL to the statically packaged Tauri UI?
 - Can Tauri own and clean up the direct C++ child process reliably on Windows,
   macOS, and Linux, including startup errors and forced termination?
-- Should the recommended per-launch request token be mandatory in both browser
-  and Tauri modes, and how should the launcher deliver it without exposing
-  business operations through Tauri IPC? Should WebSocket upgrades use a
-  short-lived single-use ticket? Are non-browser local API clients in scope?
-- What concrete request-size, setup-count, and expression-complexity bounds
-  should the server enforce before invoking `wpilib-expression`? A hard
-  evaluation timeout is not required.
+- The owner does not require per-launch API tokens; no non-UI API clients are
+  currently planned. Validate Host and Origin consistently, including
+  WebSocket upgrades, and revisit authentication if the client scope expands.
+- Do the provisional request, expression, AST, aggregate-source, and variable
+  limits accommodate the largest representative new-format projects and
+  acceptable evaluation latency?
 - What write-through and atomic-replacement guarantees can be provided
-  consistently on Windows, macOS, and Linux?
-- Can the optional Tauri webview load UI assets from the C++ server's loopback
-  origin on all supported platforms while satisfying its CSP and origin
-  validation? If so, use that same server to serve Vite assets.
+  consistently on supported local filesystems across Windows, macOS, and
+  Linux?
+- Can Tauri load its packaged static UI and connect to the loopback API with a
+  narrowly configured Origin/CORS policy and CSP on every supported platform?
 - Does the new C++ server build and run across the existing six-target release
   matrix? Linux ARM64 is currently tested natively for the legacy app, but the
   future C++ server is not yet covered.
