@@ -160,6 +160,16 @@ before implementation.
 - `/home/runner/work/Choreo/Choreo/.github/workflows/choreo.yml` currently
   covers Windows x86_64/ARM64, macOS x86_64/ARM64, and Linux x86_64/ARM64.
   Linux ARM32 is not listed in this matrix.
+- The legacy project writer in
+  `/home/runner/work/Choreo/Choreo/src-core/src/file_management/mod.rs`
+  coalesces pending project updates in a single `Option<ProjectFile>` and
+  writes them on a background thread. The thread discards the write result and
+  logs “Wrote project” regardless of success; `write_serializable` writes
+  directly to the target via `fs::write`, without temporary-file replacement.
+  This is not a suitable implementation to reuse for the 2027 server's
+  write-before-acknowledge, pause-on-failure, and safe-replacement contract.
+  Relevant code: `ProjectUpdater::update`/`wait_for`,
+  `WritingResources::new`, and `write_serializable`.
 
 ## Expression runtime and build integration research
 
