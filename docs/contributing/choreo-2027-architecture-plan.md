@@ -291,6 +291,11 @@ browser and OWASP guidance before implementation.
   `/home/runner/work/Choreo/Choreo/copy-sidecar.cjs` applies target-triple
   naming for Tauri packaging, and `/home/runner/work/Choreo/Choreo/src-tauri/build.rs`
   temporarily disables `externalBin` during the Cargo build.
+- The current Tauri configuration bundles that CLI under `externalBin`, but
+  the application does not currently spawn it as a sidecar and does not
+  include `tauri-plugin-shell`. Treat the existing setup as a packaging
+  example only; the future launcher still needs explicit child ownership,
+  readiness/stdout handling, shutdown, and exit/error behavior.
 - `/home/runner/work/Choreo/Choreo/.github/workflows/choreo.yml` currently
   covers Windows x86_64/ARM64, macOS x86_64/ARM64, and Linux x86_64/ARM64.
   Linux ARM32 is not listed in this matrix.
