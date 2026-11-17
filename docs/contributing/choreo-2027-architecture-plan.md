@@ -212,7 +212,10 @@ origins required by the two launch modes. CORS response headers do not prevent
 a request from being sent, so do not treat them as authorization. Do not use
 `GET` for mutations. The owner has decided not to require a per-launch token;
 the application currently has no non-UI API clients planned. Revisit this
-choice if the trust model or client scope changes.
+choice if the trust model or client scope changes. Without a token, browser
+Origin/Host validation does not prevent another local native process from
+calling the loopback API; treat access by same-user local processes as part of
+the accepted trust model.
 This security analysis was not independently checked against external
 standards sources in this environment; verify the threat model against current
 browser and OWASP guidance before implementation.
@@ -222,6 +225,10 @@ browser and OWASP guidance before implementation.
 - A mutation becomes visible as committed only after its write succeeds.
 - Pause new mutations on persistence failure, surface a clear error, and resume
   only after persistence is healthy.
+- Serialize project mutations through one commit lane. Construct and validate a
+  candidate state, persist it, then publish it as the new in-memory revision
+  and emit its event/acknowledgment. Failed writes must not emit a committed
+  revision or leave the session silently advanced in memory.
 - Persistence guarantees target local disks only. Recommended generic
   replacement sequence: serialize before touching the destination; create a
   unique temporary file in the destination directory; write and flush it;
