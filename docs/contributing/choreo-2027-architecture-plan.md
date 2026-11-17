@@ -343,15 +343,25 @@ browser and OWASP guidance before implementation.
   evaluates the input while holding the engine-cache mutex
   (`wpilib-expression/src/expression.cpp`, `EvaluateResult`). Copies of a
   context share that cache, so concurrent evaluations through copies serialize.
+- The server can enforce raw expression length, aggregate source size, and
+  variable-count limits before calling `EvaluationContext`. The public API
+  does not expose a parsed AST or accept node/depth budgets, so those two
+  proposed caps require extending `wpilib-expression` (or its parser
+  integration). Its current AST validation is recursive and runs after parse;
+  a post-parse node/depth check can reject before evaluation but cannot bound
+  parser work itself. The pinned ChaiScript parser has a fixed default parse
+  depth of 512, so input-size limits remain necessary even if the lower
+  application AST-depth limit is added.
 - The architecture decision is to use input and expression-complexity limits;
   no hard evaluation timeout or process isolation is required. The exact
   provisional limits above still require validation and implementation.
 - The pinned ChaiScript revision has parser nesting and function-call depth
   guards (defaults 512 and 256, respectively), but no time-based or
   cooperative interruption mechanism. These fixed recursion guards are not a
-  substitute for the selected application-level bounds. Reject oversized
-  requests before expansion/parsing and keep complexity limits below the
-  library's internal recursion caps where practical.
+  substitute for the selected application-level bounds. Enforce raw input
+  limits before expansion/parsing and AST complexity checks before evaluation;
+  keep complexity limits below the library's internal recursion caps where
+  practical.
   - [ChaiScript parser depth guard, pinned revision](https://github.com/ChaiScript/ChaiScript/blob/f635b51e3f8e95868210edfc66fdbd8e475710f5/include/chaiscript/language/chaiscript_parser.hpp#L88-L104)
   - [ChaiScript call-depth guard, pinned revision](https://github.com/ChaiScript/ChaiScript/blob/f635b51e3f8e95868210edfc66fdbd8e475710f5/include/chaiscript/chaiscript_defines.hpp#L76-L110)
 - `wpilib-expression` directly links `wpimath`, LLNL units, and `wpi::extras`;
