@@ -160,12 +160,16 @@ not prevent a request from being sent. Do not use `GET` for mutations.
 **Recommended baseline, not yet an implementation decision:** serve the UI and
 API from the same origin; bind only to loopback; reject unexpected Host and
 Origin values; and require a cryptographically random per-launch token in a
-request header for mutations and WebSocket upgrades. Deliver the token through
-the server/launcher bootstrap rather than as an API query parameter. A
-same-origin deployment avoids needing permissive CORS, while the token adds
-protection against unrelated local browser tabs. If the Tauri webview needs a
-distinct origin, explicitly allow only that origin and provide the token
-through a narrowly scoped startup mechanism, not a business-logic Tauri API.
+request header for state-changing HTTP requests. Browser WebSocket APIs do not
+allow arbitrary request headers, so authenticate upgrades with a short-lived,
+single-use ticket obtained through an authenticated HTTP request, or another
+browser-compatible mechanism; do not put the long-lived launch token in the
+WebSocket URL. Deliver the launch token through server/launcher bootstrap,
+not an API query parameter. A same-origin deployment avoids needing
+permissive CORS, while the token adds protection against unrelated local
+browser tabs. If the Tauri webview needs a distinct origin, explicitly allow
+only that origin and provide the token through a narrowly scoped startup
+mechanism, not a business-logic Tauri API.
 This security analysis was not independently checked against external
 standards sources in this environment; verify the threat model against current
 browser and OWASP guidance before implementation.
@@ -320,8 +324,8 @@ browser and OWASP guidance before implementation.
   macOS, and Linux, including startup errors and forced termination?
 - Should the recommended per-launch request token be mandatory in both browser
   and Tauri modes, and how should the launcher deliver it without exposing
-  business operations through Tauri IPC? Are non-browser local API clients in
-  scope?
+  business operations through Tauri IPC? Should WebSocket upgrades use a
+  short-lived single-use ticket? Are non-browser local API clients in scope?
 - What concrete request-size, setup-count, and expression-complexity bounds
   should the server enforce before invoking `wpilib-expression`? A hard
   evaluation timeout is not required.
