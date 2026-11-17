@@ -98,7 +98,11 @@ one library or executable per item.
   live notifications, not a durable event log. On reconnect, fetch a complete
   snapshot with its revision, then resume processing events newer than that
   revision; reject or resynchronize on revision gaps. Persist no transport
-  history solely to replay events missed while the UI was disconnected.
+  history solely to replay events missed while the UI was disconnected. Avoid
+  a snapshot/subscription race by opening the WebSocket first and buffering
+  events, then obtaining the snapshot revision, applying the snapshot, and
+  replaying buffered events newer than that revision; discard duplicates and
+  request another snapshot if a sequence gap remains.
 - Keep the server authoritative: reject invalid or stale commands instead of
   attempting last-write-wins conflict resolution.
 - The app is currently single-user/single-project, but preserve a clean
@@ -136,7 +140,9 @@ Additional `wpinet` integration findings at the pinned revision:
   the server's loopback API. The embedded mode therefore needs a narrowly
   configured CORS/Origin policy for the Tauri origin rather than assuming
   same-origin requests. Keep Vite's dev server for frontend development and
-  verify the packaged webview origin and CSP on supported platforms.
+  verify the packaged webview origin and CSP on supported platforms. The
+  dynamic API port is not known at UI build time; a Tauri initialization script
+  can provide runtime configuration before the static UI's scripts execute.
 - `uv::Tcp` exposes `Bind`, `GetSock`, and `AddrToName`, so an ephemeral-port
   flow can bind port `0` and query the selected port afterward. This path was
   inferred from the API and libuv behavior, not built or tested in Choreo.
@@ -154,6 +160,41 @@ Additional `wpinet` integration findings at the pinned revision:
   [`HttpWebSocketServerConnection`](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/wpinet/src/main/native/include/wpi/net/HttpWebSocketServerConnection.hpp),
   [`WebSocketServer`](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/wpinet/src/main/native/include/wpi/net/WebSocketServer.hpp),
   and [`HttpServerConnection` response headers](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/wpinet/src/main/native/cpp/HttpServerConnection.cpp).
+
+Tauri integration findings, verified against the repository's locked Tauri
+2.9.5 source:
+
+- The bundled asset origin differs across desktop platforms by default:
+  Windows uses `http://tauri.localhost`; macOS and Linux use
+  `tauri://localhost`. Enabling Tauri's `use_https_scheme` changes the Windows
+  origin to `https://tauri.localhost`; Tauri documents that HTTPS mode blocks
+  mixed-content requests to an HTTP API. The API server must allow only the
+  relevant Tauri origin, in addition to the standalone browser's same-origin
+  access.
+- A candidate restrictive CSP `connect-src` is
+  `http://127.0.0.1:* ws://127.0.0.1:*`; the host stays fixed to loopback
+  while the port is dynamic. Confirm CSP parsing and actual HTTP/WebSocket
+  connections in each supported WebView before adopting it.
+- The Tauri asset protocol's own `Access-Control-Allow-Origin` response does
+  not configure CORS on the separate Choreo API server. The API server must
+  handle preflight requests for the JSON/custom-header REST calls and permit
+  the exact configured Tauri origin. WebSocket handshakes do not use CORS
+  preflight; validate their `Origin` explicitly.
+- Tauri's CSP must allow the loopback API in `connect-src`; list `http:` and
+  `ws:` endpoints separately. Since the API port is OS-assigned, verify that
+  the chosen CSP host-source form permits the required loopback port range
+  without broadening access to non-loopback hosts.
+- Tauri 2.9.5 exposes an initialization-script hook that runs before the
+  bundled document is parsed. The thin launcher can inject the runtime API
+  base URL into the static UI without exposing business operations as Tauri
+  commands. The hook runs on top-level navigations; Tauri recommends checking
+  `window.location`, and its Windows implementation may also add scripts to
+  subframes. Gate the bootstrap to the expected app origin and test this
+  behavior against the exact generated-window setup and supported webviews.
+- Sources: [Tauri 2.9.5 manager URL/origin logic](https://github.com/tauri-apps/tauri/blob/f2e0405dc2d8bae949de6bb5e479bbf3cde401b6/crates/tauri/src/manager/mod.rs),
+  [Tauri 2.9.5 initialization script API](https://github.com/tauri-apps/tauri/blob/f2e0405dc2d8bae949de6bb5e479bbf3cde401b6/crates/tauri/src/webview/mod.rs),
+  [Tauri 2.9.5 custom-protocol response handling](https://github.com/tauri-apps/tauri/blob/f2e0405dc2d8bae949de6bb5e479bbf3cde401b6/crates/tauri/src/protocol/tauri.rs),
+  and [Tauri runtime's HTTPS-scheme note](https://github.com/tauri-apps/tauri/blob/f2e0405dc2d8bae949de6bb5e479bbf3cde401b6/crates/tauri-runtime/src/webview.rs).
 
 ## Localhost security notes
 
@@ -181,11 +222,35 @@ browser and OWASP guidance before implementation.
 - A mutation becomes visible as committed only after its write succeeds.
 - Pause new mutations on persistence failure, surface a clear error, and resume
   only after persistence is healthy.
-- Persistence guarantees target local disks only. Investigate atomic
-  replacement and durability behavior on each supported OS filesystem once
-  the new format's serializer and file lifecycle are known. Write temporary
-  files in the destination directory; network/removable filesystems are out of
-  scope for the guarantee.
+- Persistence guarantees target local disks only. Recommended generic
+  replacement sequence: serialize before touching the destination; create a
+  unique temporary file in the destination directory; write and flush it;
+  atomically replace the destination; then perform the platform's available
+  directory-entry durability step before acknowledging the commit. This keeps
+  replacement on one filesystem and preserves the old file on failures before
+  replacement.
+- POSIX/Linux and macOS: same-filesystem `rename()` provides atomic name
+  replacement, not by itself crash durability. The usual durable sequence is
+  `fsync()` the temporary file, rename it, then `fsync()` the parent directory.
+  On macOS, investigate `F_FULLFSYNC` where hardware-cache flush strength is
+  required. Windows: investigate `FlushFileBuffers` plus `ReplaceFileW` for an
+  existing destination, or `MoveFileExW` with replace/write-through flags;
+  account for transient sharing violations and retry safely. Replacing a file
+  can change its metadata, so define which permissions/ACLs need preservation.
+- Define the uncertain outcome if replacement succeeds but the subsequent
+  durability operation fails: do not acknowledge the edit, block further
+  mutations, and reconcile the on-disk state before resuming.
+- These are platform-specific design recommendations, not guarantees verified
+  against external OS documentation in this environment. Validate API
+  semantics and failure behavior against current platform documentation and
+  on supported local filesystems before implementation. Network/removable
+  filesystems are out of scope.
+- References: [POSIX `rename()`](https://pubs.opengroup.org/onlinepubs/9699919799/functions/rename.html),
+  [Linux `fsync(2)`](https://man7.org/linux/man-pages/man2/fsync.2.html),
+  [Windows `ReplaceFileW`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew),
+  [Windows `MoveFileExW`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw),
+  [Windows `FlushFileBuffers`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers),
+  and [Apple `fsync(2)` / `F_FULLFSYNC`](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fsync.2.html).
 - Do not replace the format-specific reader/writer before the new format work
   is available.
 
@@ -354,6 +419,9 @@ browser and OWASP guidance before implementation.
   Linux?
 - Can Tauri load its packaged static UI and connect to the loopback API with a
   narrowly configured Origin/CORS policy and CSP on every supported platform?
+  Verify the actual `Origin` header emitted by each WebView, including macOS
+  and Linux's custom `tauri://localhost` origin, and test the dynamic-port CSP
+  candidate in packaged builds.
 - Does the new C++ server build and run across the existing six-target release
   matrix? Linux ARM64 is currently tested natively for the legacy app, but the
   future C++ server is not yet covered.
