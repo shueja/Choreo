@@ -3,130 +3,220 @@
   "$id": "https://choreo.dev/schemas/project.schema.json",
   "title": "Choreo Project File Schema",
   "$defs": {
-    "Dimension": {
+    "ScalarDimension": {
+      "type": "object",
+      "description": "Sparse LLNL units base-unit exponents. Omit zero-valued powers; an empty object is dimensionless.",
+      "properties": {
+        "meter": { "type": "integer" },
+        "kilogram": { "type": "integer" },
+        "second": { "type": "integer" },
+        "ampere": { "type": "integer" },
+        "kelvin": { "type": "integer" },
+        "mole": { "type": "integer" },
+        "candela": { "type": "integer" },
+        "currency": { "type": "integer" },
+        "count": { "type": "integer" },
+        "radian": { "type": "integer" }
+      },
+      "additionalProperties": false
+    },
+    "VariableType": {
       "type": "string",
       "enum": [
-        "Number",
-        "Length",
-        "LinVel",
-        "LinAcc",
-        "Angle",
-        "AngVel",
-        "AngAcc",
-        "Time",
-        "Mass",
-        "Torque",
-        "MoI",
-        "Current",
-        "KT",
-        "KV"
+        "Quantity",
+        "Pose2d",
+        "Translation2d",
+        "Polygon2d",
+        "Rotation2d",
+        "Transform2d",
+        "Twist2d",
+        "Rectangle2d",
+        "Ellipse2d"
       ],
-      "description": "Dimension tag (matches choreo::dimensions::*::tag)"
+      "description": "Value type supported by wpilib-expression."
+    },
+    "VariableBase": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "Expression-language identifier."
+        },
+        "namespacePath": {
+          "type": "string",
+          "pattern": "^(?:[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)?$",
+          "description": "Dot-separated namespace path; empty for the root namespace."
+        },
+        "expression": {
+          "type": "string",
+          "minLength": 1,
+          "description": "wpilib-expression source used to calculate the value."
+        }
+      },
+      "required": ["name", "namespacePath", "expression"]
+    },
+    "QuantityVariableEntry": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/VariableBase" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "Quantity" },
+            "dimension": { "$ref": "#/$defs/ScalarDimension" },
+            "value": { "type": "number", "description": "Latest evaluated value in SI base units." }
+          },
+          "required": ["type", "dimension", "value"]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Pose2dVariableEntry": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/VariableBase" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "Pose2d" },
+            "value": { "$ref": "./wpi.schema.json#/$defs/WpiPose2d" }
+          },
+          "required": ["type", "value"]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Translation2dVariableEntry": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/VariableBase" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "Translation2d" },
+            "value": { "$ref": "./wpi.schema.json#/$defs/WpiTranslation2d" }
+          },
+          "required": ["type", "value"]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Polygon2dVariableEntry": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/VariableBase" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "Polygon2d" },
+            "value": { "$ref": "./shared.schema.json#/$defs/Polygon2d" }
+          },
+          "required": ["type", "value"]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Rotation2dVariableEntry": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/VariableBase" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "Rotation2d" },
+            "value": { "$ref": "./wpi.schema.json#/$defs/WpiRotation2d" }
+          },
+          "required": ["type", "value"]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Transform2dVariableEntry": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/VariableBase" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "Transform2d" },
+            "value": { "$ref": "./wpi.schema.json#/$defs/WpiTransform2d" }
+          },
+          "required": ["type", "value"]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Twist2dVariableEntry": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/VariableBase" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "Twist2d" },
+            "value": { "$ref": "./wpi.schema.json#/$defs/WpiTwist2d" }
+          },
+          "required": ["type", "value"]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Rectangle2dVariableEntry": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/VariableBase" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "Rectangle2d" },
+            "value": { "$ref": "./wpi.schema.json#/$defs/WpiRectangle2d" }
+          },
+          "required": ["type", "value"]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Ellipse2dVariableEntry": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/VariableBase" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "Ellipse2d" },
+            "value": { "$ref": "./wpi.schema.json#/$defs/WpiEllipse2d" }
+          },
+          "required": ["type", "value"]
+        }
+      ],
+      "unevaluatedProperties": false
     },
     "ExpressionVariableEntry": {
-      "type": "object",
-      "description": "Named scalar/dimensional variable keyed by UUID in variables.expressions.",
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "dimension": { "$ref": "#/$defs/Dimension" },
-        "value": { "$ref": "./shared.schema.json#/$defs/Expr" }
-      },
-      "required": ["name", "dimension", "value"],
-      "additionalProperties": false
-    },
-    "TranslationVariableEntry": {
-      "type": "object",
-      "description": "Named translation variable keyed by UUID in variables.translations.",
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "value": { "$ref": "./shared.schema.json#/$defs/Translation2e" }
-      },
-      "required": ["name", "value"],
-      "additionalProperties": false
-    },
-    "PoseVariableEntry": {
-      "type": "object",
-      "description": "Named pose variable keyed by UUID in variables.poses.",
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "value": { "$ref": "./shared.schema.json#/$defs/Pose2e" }
-      },
-      "required": ["name", "value"],
-      "additionalProperties": false
-    },
-    "RegionVariableEntry": {
-      "type": "object",
-      "description": "Named region variable keyed by UUID in variables.regions.",
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "value": { "$ref": "./shared.schema.json#/$defs/Region2e" }
-      },
-      "required": ["name", "value"],
-      "additionalProperties": false
-    },
-    "PolygonVariableEntry": {
-      "type": "object",
-      "description": "Named polygon variable keyed by UUID in variables.polygons.",
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "value": { "$ref": "./shared.schema.json#/$defs/Polygon2e" }
-      },
-      "required": ["name", "value"],
-      "additionalProperties": false
-    },
-    "CircleVariableEntry": {
-      "type": "object",
-      "description": "Named circle variable keyed by UUID in variables.circles.",
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "value": { "$ref": "./shared.schema.json#/$defs/Circle2e" }
-      },
-      "required": ["name", "value"],
-      "additionalProperties": false
+      "oneOf": [
+        { "$ref": "#/$defs/QuantityVariableEntry" },
+        { "$ref": "#/$defs/Pose2dVariableEntry" },
+        { "$ref": "#/$defs/Translation2dVariableEntry" },
+        { "$ref": "#/$defs/Polygon2dVariableEntry" },
+        { "$ref": "#/$defs/Rotation2dVariableEntry" },
+        { "$ref": "#/$defs/Transform2dVariableEntry" },
+        { "$ref": "#/$defs/Twist2dVariableEntry" },
+        { "$ref": "#/$defs/Rectangle2dVariableEntry" },
+        { "$ref": "#/$defs/Ellipse2dVariableEntry" }
+      ],
+      "description": "Named wpilib-expression variable with a persisted type and latest evaluated value."
     },
     "Variables": {
       "type": "object",
-      "description": "All document-level variables keyed by UUID, grouped by variable kind.",
+      "description": "All document-level variables keyed by stable UUID.",
       "properties": {
-        "expressions": {
+        "variables": {
           "type": "object",
           "propertyNames": { "$ref": "./shared.schema.json#/$defs/UUID" },
-          "additionalProperties": { "$ref": "#/$defs/ExpressionVariableEntry" },
-          "description": "Scalar/dimensional variables keyed by UUID."
-        },
-        "translations": {
-          "type": "object",
-          "propertyNames": { "$ref": "./shared.schema.json#/$defs/UUID" },
-          "additionalProperties": {
-            "$ref": "#/$defs/TranslationVariableEntry"
-          },
-          "description": "2D translation variables keyed by UUID."
-        },
-        "poses": {
-          "type": "object",
-          "propertyNames": { "$ref": "./shared.schema.json#/$defs/UUID" },
-          "additionalProperties": { "$ref": "#/$defs/PoseVariableEntry" },
-          "description": "2D pose variables keyed by UUID."
-        },
-        "regions": {
-          "type": "object",
-          "propertyNames": { "$ref": "./shared.schema.json#/$defs/UUID" },
-          "additionalProperties": { "$ref": "#/$defs/RegionVariableEntry" },
-          "description": "2D region variables keyed by UUID."
-        },
-        "polygons": {
-          "type": "object",
-          "propertyNames": { "$ref": "./shared.schema.json#/$defs/UUID" },
-          "additionalProperties": { "$ref": "#/$defs/PolygonVariableEntry" },
-          "description": "2D convex polygon variables keyed by UUID."
-        },
-        "circles": {
-          "type": "object",
-          "propertyNames": { "$ref": "./shared.schema.json#/$defs/UUID" },
-          "additionalProperties": { "$ref": "#/$defs/CircleVariableEntry" },
-          "description": "2D circle variables keyed by UUID."
+          "additionalProperties": { "$ref": "#/$defs/ExpressionVariableEntry" }
         }
       },
+      "required": ["variables"],
       "additionalProperties": false
     },
     "MotorConfig": {
@@ -213,7 +303,7 @@
                 "modules": {
                   "type": "array",
                   "items": {
-                    "$ref": "./shared.schema.json#/$defs/Translation2e"
+                    "$ref": "./shared.schema.json#/$defs/TranslationExpr"
                   },
                   "minItems": 4,
                   "maxItems": 4,
@@ -227,16 +317,16 @@
               "type": "object",
               "properties": {
                 "frontLeft": {
-                  "$ref": "./shared.schema.json#/$defs/Translation2e"
+                  "$ref": "./shared.schema.json#/$defs/TranslationExpr"
                 },
                 "frontRight": {
-                  "$ref": "./shared.schema.json#/$defs/Translation2e"
+                  "$ref": "./shared.schema.json#/$defs/TranslationExpr"
                 },
                 "backLeft": {
-                  "$ref": "./shared.schema.json#/$defs/Translation2e"
+                  "$ref": "./shared.schema.json#/$defs/TranslationExpr"
                 },
                 "backRight": {
-                  "$ref": "./shared.schema.json#/$defs/Translation2e"
+                  "$ref": "./shared.schema.json#/$defs/TranslationExpr"
                 }
               },
               "required": ["frontLeft", "frontRight", "backLeft", "backRight"],
@@ -246,7 +336,7 @@
           "minProperties": 1,
           "additionalProperties": false
         },
-        "bumpers": { "$ref": "./shared.schema.json#/$defs/Polygon2e" },
+        "bumpers": { "$ref": "./shared.schema.json#/$defs/PolygonExpr" },
 
         "motor": { "$ref": "#/$defs/MotorConfig" }
       },

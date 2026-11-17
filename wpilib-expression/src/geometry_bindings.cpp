@@ -1,5 +1,6 @@
 #include "geometry_bindings.hpp"
 
+#include "wpilib-expression/expression.hpp"
 #include "units.hpp"
 
 #include <wpi/math/geometry/Pose2d.hpp>
@@ -27,6 +28,7 @@ using Transform2d = wpi::math::Transform2d;
 using Twist2d = wpi::math::Twist2d;
 using Ellipse2d = wpi::math::Ellipse2d;
 using Rectangle2d = wpi::math::Rectangle2d;
+using Polygon2d = wpi::math::Polygon2d;
 using wpi::units::meter_t;
 using wpi::units::radian_t;
 
@@ -102,12 +104,8 @@ Geometry NearestGeometry(const Geometry& origin,
   return origin.Nearest(std::span<const Geometry>{candidates});
 }
 
-Translation2d NearestTranslationArray(const Translation2d& origin,
-                                     const std::vector<Translation2d>& values) {
-  if (values.empty()) {
-    throw std::invalid_argument("nearest requires a non-empty collection");
-  }
-  return origin.Nearest(std::span<const Translation2d>{values});
+Translation2d NearestPolygon(const Translation2d& origin, const Polygon2d& polygon) {
+  return polygon.Nearest(origin);
 }
 
 }  // namespace
@@ -139,7 +137,17 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
   engine.add(chaiscript::user_type<Rectangle2d>(), "Rectangle2d");
   engine.add(chaiscript::user_type<Ellipse2d>(), "Ellipse2d");
   engine.add(chaiscript::user_type<wpi::util::array<Translation2d, 2>>(), "EllipseFocalPoints");
-  engine.add(chaiscript::user_type<std::vector<Translation2d>>(), "Translation2dArray");
+  engine.add(chaiscript::user_type<Polygon2d>(), "Polygon2d");
+  BIND_METHOD(Polygon2d, Nearest);
+  BIND_LAMBDA(Size, [](const Polygon2d& polygon) {
+    return static_cast<int>(polygon.Size());
+  });
+  BIND_LAMBDA([], [](const Polygon2d& polygon, int index) {
+    if (index < 0) {
+      throw std::out_of_range("polygon vertex index is out of range");
+    }
+    return polygon.At(static_cast<std::size_t>(index));
+  });
 
   RegisterMeasurementConversion<wpi::units::meter_t>(engine, units::precise::m);
   RegisterMeasurementConversion<wpi::units::radian_t>(engine, units::precise::rad);
@@ -185,7 +193,7 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
   BIND_METHOD(Translation2d, Dot);
   BIND_METHOD(Translation2d, Cross);
   BIND_LAMBDA(Nearest, &NearestGeometry<Translation2d>);
-  BIND_LAMBDA(Nearest, &NearestTranslationArray);
+  BIND_LAMBDA(Nearest, &NearestPolygon);
   BIND_LAMBDA([], [](const std::vector<Translation2d>& values, int index) {
     if (index < 0 || static_cast<std::size_t>(index) >= values.size()) {
       throw std::out_of_range("translation array index is out of range");

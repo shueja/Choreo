@@ -75,6 +75,11 @@ if(TARGET wpiutil AND NOT TARGET wpiutil::wpiutil)
     add_library(wpiutil::wpiutil ALIAS wpiutil)
 endif()
 
+add_subdirectory(
+    "${CMAKE_CURRENT_SOURCE_DIR}/../wpilib-extras"
+    "${CMAKE_CURRENT_BINARY_DIR}/wpilib-extras"
+)
+
 set(CHAISCRIPT_COMPAT_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/chaiscript-compat/include")
 file(COPY "${CHAISCRIPT_INCLUDE_DIR}/chaiscript" DESTINATION "${CHAISCRIPT_COMPAT_INCLUDE_DIR}")
 set(CHAISCRIPT_PROXY_FUNCTIONS "${CHAISCRIPT_COMPAT_INCLUDE_DIR}/chaiscript/dispatchkit/proxy_functions.hpp")
@@ -112,13 +117,17 @@ if(MSVC AND DEFINED ENV{INCLUDE})
 endif()
 target_link_libraries(
     wpilib_expression
-    PUBLIC wpimath::wpimath units::units
+    PUBLIC wpimath::wpimath units::units wpi::extras
 )
 set_target_properties(wpilib_expression PROPERTIES EXPORT_NAME expression)
 
 option(WPILIB_EXPRESSION_BUILD_TESTS "Build expression library tests" ON)
 if(WPILIB_EXPRESSION_BUILD_TESTS)
     enable_testing()
+    add_executable(wpilib_extras_test ../wpilib-extras/tests/Polygon2dTest.cpp)
+    target_link_libraries(wpilib_extras_test PRIVATE wpi::extras)
+    add_test(NAME wpilib_extras.Polygon2d COMMAND wpilib_extras_test)
+
     add_executable(wpilib_expression_test tests/expression_test.cpp)
     target_link_libraries(wpilib_expression_test PRIVATE wpilib::expression)
     foreach(test_case IN ITEMS

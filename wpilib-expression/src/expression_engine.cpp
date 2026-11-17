@@ -24,7 +24,7 @@ void ValidateVariableName(std::string_view name, bool allowReservedName) {
     }
   }
   static const std::set<std::string> reservedNames{
-      "quantity", "Pose2d", "Translation2d", "Rotation2d", "Transform2d", "Twist2d",
+      "quantity", "Pose2d", "Translation2d", "Polygon2d", "Rotation2d", "Transform2d", "Twist2d",
       "Rectangle2d", "Ellipse2d", "EllipseFocalPoints",
       "abs", "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "cbrt", "ceil",
       "copysign", "cos", "cosh", "erf", "erfc", "exp", "exp2", "expm1", "fabs", "fdim",
@@ -57,8 +57,8 @@ DeclaredType GetDeclaredType(const VariableValue& value) {
       return {VariableType::Pose2d, units::precise::one};
     } else if constexpr (std::is_same_v<Value, Translation2d>) {
       return {VariableType::Translation2d, units::precise::one};
-    } else if constexpr (std::is_same_v<Value, Translation2dArray>) {
-      return {VariableType::Translation2dArray, units::precise::one};
+    } else if constexpr (std::is_same_v<Value, Polygon2d>) {
+      return {VariableType::Polygon2d, units::precise::one};
     } else if constexpr (std::is_same_v<Value, Rotation2d>) {
       return {VariableType::Rotation2d, units::precise::one};
     } else if constexpr (std::is_same_v<Value, Transform2d>) {

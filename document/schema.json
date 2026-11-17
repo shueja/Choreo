@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "choreo-document-schema",
+  "$id": "https://choreo.dev/schemas/schema.json",
   "title": "Choreo Document Schema",
   "description": "Root schema hub exposing the project, trajectory, and progress schemas so generators can materialize the full type set.",
   "$defs": {
@@ -24,27 +24,39 @@
     "PolygonExpr": { "$ref": "./shared.schema.json#/$defs/PolygonExpr" },
     "CircleExpr": { "$ref": "./shared.schema.json#/$defs/CircleExpr" },
     "GeometryExpr": { "$ref": "./shared.schema.json#/$defs/GeometryExpr" },
-    "Translation2e": { "$ref": "./shared.schema.json#/$defs/Translation2e" },
-    "Rotation2e": { "$ref": "./shared.schema.json#/$defs/Rotation2e" },
-    "Pose2e": { "$ref": "./shared.schema.json#/$defs/Pose2e" },
-    "Region2e": { "$ref": "./shared.schema.json#/$defs/Region2e" },
-    "Polygon2e": { "$ref": "./shared.schema.json#/$defs/Polygon2e" },
-    "Circle2e": { "$ref": "./shared.schema.json#/$defs/Circle2e" },
-    "Dimension": { "$ref": "./project.schema.json#/$defs/Dimension" },
+    "ScalarDimension": {
+      "$ref": "./project.schema.json#/$defs/ScalarDimension"
+    },
+    "VariableType": { "$ref": "./project.schema.json#/$defs/VariableType" },
+    "QuantityVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/QuantityVariableEntry"
+    },
+    "Pose2dVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/Pose2dVariableEntry"
+    },
+    "Translation2dVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/Translation2dVariableEntry"
+    },
+    "Polygon2dVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/Polygon2dVariableEntry"
+    },
+    "Rotation2dVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/Rotation2dVariableEntry"
+    },
+    "Transform2dVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/Transform2dVariableEntry"
+    },
+    "Twist2dVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/Twist2dVariableEntry"
+    },
+    "Rectangle2dVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/Rectangle2dVariableEntry"
+    },
+    "Ellipse2dVariableEntry": {
+      "$ref": "./project.schema.json#/$defs/Ellipse2dVariableEntry"
+    },
     "ExpressionVariableEntry": {
       "$ref": "./project.schema.json#/$defs/ExpressionVariableEntry"
-    },
-    "TranslationVariableEntry": {
-      "$ref": "./project.schema.json#/$defs/TranslationVariableEntry"
-    },
-    "PoseVariableEntry": {
-      "$ref": "./project.schema.json#/$defs/PoseVariableEntry"
-    },
-    "RegionVariableEntry": {
-      "$ref": "./project.schema.json#/$defs/RegionVariableEntry"
-    },
-    "CircleVariableEntry": {
-      "$ref": "./project.schema.json#/$defs/CircleVariableEntry"
     },
     "Variables": { "$ref": "./project.schema.json#/$defs/Variables" },
     "MotorConfig": { "$ref": "./project.schema.json#/$defs/MotorConfig" },
@@ -73,6 +85,9 @@
     "WpiRotation2d": { "$ref": "./wpi.schema.json#/$defs/WpiRotation2d" },
     "WpiPose2d": { "$ref": "./wpi.schema.json#/$defs/WpiPose2d" },
     "WpiRectangle2d": { "$ref": "./wpi.schema.json#/$defs/WpiRectangle2d" },
+    "WpiTransform2d": { "$ref": "./wpi.schema.json#/$defs/WpiTransform2d" },
+    "WpiTwist2d": { "$ref": "./wpi.schema.json#/$defs/WpiTwist2d" },
+    "WpiEllipse2d": { "$ref": "./wpi.schema.json#/$defs/WpiEllipse2d" },
     "WpiChassisVelocities": {
       "$ref": "./wpi.schema.json#/$defs/WpiChassisVelocities"
     },

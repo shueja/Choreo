@@ -49,6 +49,38 @@
       "required": ["center", "xWidth", "yWidth"],
       "additionalProperties": false
     },
+    "WpiTransform2d": {
+      "type": "object",
+      "description": "WPILib Transform2d with translation and rotation components.",
+      "properties": {
+        "translation": { "$ref": "#/$defs/WpiTranslation2d" },
+        "rotation": { "$ref": "#/$defs/WpiRotation2d" }
+      },
+      "required": ["translation", "rotation"],
+      "additionalProperties": false
+    },
+    "WpiTwist2d": {
+      "type": "object",
+      "description": "WPILib Twist2d with linear displacement in metres and angular displacement in radians.",
+      "properties": {
+        "dx": { "type": "number" },
+        "dy": { "type": "number" },
+        "dtheta": { "type": "number" }
+      },
+      "required": ["dx", "dy", "dtheta"],
+      "additionalProperties": false
+    },
+    "WpiEllipse2d": {
+      "type": "object",
+      "description": "WPILib Ellipse2d with a center pose and positive semi-axes in metres.",
+      "properties": {
+        "center": { "$ref": "#/$defs/WpiPose2d" },
+        "xSemiAxis": { "type": "number", "exclusiveMinimum": 0 },
+        "ySemiAxis": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "required": ["center", "xSemiAxis", "ySemiAxis"],
+      "additionalProperties": false
+    },
     "WpiChassisVelocities": {
       "type": "object",
       "description": "WPILib ChassisVelocities in field coordinates.",

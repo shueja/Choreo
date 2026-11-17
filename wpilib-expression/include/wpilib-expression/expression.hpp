@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <wpi/math/geometry/Pose2d.hpp>
+#include <wpi/math/geometry/Polygon2d.hpp>
 #include <wpi/math/geometry/Rotation2d.hpp>
 #include <wpi/math/geometry/Transform2d.hpp>
 #include <wpi/math/geometry/Translation2d.hpp>
@@ -47,7 +48,7 @@ enum class VariableType {
   Quantity,
   Pose2d,
   Translation2d,
-  Translation2dArray,
+  Polygon2d,
   Rotation2d,
   Transform2d,
   Twist2d,
@@ -57,7 +58,7 @@ enum class VariableType {
 
 using VariableValue =
     std::variant<units::precise_measurement, wpi::math::Pose2d, wpi::math::Translation2d,
-                 std::vector<wpi::math::Translation2d>, wpi::math::Rotation2d,
+                 wpi::math::Polygon2d, wpi::math::Rotation2d,
                  wpi::math::Transform2d, wpi::math::Twist2d, wpi::math::Rectangle2d,
                  wpi::math::Ellipse2d>;
 
@@ -66,6 +67,8 @@ struct VariableDefinition {
   std::string namespacePath;
   std::string name;
   std::string expression;
+  std::optional<VariableType> expectedType;
+  std::optional<units::precise_unit> expectedDimension;
 };
 
 struct VariableInfo {
@@ -91,7 +94,7 @@ class EvaluationContext {
   void SetVariable(std::string name, units::precise_measurement value);
   void SetVariable(std::string name, wpi::math::Pose2d value);
   void SetVariable(std::string name, wpi::math::Translation2d value);
-  void SetVariable(std::string name, std::vector<wpi::math::Translation2d> value);
+  void SetVariable(std::string name, wpi::math::Polygon2d value);
   void SetVariable(std::string name, wpi::math::Rotation2d value);
   void SetVariable(std::string name, wpi::math::Transform2d value);
   void SetVariable(std::string name, wpi::math::Twist2d value);

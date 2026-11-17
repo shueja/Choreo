@@ -181,8 +181,10 @@ void CollectVariableInfo(const detail::Variables& variables, const std::string& 
     VariableInfo info;
     info.definition = {record.id, namespacePath, name, record.expression};
     info.type = static_cast<VariableType>(record.declaredType->type);
+    info.definition.expectedType = info.type;
     if (record.declaredType->type == detail::VariableType::Quantity) {
       info.dimension = record.declaredType->dimension;
+      info.definition.expectedDimension = info.dimension;
     }
     std::visit(
         [&](const auto& value) {
@@ -352,23 +354,23 @@ detail::VariableValue UnboxVariableValue(chaiscript::ChaiScript& engine,
   if (type.bare_equal(chaiscript::user_type<Translation2d>())) {
     return chaiscript::boxed_cast<Translation2d>(value);
   }
-  if (type.bare_equal(chaiscript::user_type<detail::Translation2dArray>())) {
-    return chaiscript::boxed_cast<detail::Translation2dArray>(value);
+  if (type.bare_equal(chaiscript::user_type<detail::Polygon2d>())) {
+    return chaiscript::boxed_cast<detail::Polygon2d>(value);
   }
   if (type.bare_equal(chaiscript::user_type<std::vector<chaiscript::Boxed_Value>>())) {
-    detail::Translation2dArray translations;
+    std::vector<Translation2d> vertices;
     const auto& values =
         chaiscript::boxed_cast<const std::vector<chaiscript::Boxed_Value>&>(value);
-    translations.reserve(values.size());
+    vertices.reserve(values.size());
     for (const auto& item : values) {
       try {
-        translations.push_back(chaiscript::boxed_cast<Translation2d>(item));
+        vertices.push_back(chaiscript::boxed_cast<Translation2d>(item));
       } catch (const chaiscript::exception::bad_boxed_cast&) {
-        throw std::invalid_argument("translation arrays may contain only Translation2d values: " +
+        throw std::invalid_argument("polygon vertices must be Translation2d values: " +
                                     std::string(name));
       }
     }
-    return translations;
+    return detail::Polygon2d{std::move(vertices)};
   }
   if (type.bare_equal(chaiscript::user_type<Rotation2d>())) {
     return chaiscript::boxed_cast<Rotation2d>(value);
@@ -426,7 +428,7 @@ void ValidateExpression(const chaiscript::AST_Node& node,
       "Distance", "Norm", "Radians", "Degrees", "Cos", "Sin", "Tan", "Inverse", "Log",
       "dx", "dy", "dtheta", "Exp", "Center", "XWidth", "YWidth", "XSemiAxis", "YSemiAxis",
       "FocalPoints", "Intersects", "Contains", "Nearest", "RotateAround", "SquaredDistance",
-      "SquaredNorm", "Dot", "Cross", "Angle"};
+      "SquaredNorm", "Dot", "Cross", "Angle", "Size"};
   static const std::set<std::string_view> safeOperators{
       "+", "-", "*", "/", "^", "==", "!=", "<", "<=", ">", ">=", "!"};
   using Type = chaiscript::AST_Node_Type;
@@ -1031,17 +1033,17 @@ void EvaluationContext::SetSetupScriptImpl(std::string_view source,
     } else if (type.bare_equal(chaiscript::user_type<Translation2d>())) {
       save(chaiscript::boxed_cast<Translation2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<std::vector<chaiscript::Boxed_Value>>())) {
-      detail::Translation2dArray translations;
+      std::vector<Translation2d> vertices;
       const auto& values = chaiscript::boxed_cast<const std::vector<chaiscript::Boxed_Value>&>(value);
-      translations.reserve(values.size());
+      vertices.reserve(values.size());
       for (const auto& item : values) {
         try {
-          translations.push_back(chaiscript::boxed_cast<Translation2d>(item));
+          vertices.push_back(chaiscript::boxed_cast<Translation2d>(item));
         } catch (const chaiscript::exception::bad_boxed_cast&) {
-          throw std::invalid_argument("setup arrays must contain only Translation2d values: " + name);
+          throw std::invalid_argument("setup polygon vertices must be Translation2d values: " + name);
         }
       }
-      save(std::move(translations));
+      save(detail::Polygon2d{std::move(vertices)});
     } else if (type.bare_equal(chaiscript::user_type<Rotation2d>())) {
       save(chaiscript::boxed_cast<Rotation2d>(value));
     } else if (type.bare_equal(chaiscript::user_type<Transform2d>())) {
@@ -1204,6 +1206,27 @@ void EvaluationContext::SetVariables(std::vector<VariableDefinition> definitions
       throw SyntaxError(error);
     }
     auto value = UnboxVariableValue(evaluator, boxed, qualifiedName);
+    const auto actualType = detail::GetDeclaredType(value);
+    if (definition.expectedType) {
+      const auto expectedType = static_cast<detail::VariableType>(*definition.expectedType);
+      if (expectedType != actualType.type) {
+        throw std::invalid_argument("variable type does not match its persisted declaration: " +
+                                    qualifiedName);
+      }
+      if (expectedType == detail::VariableType::Quantity) {
+        if (!definition.expectedDimension ||
+            definition.expectedDimension->base_units() != actualType.dimension.base_units()) {
+          throw std::invalid_argument(
+              "variable dimension does not match its persisted declaration: " + qualifiedName);
+        }
+      } else if (definition.expectedDimension) {
+        throw std::invalid_argument("geometry variable cannot declare a scalar dimension: " +
+                                    qualifiedName);
+      }
+    } else if (definition.expectedDimension) {
+      throw std::invalid_argument("variable dimension requires a declared quantity type: " +
+                                  qualifiedName);
+    }
     const auto* previous = FindVariableById(oldVariables, definition.id);
     detail::Variables* destination = &replacement->variables;
     if (!definition.namespacePath.empty()) {
@@ -1306,7 +1329,7 @@ void EvaluationContext::SetVariable(std::string name, Translation2d value) {
 }
 
 void EvaluationContext::SetVariable(
-    std::string name, std::vector<Translation2d> value) {
+    std::string name, wpi::math::Polygon2d value) {
   auto& variables = MutableImpl().variables;
   auto existing = variables.find(name);
   detail::StoreVariable(variables, std::move(name), std::move(value),

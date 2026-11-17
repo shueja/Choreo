@@ -12,7 +12,7 @@
           "description": "Stable UUID for this waypoint."
         },
         "pose": {
-          "$ref": "./shared.schema.json#/$defs/Pose2e",
+          "$ref": "./shared.schema.json#/$defs/PoseExpr",
           "description": "Position and heading (m, rad)"
         },
         "intervals": {

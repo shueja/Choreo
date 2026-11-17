@@ -17,7 +17,7 @@
 #include <wpi/math/shape/Ellipse2d.hpp>
 #include <wpi/math/shape/Rectangle2d.hpp>
 
-#include "wpilib-expression/quantity.hpp"
+#include "wpilib-expression/expression.hpp"
 
 namespace wpilib::expression::detail {
 
@@ -30,15 +30,15 @@ using Rectangle2d = wpi::math::Rectangle2d;
 using Ellipse2d = wpi::math::Ellipse2d;
 struct NamespaceValues;
 using NamespacePtr = std::shared_ptr<const NamespaceValues>;
-using Translation2dArray = std::vector<Translation2d>;
+using Polygon2d = wpi::math::Polygon2d;
 using VariableValue = std::variant<units::precise_measurement, Pose2d, Translation2d,
-                                   Translation2dArray, Rotation2d, Transform2d, Twist2d,
+                                   Polygon2d, Rotation2d, Transform2d, Twist2d,
                                    Rectangle2d, Ellipse2d, NamespacePtr>;
 enum class VariableType {
   Quantity,
   Pose2d,
   Translation2d,
-  Translation2dArray,
+  Polygon2d,
   Rotation2d,
   Transform2d,
   Twist2d,
@@ -51,6 +51,8 @@ struct DeclaredType {
   VariableType type;
   units::precise_unit dimension;
 };
+
+DeclaredType GetDeclaredType(const VariableValue& value);
 
 struct VariableRecord {
   VariableValue value;

@@ -24,8 +24,10 @@ using wpilib::expression::ErrorMessage;
 using wpilib::expression::From;
 using wpilib::expression::In;
 using wpilib::expression::TryAs;
+using wpilib::expression::VariableType;
 using wpilib::expression::VariableDefinition;
 using wpi::math::Pose2d;
+using wpi::math::Polygon2d;
 
 namespace {
 
@@ -190,15 +192,21 @@ int TestSetup() {
     return 1;
   }
 
-  scriptSetup.SetSetupScript("// 2 unknown_units\nvar base = 2 m; /* 3 unknown_units */ "
-               "var offset = 3 ft; var total = base + offset; "
-                       "var pose = Pose2d(3 m, 4 m, 90 deg); var gain = 2; "
-                       "var heading = pose.Rotation().Degrees(); var targetX = pose.X(); "
-                       "global shared = 4 m; const var extra = 1 m; auto combined = total + extra; "
-                       "var target_points = [Translation2d(0 m, 0 m), Translation2d(3 m, 4 m)]; "
-                       "var magnitude = abs(-2 m); var shorter = min(3 m, 2 m); "
-                       "var longer = max(3 m, 2 m); var root = sqrt(9 m^2);");
-  setup.SetVariables({
+  try {
+    scriptSetup.SetSetupScript("// 2 unknown_units\nvar base = 2 m; /* 3 unknown_units */ "
+                 "var offset = 3 ft; var total = base + offset; "
+                         "var pose = Pose2d(3 m, 4 m, 90 deg); var gain = 2; "
+                         "var heading = pose.Rotation().Degrees(); var targetX = pose.X(); "
+                         "global shared = 4 m; const var extra = 1 m; auto combined = total + extra; "
+                         "var target_points = [Translation2d(0 m, 0 m), Translation2d(3 m, 4 m)]; "
+                         "var magnitude = abs(-2 m); var shorter = min(3 m, 2 m); "
+                         "var longer = max(3 m, 2 m); var root = sqrt(9 m^2);");
+  } catch (const std::exception& error) {
+    std::println(stderr, "setup script load failed: {}", error.what());
+    return 1;
+  }
+  try {
+    setup.SetVariables({
       Variable("base-id", "", "base", "2 m"),
       Variable("offset-id", "", "offset", "3 ft"),
       Variable("total-id", "", "total", "base + offset"),
@@ -215,31 +223,66 @@ int TestSetup() {
            "Translation2d(1 m, 1 m)]"),
       Variable("box-id", "field.points", "box",
            "Rectangle2d(field.points.origin, 2 m, 2 m)"),
-  });
-  if (!EvaluatesTo(setup, "base + offset", 2.9144, "m") ||
-      !EvaluatesTo(setup, "total", 2.9144, "m") ||
-      !EvaluatesTo(setup, "pose.X()", 3.0, "m") ||
-      !EvaluatesTo(setup, "pose.Rotation().Degrees()", 90.0, "deg") ||
-      !EvaluatesTo(setup, "pose.Rotation().Degrees() / deg", 90.0, "") ||
-      !EvaluatesTo(setup, "heading", 90.0, "deg") ||
-      !EvaluatesTo(setup, "targetX", 3.0, "m") ||
-      !EvaluatesTo(setup, "gain", 2.0, "") ||
-      !EvaluatesTo(setup, "shared", 4.0, "m") ||
-      !EvaluatesTo(setup, "combined", 3.9144, "m") ||
-      !EvaluatesTo(setup, "field.points.center_box[0].Y()", -1.0, "m") ||
-      !EvaluatesTo(setup, "field.points.box.XWidth()", 2.0, "m")) {
-    std::println(stderr, "setup script returned incorrect variables");
+    });
+  } catch (const std::exception& error) {
+    std::println(stderr, "variable load failed: {}", error.what());
     return 1;
   }
-  if (!EvaluatesTo(scriptSetup, "base + offset", 2.9144, "m") ||
-      !EvaluatesTo(scriptSetup, "target_points[1].Y()", 4.0, "m") ||
-      !EvaluatesTo(scriptSetup,
-                   "Translation2d(2 m, 4 m).Nearest(target_points).X()", 3.0, "m") ||
-      !EvaluatesTo(scriptSetup, "magnitude", 2.0, "m") ||
-      !EvaluatesTo(scriptSetup, "shorter", 2.0, "m") ||
-      !EvaluatesTo(scriptSetup, "longer", 3.0, "m") ||
-      !EvaluatesTo(scriptSetup, "root", 3.0, "m")) {
-    std::println(stderr, "setup script returned incorrect variables");
+  auto setupVariables = setup.GetVariables();
+  auto polygon = std::find_if(setupVariables.begin(), setupVariables.end(), [](const auto& value) {
+    return value.definition.id == "center-box-id";
+  });
+  if (polygon == setupVariables.end() || polygon->type != VariableType::Polygon2d ||
+      !std::holds_alternative<Polygon2d>(polygon->value) ||
+      std::get<Polygon2d>(polygon->value).Size() != 3) {
+    std::println(stderr, "translation vertex list was not exposed as Polygon2d");
+    return 1;
+  }
+  auto checkSetupExpression = [&](std::string_view expression, double expected,
+                                  std::string_view unit) {
+    try {
+      return EvaluatesTo(setup, expression, expected, unit);
+    } catch (const std::exception& error) {
+      std::println(stderr, "setup expression '{}' threw: {}", expression, error.what());
+      throw;
+    }
+  };
+  try {
+    if (!checkSetupExpression("base + offset", 2.9144, "m") ||
+        !checkSetupExpression("total", 2.9144, "m") ||
+        !checkSetupExpression("pose.X()", 3.0, "m") ||
+        !checkSetupExpression("pose.Rotation().Degrees()", 90.0, "deg") ||
+        !checkSetupExpression("pose.Rotation().Degrees() / deg", 90.0, "") ||
+        !checkSetupExpression("heading", 90.0, "deg") ||
+        !checkSetupExpression("targetX", 3.0, "m") ||
+        !checkSetupExpression("gain", 2.0, "") ||
+        !checkSetupExpression("shared", 4.0, "m") ||
+        !checkSetupExpression("combined", 3.9144, "m") ||
+        !checkSetupExpression("field.points.center_box[0].Y()", -1.0, "m") ||
+        !checkSetupExpression("field.points.center_box.Size()", 3.0, "") ||
+        !checkSetupExpression("field.points.center_box.Nearest(Translation2d(3 m, 1 m)).X()", 1.0, "m") ||
+        !checkSetupExpression("field.points.box.XWidth()", 2.0, "m")) {
+      std::println(stderr, "setup script returned incorrect variables");
+      return 1;
+    }
+  } catch (const std::exception& error) {
+    std::println(stderr, "setup expression evaluation threw: {}", error.what());
+    return 1;
+  }
+  try {
+    if (!EvaluatesTo(scriptSetup, "base + offset", 2.9144, "m") ||
+        !EvaluatesTo(scriptSetup, "target_points[1].Y()", 4.0, "m") ||
+        !EvaluatesTo(scriptSetup,
+                     "Translation2d(2 m, 4 m).Nearest(target_points).X()", 3.0, "m") ||
+        !EvaluatesTo(scriptSetup, "magnitude", 2.0, "m") ||
+        !EvaluatesTo(scriptSetup, "shorter", 2.0, "m") ||
+        !EvaluatesTo(scriptSetup, "longer", 3.0, "m") ||
+        !EvaluatesTo(scriptSetup, "root", 3.0, "m")) {
+      std::println(stderr, "setup script returned incorrect variables");
+      return 1;
+    }
+  } catch (const std::exception& error) {
+    std::println(stderr, "setup script expression evaluation threw: {}", error.what());
     return 1;
   }
   bool setupFailureRejected = false;
@@ -586,6 +629,56 @@ int TestVariableReferencesAndRename() {
   }
   if (!typeChangeRejected || !EvaluatesTo(context, "result", 9.0, "m")) {
     std::println(stderr, "incompatible dependency update corrupted cached values");
+    return 1;
+  }
+
+  EvaluationContext restored;
+  restored.SetVariables(Definitions(context));
+  auto restoredVariables = restored.GetVariables();
+  auto restoredDistance = std::find_if(
+      restoredVariables.begin(), restoredVariables.end(), [](const auto& variable) {
+        return variable.definition.id == "distance-id";
+      });
+  if (restoredDistance == restoredVariables.end() ||
+      restoredDistance->definition.expectedType != VariableType::Quantity ||
+      !restoredDistance->definition.expectedDimension ||
+      restoredDistance->definition.expectedDimension->base_units() !=
+          units::precise::m.base_units()) {
+    std::println(stderr, "restored variable did not preserve its declared scalar dimension");
+    return 1;
+  }
+  bool restoredDimensionChangeRejected = false;
+  try {
+    changed = Definitions(restored);
+    for (auto& definition : changed) {
+      if (definition.id == "distance-id") {
+        definition.expression = "3 s";
+      }
+    }
+    restored.SetVariables(std::move(changed));
+  } catch (const std::invalid_argument&) {
+    restoredDimensionChangeRejected = true;
+  }
+  if (!restoredDimensionChangeRejected || !EvaluatesTo(restored, "result", 9.0, "m")) {
+    std::println(stderr, "persisted scalar dimension was not enforced after reload");
+    return 1;
+  }
+
+  EvaluationContext geometry;
+  geometry.SetVariables({Variable("pose-id", "", "pose", "Pose2d(1 m, 2 m, 0 deg)")});
+  EvaluationContext restoredGeometry;
+  restoredGeometry.SetVariables(Definitions(geometry));
+  bool restoredGeometryTypeChangeRejected = false;
+  try {
+    auto geometryDefinitions = Definitions(restoredGeometry);
+    geometryDefinitions.front().expression = "Translation2d(1 m, 2 m)";
+    restoredGeometry.SetVariables(std::move(geometryDefinitions));
+  } catch (const std::invalid_argument&) {
+    restoredGeometryTypeChangeRejected = true;
+  }
+  if (!restoredGeometryTypeChangeRejected ||
+      std::abs(restoredGeometry.EvaluatePose2d("pose").X().value() - 1.0) > 1e-10) {
+    std::println(stderr, "persisted geometry type was not enforced after reload");
     return 1;
   }
   return 0;
@@ -1100,9 +1193,9 @@ int TestGeometryOperations() {
   auto otherTranslation = context.EvaluateTranslation2d("Translation2d(0 m, 0 m)");
   context.SetVariable("translation", translation);
   context.SetVariable("other", otherTranslation);
-    context.SetVariable("target_points", std::vector<wpi::math::Translation2d>{
+      context.SetVariable("target_points", Polygon2d{std::vector<wpi::math::Translation2d>{
       wpi::math::Translation2d{wpi::units::meter_t{0.0}, wpi::units::meter_t{0.0}},
-      wpi::math::Translation2d{wpi::units::meter_t{3.0}, wpi::units::meter_t{4.0}}});
+        wpi::math::Translation2d{wpi::units::meter_t{3.0}, wpi::units::meter_t{4.0}}}});
   if (!EvaluatesTo(context, "translation.Distance(other)", 5.0, "m") ||
       !EvaluatesTo(context, "translation.Norm()", 5.0, "m") ||
       !EvaluatesTo(context, "translation.Y()", 4.0, "m") ||
