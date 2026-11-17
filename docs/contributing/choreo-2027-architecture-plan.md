@@ -161,6 +161,48 @@ before implementation.
   covers Windows x86_64/ARM64, macOS x86_64/ARM64, and Linux x86_64/ARM64.
   Linux ARM32 is not listed in this matrix.
 
+## Expression runtime and build integration research
+
+- The expression engine deliberately disables ChaiScript module loading,
+  external scripts, and I/O. It validates setup and evaluation ASTs against
+  restricted forms: project expressions are single read-only expressions,
+  while setup accepts initialized variable declarations. These restrictions
+  reduce the attack surface but do not constitute a resource budget.
+- `wpilib-expression` documents that evaluation is not resource-limited. Its
+  public `EvaluationContext` API has no deadline or cancellation parameter.
+  Evaluation is synchronous: `EvaluateResult` expands, parses, validates, and
+  evaluates the input while holding the engine-cache mutex
+  (`wpilib-expression/src/expression.cpp`, `EvaluateResult`). Copies of a
+  context share that cache, so concurrent evaluations through copies serialize.
+- The pinned ChaiScript revision has parser nesting and function-call depth
+  guards (defaults 512 and 256, respectively), but no time-based or
+  cooperative interruption mechanism. These fixed recursion guards are not a
+  substitute for bounding input size or total work. Reject oversized requests
+  before expansion/parsing; investigate limits on expression bytes, setup
+  variable count, and AST size/depth. If hard execution deadlines are needed,
+  investigate process isolation or an interruptible evaluator rather than
+  assuming a caller-side timeout will stop synchronous evaluation.
+  - [ChaiScript parser depth guard, pinned revision](https://github.com/ChaiScript/ChaiScript/blob/f635b51e3f8e95868210edfc66fdbd8e475710f5/include/chaiscript/language/chaiscript_parser.hpp#L88-L104)
+  - [ChaiScript call-depth guard, pinned revision](https://github.com/ChaiScript/ChaiScript/blob/f635b51e3f8e95868210edfc66fdbd8e475710f5/include/chaiscript/chaiscript_defines.hpp#L76-L110)
+- `wpilib-expression` directly links `wpimath`, LLNL units, and `wpi::extras`;
+  its project CMake currently forces `WPILIB_WITH_NTCORE=ON`. In the pinned
+  allwpilib CMake configuration, `WPILIB_WITH_WPIMATH` and
+  `WPILIB_WITH_NTCORE` are independent options. Disabling NTCore skips the
+  NTCore/wpinet, datalog, and libuv dependency path while retaining WPIMath.
+  This is a static CMake dependency-graph finding, not a verified configure or
+  build result. If the server chooses `wpinet` for transport, that transport
+  choice may require enabling the NTCore/wpinet build path; measure it
+  separately from the expression library's needs.
+  - [allwpilib feature options and dependency gates, pinned revision](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/CMakeLists.txt#L91-L95)
+  - [allwpilib NTCore and WPIMath subdirectory gates, pinned revision](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/CMakeLists.txt#L312-L327)
+  - [WPIMath target dependencies, pinned revision](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/wpimath/CMakeLists.txt#L71-L111)
+- The repository has a separate `wpilib-expression` workflow that configures,
+  builds, and tests the library on Ubuntu, plus a setup-replacement benchmark.
+  The main Choreo workflow covers six desktop/ARM64 targets but currently
+  builds Cargo/Tauri rather than a C++ application server. A new server will
+  need explicit CMake build, test, and packaging coverage across its supported
+  targets.
+
 ## Packaging research
 
 - Build the C++ localhost server as a first-class CMake executable, separate
@@ -183,16 +225,16 @@ before implementation.
 
 ## Open research questions
 
-- Can the existing WPILib CMake build expose `wpinet` without building an
-  unnecessary set of NTCore dependencies, and what are the resulting bundle
-  sizes and platform-specific packaging requirements?
+- Can `wpilib-expression` build and pass tests with `WPILIB_WITH_NTCORE=OFF`?
+  If the server selects `wpinet`, what extra build dependencies, compile time,
+  and packaged runtime size does enabling NTCore/wpinet add?
 - What should the standalone server's port-selection and browser-startup
   handshake be, especially when using an OS-assigned ephemeral port?
 - How should the webview launcher discover the server URL and coordinate
   startup/shutdown without becoming a second application backend?
-- What input and execution bounds, if any, should be added around
-  `wpilib-expression` before it evaluates server-provided expressions, given
-  that its documented evaluation is not resource-limited?
+- What request-size, setup-count, and expression-complexity bounds should the
+  server enforce before invoking `wpilib-expression`? Is a hard evaluation
+  deadline required, given the synchronous API has no cancellation hook?
 - What write-through and atomic-replacement guarantees can be provided
   consistently on Windows, macOS, and Linux?
 - What API reconnection behavior is sufficient for the single-user UI without
@@ -209,17 +251,19 @@ before implementation.
 
 ## Suggested research order
 
-1. Prototype a minimal CMake server target and measure the `wpinet`
-   build/package footprint on representative Windows, macOS, and Linux targets;
-   compare cpp-httplib only if integration cost warrants it.
+1. Verify a WPIMath-only `wpilib-expression` CMake configure/build with
+   `WPILIB_WITH_NTCORE=OFF`; separately prototype the server transport and
+   measure `wpinet` build/package footprint on representative Windows, macOS,
+   and Linux targets. Compare cpp-httplib only if integration cost warrants it.
 2. Define the server startup/readiness/port handoff and webview process-lifecycle
    contract; verify the standalone browser path uses the same server binary.
 3. Add a dedicated server build/test/package path to CI for all retained
    targets, then verify the release artifact matrix.
 4. Specify generic request, event, revision, rejection, and reconnect behavior
    without document-specific payloads.
-5. Define and test expression input/execution limits and diagnostics around
-   the required `wpilib-expression` integration.
+5. Define and test expression request-size, setup-count, and complexity
+   limits and diagnostics around the required `wpilib-expression` integration;
+   decide whether hard execution deadlines are necessary.
 6. Define write-through failure and safe replacement behavior once the new
    format's storage contract is available.
 7. Integrate the user's project-parameter TrajoptLib wrapper only after its
