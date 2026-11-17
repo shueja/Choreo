@@ -28,6 +28,8 @@ items as local project-format work becomes available.
 - The new C++ server must use `wpilib-expression`; the new project format is
   designed around it. Treat the expression library as a production server
   dependency, not an optional candidate.
+- Complexity limits are sufficient for expression evaluation; a hard
+  evaluation timeout is not required.
 - Preserve the current platform support matrix except Linux ARM32.
 - Prefer WPILib tooling and avoid unnecessary dependencies.
 
@@ -184,14 +186,16 @@ before implementation.
   evaluates the input while holding the engine-cache mutex
   (`wpilib-expression/src/expression.cpp`, `EvaluateResult`). Copies of a
   context share that cache, so concurrent evaluations through copies serialize.
+- The architecture decision is to use input and expression-complexity limits;
+  no hard evaluation timeout or process isolation is required. Establish
+  concrete bounds before calling the library, including the input bytes
+  permitted before expansion, setup-variable count, and parsed AST complexity.
 - The pinned ChaiScript revision has parser nesting and function-call depth
   guards (defaults 512 and 256, respectively), but no time-based or
   cooperative interruption mechanism. These fixed recursion guards are not a
-  substitute for bounding input size or total work. Reject oversized requests
-  before expansion/parsing; investigate limits on expression bytes, setup
-  variable count, and AST size/depth. If hard execution deadlines are needed,
-  investigate process isolation or an interruptible evaluator rather than
-  assuming a caller-side timeout will stop synchronous evaluation.
+  substitute for the selected application-level bounds. Reject oversized
+  requests before expansion/parsing and keep complexity limits below the
+  library's internal recursion caps where practical.
   - [ChaiScript parser depth guard, pinned revision](https://github.com/ChaiScript/ChaiScript/blob/f635b51e3f8e95868210edfc66fdbd8e475710f5/include/chaiscript/language/chaiscript_parser.hpp#L88-L104)
   - [ChaiScript call-depth guard, pinned revision](https://github.com/ChaiScript/ChaiScript/blob/f635b51e3f8e95868210edfc66fdbd8e475710f5/include/chaiscript/chaiscript_defines.hpp#L76-L110)
 - `wpilib-expression` directly links `wpimath`, LLNL units, and `wpi::extras`;
@@ -242,9 +246,9 @@ before implementation.
   handshake be, especially when using an OS-assigned ephemeral port?
 - How should the webview launcher discover the server URL and coordinate
   startup/shutdown without becoming a second application backend?
-- What request-size, setup-count, and expression-complexity bounds should the
-  server enforce before invoking `wpilib-expression`? Is a hard evaluation
-  deadline required, given the synchronous API has no cancellation hook?
+- What concrete request-size, setup-count, and expression-complexity bounds
+  should the server enforce before invoking `wpilib-expression`? A hard
+  evaluation timeout is not required.
 - What write-through and atomic-replacement guarantees can be provided
   consistently on Windows, macOS, and Linux?
 - What API reconnection behavior is sufficient for the single-user UI without
@@ -272,8 +276,7 @@ before implementation.
 4. Specify generic request, event, revision, rejection, and reconnect behavior
    without document-specific payloads.
 5. Define and test expression request-size, setup-count, and complexity
-   limits and diagnostics around the required `wpilib-expression` integration;
-   decide whether hard execution deadlines are necessary.
+   limits and diagnostics around the required `wpilib-expression` integration.
 6. Define write-through failure and safe replacement behavior once the new
    format's storage contract is available.
 7. Integrate the user's project-parameter TrajoptLib wrapper only after its
