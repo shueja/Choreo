@@ -109,6 +109,43 @@ one library or executable per item.
   transport/application boundary so future transport changes do not require
   rewriting document behavior.
 
+### Protocol research follow-ups
+
+The protocol is greenfield in this repository; no existing request IDs,
+document revisions, or event sequence numbers were found. Practical design
+constraints to carry into its specification:
+
+- Give every command a client request ID and echo it in its REST response.
+  Distinguish a request-specific success/error acknowledgment from the
+  committed-state event. The response and WebSocket event use separate
+  connections and can be observed in either order; apply document state from
+  the revisioned event/snapshot stream, not twice from both response and
+  event.
+- Include the client's base revision on mutations and reject stale commands
+  rather than silently applying them to a newer document. Use this mainly to
+  catch client ordering bugs in this single-user app. Define how undo/redo
+  validates the current revision too.
+- A lost REST response creates an ambiguous outcome. Use request IDs for
+  correlation and make retries safe: prefer naturally idempotent replace/set
+  operations; if non-idempotent commands are retried, deduplicate their IDs
+  and retain the result for at least the retry window. A volatile cache alone
+  does not cover a server crash after a durable commit but before the response;
+  either make those operations reconcilable after reconnect or persist
+  deduplication state atomically with the mutation.
+- WebSocket frames are ordered within one live connection, but the protocol
+  does not provide application-level acknowledgments or resume missed
+  messages after reconnect. Revision/previous-revision fields are still
+  needed to detect a gap across reconnects and to correlate mutation events.
+  Bound the reconnect event buffer; if it overflows or the snapshot revision
+  cannot be bridged, discard it and fetch a fresh snapshot.
+- Standards sources for verification: [RFC 9110 idempotent methods and
+  conditional requests](https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2),
+  [JSON-RPC 2.0 request/response correlation](https://www.jsonrpc.org/specification),
+  [RFC 6455 WebSocket protocol](https://www.rfc-editor.org/rfc/rfc6455), and
+  [CloudEvents event attributes](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md).
+  External source access was blocked in this research environment, so these
+  links and standards interpretations were not independently fetched here.
+
 ## Transport research
 
 **Current recommendation: use WPILib `wpinet` as the first implementation
@@ -269,6 +306,13 @@ browser and OWASP guidance before implementation.
 - `/home/runner/work/Choreo/Choreo/src-tauri/src/api.rs` exposes business
   operations through Tauri commands; the UI calls them through
   `/home/runner/work/Choreo/Choreo/src/document/tauriCommands.ts`.
+- The existing command adapter groups operations that will need explicit
+  replacements when the UI moves to HTTP/WebSockets: project/trajectory
+  lifecycle, generation and cancellation, progress, expression/interval
+  queries, code generation, field/project selection, diagnostics, and
+  platform actions such as opening an explorer. The latter currently depend
+  on Tauri dialog or OS APIs; a browser-mode design cannot assume those
+  desktop-only capabilities.
 - `/home/runner/work/Choreo/Choreo/src/document/DocumentModel.tsx` keeps the
   editable document in a MobX-State-Tree model and attaches undo/redo there.
 - `/home/runner/work/Choreo/Choreo/src/document/ExpressionStore.tsx` uses
@@ -296,6 +340,21 @@ browser and OWASP guidance before implementation.
   include `tauri-plugin-shell`. Treat the existing setup as a packaging
   example only; the future launcher still needs explicit child ownership,
   readiness/stdout handling, shutdown, and exit/error behavior.
+- Tauri 2.9.5 core does not itself expose a shell-spawn API. A future Rust
+  launcher can own a known server executable with `std::process::Command`;
+  alternatively, the official shell plugin provides sidecar helpers, but
+  JavaScript-triggered execution is capability-scoped and should not become
+  a general business API. The plugin's kill path is forceful, not graceful;
+  design a server shutdown protocol (for example, a private stdin control
+  channel) and explicitly reap the child on app exit before falling back to
+  termination. Default child termination does not clean up grandchildren;
+  avoid server-spawned helpers or deliberately manage process groups/job
+  objects.
+- The shell plugin's source inspected for this research was the rolling Tauri
+  v2 branch, not a version pinned by Choreo. Its exact behavior and packaging
+  paths must be checked against the plugin version selected for the launcher.
+  Tauri core's origin and initialization-script behavior is pinned to 2.9.5;
+  this does not verify end-to-end startup or shutdown behavior in Choreo.
 - `/home/runner/work/Choreo/Choreo/.github/workflows/choreo.yml` currently
   covers Windows x86_64/ARM64, macOS x86_64/ARM64, and Linux x86_64/ARM64.
   Linux ARM32 is not listed in this matrix.
@@ -304,6 +363,15 @@ browser and OWASP guidance before implementation.
   and packages standalone ZIP, AppImage, deb, and rpm artifacts. This verifies
   the current app pipeline only; the future C++ server still needs its own
   build, test, and packaging coverage.
+- C++ CI coverage is materially narrower than the six-target GUI matrix:
+  `wpilib-expression` CMake is tested only on Ubuntu x86_64; the ChoreoLib
+  Gradle workflow covers several native targets but explicitly disables
+  Windows ARM64 because of a commands-library link failure. The project does
+  not establish that the CMake/WPILib server dependency graph builds on all
+  six GUI targets, nor that its standalone binaries include every runtime
+  dependency. Existing CMake projects force static libraries, while
+  ChoreoLib's Gradle packaging uses shared WPILib libraries; neither by itself
+  proves the final server's deployment strategy or size.
 - The legacy project writer in
   `/home/runner/work/Choreo/Choreo/src-core/src/file_management/mod.rs`
   coalesces pending project updates in a single `Option<ProjectFile>` and
@@ -439,9 +507,13 @@ browser and OWASP guidance before implementation.
   the override from a server build after the server's target graph is known.
 - Does the proposed port-0/readiness-record startup contract work reliably
   with `wpinet` and Tauri on all supported platforms, including passing the
-  dynamic API URL to the statically packaged Tauri UI?
-- Can Tauri own and clean up the direct C++ child process reliably on Windows,
-  macOS, and Linux, including startup errors and forced termination?
+  dynamic API URL to the statically packaged Tauri UI? Source research confirms
+  the relevant low-level bind/address APIs but no Choreo prototype has tested
+  this path.
+- Can a Tauri launcher own and clean up the direct C++ child process reliably
+  on Windows, macOS, and Linux, including startup errors and forced
+  termination? Source research confirms there is no existing Choreo sidecar
+  lifecycle to reuse; a prototype is still required.
 - The owner does not require per-launch API tokens; no non-UI API clients are
   currently planned. Validate Host and Origin consistently, including
   WebSocket upgrades, and revisit authentication if the client scope expands.
@@ -457,8 +529,14 @@ browser and OWASP guidance before implementation.
   and Linux's custom `tauri://localhost` origin, and test the dynamic-port CSP
   candidate in packaged builds.
 - Does the new C++ server build and run across the existing six-target release
-  matrix? Linux ARM64 is currently tested natively for the legacy app, but the
-  future C++ server is not yet covered.
+  matrix? Research found no such CMake coverage today, and Windows ARM64 is
+  already disabled in the separate ChoreoLib C++ workflow; build prototypes
+  must establish feasibility. Also determine whether the final standalone
+  packages should bundle shared WPILib/runtime libraries or link statically.
+- How should the generic API represent progress/cancellation for generation
+  operations? Existing Tauri commands launch generation and stream progress
+  independently, but the new HTTP/WebSocket operation contract is not yet
+  specified.
 
 ## Suggested research order
 
@@ -469,11 +547,15 @@ browser and OWASP guidance before implementation.
 2. Prototype port-0 binding, readiness reporting, browser launch, and direct
    Tauri child-process lifecycle; verify the same server binary serves both
    modes and that Tauri can load its UI origin.
-3. Add a dedicated server build/test/package path to CI for all six retained
-   targets, then verify the release artifact matrix, including native Linux
-   ARM64.
-4. Specify generic request/event envelopes and test snapshot-based reconnect
-   behavior without document-specific payloads or durable event replay.
+3. Add a dedicated server build/test/package path to CI for the retained
+   targets, starting with the platforms supported by the C++ dependencies;
+   investigate the Windows ARM64 gap, then verify the complete release matrix
+   including native Linux ARM64.
+4. Specify generic request/event envelopes using the protocol findings above;
+   test acknowledgments, retry behavior, bounded snapshot-based reconnect,
+   revision gaps, and generation cancellation without document-specific
+   payloads or durable event replay. Confirm linked standards against live
+   primary sources before treating them as verified citations.
 5. Define and test expression request-size, setup-count, and complexity limits
    and diagnostics around the required `wpilib-expression` integration.
 6. Define write-through failure and safe replacement behavior once the new
