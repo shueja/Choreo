@@ -54,8 +54,11 @@ one library or executable per item.
    coordinates persistence and application operations, and publishes committed
    revisions and progress.
 3. **HTTP/WebSocket transport** — exposes the API, validates incoming requests,
-   and translates transport messages into application operations. Whether it
-   also serves the UI assets remains open. Keep document behavior out of this
+   and translates transport messages into application operations. Recommended
+   default: serve the production Vite assets from the C++ server as well, so
+   both launch modes use one origin and no separate static-file server is
+   needed. Verify Tauri navigation, CSP, and origin validation on supported
+   platforms before committing to this. Keep document behavior out of this
    layer.
 4. **Expression service** — integrate the existing `wpilib-expression` C++
    library as the server's expression engine. The current UI uses `mathjs`;
@@ -83,6 +86,11 @@ one library or executable per item.
   revisions or sequence numbers, structured errors, and a way to request a
   current snapshot after reconnect. Do not bind these envelopes to document
   fields until the new format work is available.
+- Recommended reconnect behavior for the single-user application: events are
+  live notifications, not a durable event log. On reconnect, fetch a complete
+  snapshot with its revision, then resume processing events newer than that
+  revision; reject or resynchronize on revision gaps. Persist no transport
+  history solely to replay events missed while the UI was disconnected.
 - Keep the server authoritative: reject invalid or stale commands instead of
   attempting last-write-wins conflict resolution.
 - The app is currently single-user/single-project, but preserve a clean
@@ -115,6 +123,13 @@ Additional `wpinet` integration findings at the pinned revision:
 - The combined `HttpWebSocketServerConnection` supports HTTP and WebSocket
   upgrades on one connection/port. The API remains low-level: request dispatch
   is custom path parsing rather than a declarative router.
+- Recommended default: serve the production Vite assets from the C++ server,
+  alongside REST and WebSocket routes. This keeps standalone and embedded
+  modes on one origin, avoids a second static-file server and cross-origin
+  setup, and aligns the UI lifecycle with the server process. Keep Vite's
+  development server for local frontend development. Verify Tauri can navigate
+  to the server URL with the intended CSP and origin checks before adopting
+  this in production.
 - `uv::Tcp` exposes `Bind`, `GetSock`, and `AddrToName`, so an ephemeral-port
   flow can bind port `0` and query the selected port afterward. This path was
   inferred from the API and libuv behavior, not built or tested in Choreo.
@@ -271,22 +286,38 @@ browser and OWASP guidance before implementation.
 - Existing Tauri external-binary and copy-sidecar configuration may be a useful
   packaging pattern, but the current Rust CLI sidecar does not provide server
   readiness, URL/port negotiation, shutdown, or crash-recovery behavior.
+- Recommended startup contract: bind to loopback port `0`, finish initializing,
+  then emit one machine-readable readiness record containing the selected URL.
+  In standalone mode the server opens that URL in the default browser; in
+  Tauri mode the thin launcher starts the same executable with browser opening
+  disabled, reads readiness, and navigates its webview to the URL. Keep
+  diagnostics on stderr so stdout remains a reliable control channel. Validate
+  this flow in the prototype, including startup failure and early child exit.
+- Recommended process ownership: the Tauri launcher directly owns the server
+  child process (no shell wrapper), requests graceful shutdown on app exit, and
+  force-terminates only if needed. The server should not spawn helper processes
+  that complicate Windows process cleanup. This is a proposed lifecycle, not
+  yet tested in the existing Tauri app.
 - Add explicit CMake configure/build/test/package steps to CI. The current
   Choreo workflow builds with Cargo/Tauri and packages both the GUI and CLI;
   it does not yet build a C++ application server.
-- Prefer an OS-assigned port and a readiness handshake over assuming a fixed
-  port. Decide how the process reports the selected URL and how the embedded
-  launcher coordinates startup, shutdown, and process-tree cleanup.
+- The current release pipeline provides Windows NSIS plus standalone ZIP,
+  macOS DMG plus standalone ZIP, and Linux AppImage/deb/rpm plus standalone
+  ZIP. Recommended starting point is to retain these formats, include the
+  C++ server in GUI installers and include the server with its UI assets in
+  standalone ZIPs. Confirm whether UI assets are embedded or shipped as files
+  and measure their effect on bundle size before finalizing.
 
 ## Open research questions
 
 - Can `wpilib-expression` build and pass tests with `WPILIB_WITH_NTCORE=OFF`?
   If the server selects `wpinet`, what extra build dependencies, compile time,
-  and packaged runtime size does enabling NTCore/wpinet add?
-- What should the standalone server's port-selection and browser-startup
-  handshake be, especially when using an OS-assigned ephemeral port?
-- How should the webview launcher discover the server URL and coordinate
-  startup/shutdown without becoming a second application backend?
+  and packaged runtime size does enabling NTCore/wpinet add? Static analysis
+  suggests it can; configure/build verification is still needed.
+- Does the proposed port-0/readiness-record startup contract work reliably
+  with `wpinet` and Tauri on all supported platforms?
+- Can Tauri own and clean up the direct C++ child process reliably on Windows,
+  macOS, and Linux, including startup errors and forced termination?
 - Should the recommended per-launch request token be mandatory in both browser
   and Tauri modes, and how should the launcher deliver it without exposing
   business operations through Tauri IPC? Are non-browser local API clients in
@@ -296,33 +327,31 @@ browser and OWASP guidance before implementation.
   evaluation timeout is not required.
 - What write-through and atomic-replacement guarantees can be provided
   consistently on Windows, macOS, and Linux?
-- What API reconnection behavior is sufficient for the single-user UI without
-  adding unnecessary event-log complexity?
-- Should the C++ server itself serve the Vite build output, or should the
-  launcher serve assets separately while sharing the same API origin?
-- Which packaging formats should include the standalone server, and should
-  standalone browser mode ship as the server binary alone or with a small
-  launcher?
-- How should Tauri detect server readiness and stop the process reliably on
-  each platform, especially Windows process-tree behavior?
-- Does the new C++ server build and run across the existing Linux ARM64
-  release matrix, and which of its artifacts should include the server?
+- Can the optional Tauri webview load UI assets from the C++ server's loopback
+  origin on all supported platforms while satisfying its CSP and origin
+  validation? If so, use that same server to serve Vite assets.
+- Does the new C++ server build and run across the existing six-target release
+  matrix? Linux ARM64 is currently tested natively for the legacy app, but the
+  future C++ server is not yet covered.
 
 ## Suggested research order
 
 1. Verify a WPIMath-only `wpilib-expression` CMake configure/build with
-   `WPILIB_WITH_NTCORE=OFF`; separately prototype the server transport and
-   measure `wpinet` build/package footprint on representative Windows, macOS,
-   and Linux targets. Compare cpp-httplib only if integration cost warrants it.
-2. Define the server startup/readiness/port handoff and webview process-lifecycle
-   contract; verify the standalone browser path uses the same server binary.
-3. Add a dedicated server build/test/package path to CI for all retained
-   targets, then verify the release artifact matrix.
-4. Specify generic request, event, revision, rejection, and reconnect behavior
-   without document-specific payloads.
-5. Define and test expression request-size, setup-count, and complexity
-   limits and diagnostics around the required `wpilib-expression` integration.
+   `WPILIB_WITH_NTCORE=OFF`; separately prototype the selected server transport
+   and measure `wpinet` build/package footprint. Compare cpp-httplib only if
+   integration cost warrants it.
+2. Prototype port-0 binding, readiness reporting, browser launch, and direct
+   Tauri child-process lifecycle; verify the same server binary serves both
+   modes and that Tauri can load its UI origin.
+3. Add a dedicated server build/test/package path to CI for all six retained
+   targets, then verify the release artifact matrix, including native Linux
+   ARM64.
+4. Specify generic request/event envelopes and test snapshot-based reconnect
+   behavior without document-specific payloads or durable event replay.
+5. Define and test expression request-size, setup-count, and complexity limits
+   and diagnostics around the required `wpilib-expression` integration.
 6. Define write-through failure and safe replacement behavior once the new
-   format's storage contract is available.
+   format's storage contract is available; test same-directory replacement
+   and failure recovery on each supported operating system.
 7. Integrate the user's project-parameter TrajoptLib wrapper only after its
    local interface is available; keep its design outside this plan.
