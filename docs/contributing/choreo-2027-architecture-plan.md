@@ -355,17 +355,27 @@ browser and OWASP guidance before implementation.
   - [ChaiScript parser depth guard, pinned revision](https://github.com/ChaiScript/ChaiScript/blob/f635b51e3f8e95868210edfc66fdbd8e475710f5/include/chaiscript/language/chaiscript_parser.hpp#L88-L104)
   - [ChaiScript call-depth guard, pinned revision](https://github.com/ChaiScript/ChaiScript/blob/f635b51e3f8e95868210edfc66fdbd8e475710f5/include/chaiscript/chaiscript_defines.hpp#L76-L110)
 - `wpilib-expression` directly links `wpimath`, LLNL units, and `wpi::extras`;
-  its project CMake currently forces `WPILIB_WITH_NTCORE=ON`. In the pinned
-  allwpilib CMake configuration, `WPILIB_WITH_WPIMATH` and
+  its project CMake currently sets the `WPILIB_WITH_NTCORE` default to `ON`.
+  In the pinned allwpilib CMake configuration, `WPILIB_WITH_WPIMATH` and
   `WPILIB_WITH_NTCORE` are independent options. Disabling NTCore skips the
   NTCore/wpinet, datalog, and libuv dependency path while retaining WPIMath.
-  This is a static CMake dependency-graph finding, not a verified configure or
-  build result. If the server chooses `wpinet` for transport, that transport
-  choice may require enabling the NTCore/wpinet build path; measure it
-  separately from the expression library's needs.
+  This was empirically verified on Linux with GCC 14 at the pinned allwpilib
+  revision: configuring with `-DWPILIB_WITH_NTCORE=OFF` completed, the full
+  build succeeded, and all 16 CTest cases passed. The resulting build tree
+  contained no NTCore, wpinet, datalog, or libuv targets. The override works
+  because the repository's `CACHE INTERNAL` defaults do not use `FORCE`;
+  however, the source defaults remain `ON` in `wpilib-expression`,
+  `wpilib-extras`, and `sample-project`. This does not quantify the build or
+  package cost of enabling NTCore/wpinet for the server transport.
   - [allwpilib feature options and dependency gates, pinned revision](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/CMakeLists.txt#L91-L95)
   - [allwpilib NTCore and WPIMath subdirectory gates, pinned revision](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/CMakeLists.txt#L312-L327)
   - [WPIMath target dependencies, pinned revision](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/wpimath/CMakeLists.txt#L71-L111)
+- The NTCORE=OFF run used the same pinned WPILib revision and GCC 14 toolchain
+  as the existing Ubuntu expression workflow. It verifies the override and
+  expression-library behavior on Linux only; it is not CI coverage, a Windows
+  or macOS build, or a side-by-side NTCORE=ON comparison. The large static
+  library sizes from this RelWithDebInfo build are not a useful release-size
+  estimate.
 - The repository has a separate `wpilib-expression` workflow that configures,
   builds, and tests the library on Ubuntu, plus a setup-replacement benchmark.
   The main Choreo workflow covers six desktop/ARM64 targets but currently
@@ -411,10 +421,12 @@ browser and OWASP guidance before implementation.
 
 ## Open research questions
 
-- Can `wpilib-expression` build and pass tests with `WPILIB_WITH_NTCORE=OFF`?
-  If the server selects `wpinet`, what extra build dependencies, compile time,
-  and packaged runtime size does enabling NTCore/wpinet add? Static analysis
-  suggests it can; configure/build verification is still needed.
+- The `wpilib-expression` library builds and passes all tests with
+  `WPILIB_WITH_NTCORE=OFF` on Linux/GCC 14. If the server selects `wpinet`,
+  measure the extra build dependencies, compile time, and packaged runtime
+  size of enabling NTCore/wpinet; no side-by-side comparison has been run.
+  Decide whether to change the library's in-repository default or only pass
+  the override from a server build after the server's target graph is known.
 - Does the proposed port-0/readiness-record startup contract work reliably
   with `wpinet` and Tauri on all supported platforms, including passing the
   dynamic API URL to the statically packaged Tauri UI?
@@ -440,10 +452,10 @@ browser and OWASP guidance before implementation.
 
 ## Suggested research order
 
-1. Verify a WPIMath-only `wpilib-expression` CMake configure/build with
-   `WPILIB_WITH_NTCORE=OFF`; separately prototype the selected server transport
-   and measure `wpinet` build/package footprint. Compare cpp-httplib only if
-   integration cost warrants it.
+1. The Linux/GCC 14 WPIMath-only `wpilib-expression` configure/build/test with
+   `WPILIB_WITH_NTCORE=OFF` is verified. Separately prototype the selected
+   server transport and measure `wpinet` build/package footprint. Compare
+   cpp-httplib only if integration cost warrants it.
 2. Prototype port-0 binding, readiness reporting, browser launch, and direct
    Tauri child-process lifecycle; verify the same server binary serves both
    modes and that Tauri can load its UI origin.
