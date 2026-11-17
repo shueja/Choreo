@@ -25,6 +25,9 @@ items as local project-format work becomes available.
   format changes.
 - Remove Rust business logic. Rust may remain only as a thin launcher for the
   embedded webview.
+- The new C++ server must use `wpilib-expression`; the new project format is
+  designed around it. Treat the expression library as a production server
+  dependency, not an optional candidate.
 - Preserve the current platform support matrix except Linux ARM32.
 - Prefer WPILib tooling and avoid unnecessary dependencies.
 
@@ -52,11 +55,11 @@ one library or executable per item.
    and translates transport messages into application operations. Whether it
    also serves the UI assets remains open. Keep document behavior out of this
    layer.
-4. **Expression service** — evaluate whether the existing standalone
-   `wpilib-expression` C++ library should serve the future backend. This is a
-   separate decision; the current UI uses `mathjs`. The library README states
-   evaluation is not resource-limited, so server adoption requires an explicit
-   decision about bounding expression input and execution.
+4. **Expression service** — integrate the existing `wpilib-expression` C++
+   library as the server's expression engine. The current UI uses `mathjs`;
+   migration should make the server the source of expression evaluation and
+   validation. The library README states evaluation is not resource-limited, so
+   define appropriate expression input and execution bounds for server use.
 5. **Persistence** — keep the new format adapter separate from generic
    persistence mechanics such as safe replacement, error reporting, and
    serializing writes.
@@ -135,11 +138,13 @@ before implementation.
 - `/home/runner/work/Choreo/Choreo/src/document/DocumentModel.tsx` keeps the
   editable document in a MobX-State-Tree model and attaches undo/redo there.
 - `/home/runner/work/Choreo/Choreo/src/document/ExpressionStore.tsx` uses
-  `mathjs` for expression evaluation. The standalone C++ experiment is under
-  `/home/runner/work/Choreo/Choreo/wpilib-expression`; the root
-  `/home/runner/work/Choreo/Choreo/IMPLEMENTATION_PLAN.md` describes it as an
-  independent CMake project and explicitly says not to integrate it into
-  Choreo. Its README says expression evaluation is not resource-limited.
+  `mathjs` for expression evaluation. The new server is required to use
+  `/home/runner/work/Choreo/Choreo/wpilib-expression`, and the new format is
+  being designed for it. The root
+  `/home/runner/work/Choreo/Choreo/IMPLEMENTATION_PLAN.md` currently describes
+  the expression library as an independent project not to integrate into Choreo;
+  that older experiment plan must be reconciled with this newer architecture
+  decision. The library README says expression evaluation is not resource-limited.
 - `/home/runner/work/Choreo/Choreo/trajoptlib/CMakeLists.txt` builds and tests
   the native TrajoptLib library independently of its Rust FFI adapter. The
   format-dependent generation pipeline is in
@@ -185,9 +190,9 @@ before implementation.
   handshake be, especially when using an OS-assigned ephemeral port?
 - How should the webview launcher discover the server URL and coordinate
   startup/shutdown without becoming a second application backend?
-- Does `wpilib-expression` meet Choreo's expression-language, diagnostics, and
-  execution-safety needs? In particular, what bounds or isolation are needed
-  given that its documented evaluation is not resource-limited?
+- What input and execution bounds, if any, should be added around
+  `wpilib-expression` before it evaluates server-provided expressions, given
+  that its documented evaluation is not resource-limited?
 - What write-through and atomic-replacement guarantees can be provided
   consistently on Windows, macOS, and Linux?
 - What API reconnection behavior is sufficient for the single-user UI without
@@ -213,7 +218,8 @@ before implementation.
    targets, then verify the release artifact matrix.
 4. Specify generic request, event, revision, rejection, and reconnect behavior
    without document-specific payloads.
-5. Evaluate expression-service adoption independently of project persistence.
+5. Define and test expression input/execution limits and diagnostics around
+   the required `wpilib-expression` integration.
 6. Define write-through failure and safe replacement behavior once the new
    format's storage contract is available.
 7. Integrate the user's project-parameter TrajoptLib wrapper only after its
