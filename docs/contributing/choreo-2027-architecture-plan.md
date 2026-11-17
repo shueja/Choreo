@@ -110,14 +110,50 @@ committing to this choice. If integration cost is excessive, evaluate
 cpp-httplib as a smaller alternative; Boost.Beast appears heavier than needed
 for this localhost, single-user service.
 
+Additional `wpinet` integration findings at the pinned revision:
+
+- The combined `HttpWebSocketServerConnection` supports HTTP and WebSocket
+  upgrades on one connection/port. The API remains low-level: request dispatch
+  is custom path parsing rather than a declarative router.
+- `uv::Tcp` exposes `Bind`, `GetSock`, and `AddrToName`, so an ephemeral-port
+  flow can bind port `0` and query the selected port afterward. This path was
+  inferred from the API and libuv behavior, not built or tested in Choreo.
+  The convenience `WebServer::Start(port, path)` stores servers by the
+  requested port and is not suitable for this handoff without adaptation.
+- The WebSocket API exposes connection state and lifecycle signals. Its
+  server helper offers URL and Host validation hooks, but Origin validation
+  must be implemented by the application during the HTTP/WebSocket handshake.
+- `HttpServerConnection` adds wildcard `Access-Control-Allow-Origin: *` and
+  methods headers by default. Do not treat these response headers as request
+  authorization; override/customize response handling and explicitly handle
+  any required `OPTIONS` preflight.
+- Sources: [`uv::Tcp`](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/wpinet/src/main/native/include/wpi/net/uv/Tcp.hpp),
+  [`uv::AddrToName`](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/wpinet/src/main/native/include/wpi/net/uv/util.hpp),
+  [`HttpWebSocketServerConnection`](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/wpinet/src/main/native/include/wpi/net/HttpWebSocketServerConnection.hpp),
+  [`WebSocketServer`](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/wpinet/src/main/native/include/wpi/net/WebSocketServer.hpp),
+  and [`HttpServerConnection` response headers](https://github.com/wpilibsuite/allwpilib/blob/f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a/wpinet/src/main/native/cpp/HttpServerConnection.cpp).
+
 ## Localhost security notes
 
 Loopback binding is necessary but should not be treated as the entire security
-boundary. Validate Host and Origin on HTTP requests and WebSocket upgrades,
-protect state-changing routes against cross-origin requests, and avoid treating
-CORS response headers as request authorization. Prefer serving the UI and API
-from one origin. Revisit how the embedded webview's origin fits the allow-list
-before implementation.
+boundary. DNS rebinding can make an attacker-controlled hostname resolve to a
+local service, so validate the `Host` header against the actual loopback
+address/port as well as validating browser `Origin`. Apply the checks to
+state-changing HTTP requests and WebSocket upgrades; CORS response headers do
+not prevent a request from being sent. Do not use `GET` for mutations.
+
+**Recommended baseline, not yet an implementation decision:** serve the UI and
+API from the same origin; bind only to loopback; reject unexpected Host and
+Origin values; and require a cryptographically random per-launch token in a
+request header for mutations and WebSocket upgrades. Deliver the token through
+the server/launcher bootstrap rather than as an API query parameter. A
+same-origin deployment avoids needing permissive CORS, while the token adds
+protection against unrelated local browser tabs. If the Tauri webview needs a
+distinct origin, explicitly allow only that origin and provide the token
+through a narrowly scoped startup mechanism, not a business-logic Tauri API.
+This security analysis was not independently checked against external
+standards sources in this environment; verify the threat model against current
+browser and OWASP guidance before implementation.
 
 ## Persistence semantics
 
@@ -162,6 +198,11 @@ before implementation.
 - `/home/runner/work/Choreo/Choreo/.github/workflows/choreo.yml` currently
   covers Windows x86_64/ARM64, macOS x86_64/ARM64, and Linux x86_64/ARM64.
   Linux ARM32 is not listed in this matrix.
+- The existing Linux ARM64 target is exercised on the native
+  `ubuntu-24.04-arm` runner: CI runs the Rust test suite, builds the Tauri app,
+  and packages standalone ZIP, AppImage, deb, and rpm artifacts. This verifies
+  the current app pipeline only; the future C++ server still needs its own
+  build, test, and packaging coverage.
 - The legacy project writer in
   `/home/runner/work/Choreo/Choreo/src-core/src/file_management/mod.rs`
   coalesces pending project updates in a single `Option<ProjectFile>` and
@@ -246,6 +287,10 @@ before implementation.
   handshake be, especially when using an OS-assigned ephemeral port?
 - How should the webview launcher discover the server URL and coordinate
   startup/shutdown without becoming a second application backend?
+- Should the recommended per-launch request token be mandatory in both browser
+  and Tauri modes, and how should the launcher deliver it without exposing
+  business operations through Tauri IPC? Are non-browser local API clients in
+  scope?
 - What concrete request-size, setup-count, and expression-complexity bounds
   should the server enforce before invoking `wpilib-expression`? A hard
   evaluation timeout is not required.
@@ -260,8 +305,8 @@ before implementation.
   launcher?
 - How should Tauri detect server readiness and stop the process reliably on
   each platform, especially Windows process-tree behavior?
-- Which existing release artifact formats are actually supported and tested
-  for Linux ARM64?
+- Does the new C++ server build and run across the existing Linux ARM64
+  release matrix, and which of its artifacts should include the server?
 
 ## Suggested research order
 
