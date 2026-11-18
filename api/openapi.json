@@ -97,21 +97,11 @@
         "summary": "Save modified files and close the active project, cancelling active generation",
         "responses": {
           "202": {
-            "description": "Session close was accepted; completion is reported over the events WebSocket",
+            "description": "Session close was accepted; completion or SAVE_FAILED is reported over the events WebSocket",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SessionOperationAccepted"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "The project could not be saved; the session remains open",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
