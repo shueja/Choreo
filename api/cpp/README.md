@@ -10,7 +10,7 @@ api.RegisterRoute("GET", "/api/v1/snapshot", [](const auto& request) {
 api.RegisterWebSocketRoute(
     "/api/v1/events",
     choreo::api::WebSocketCallbacks{
-        .onOpen = [](choreo::api::WebSocketId id) {},
+      .onOpen = [](choreo::api::WebSocketId id, std::string_view target) {},
         .onText = [](choreo::api::WebSocketId id, std::string_view message) {},
         .onClose = [](choreo::api::WebSocketId id, std::uint16_t code,
                       std::string_view reason) {}});

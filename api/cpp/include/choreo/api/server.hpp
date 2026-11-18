@@ -39,7 +39,7 @@ struct HttpResponse {
 /** Callbacks for one WebSocket route. Text callbacks receive complete messages.
  */
 struct WebSocketCallbacks {
-  std::function<void(WebSocketId)> onOpen;
+  std::function<void(WebSocketId, std::string_view)> onOpen;
   std::function<void(WebSocketId, std::string_view)> onText;
   std::function<void(WebSocketId, std::uint16_t, std::string_view)> onClose;
 };

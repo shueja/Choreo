@@ -552,6 +552,7 @@ struct ApiServer::Impl : public std::enable_shared_from_this<ApiServer::Impl> {
         return false;
       }
       websocketPath = std::string{PathOnly(m_request.GetUrl())};
+      websocketTarget = std::string{m_request.GetUrl()};
       auto route = owner->FindWebSocketRoute(websocketPath);
       auto origin = requestHeaders.find("origin");
       auto host = requestHeaders.find("host");
@@ -579,10 +580,11 @@ struct ApiServer::Impl : public std::enable_shared_from_this<ApiServer::Impl> {
       auto id = owner->AddWebSocket(websocketPath, socket, websocketCallbacks);
       auto callbacks = websocketCallbacks;
       std::weak_ptr<Impl> weakOwner = owner;
-      socket->open.connect([callbacks, id](std::string_view) {
+      auto target = websocketTarget;
+      socket->open.connect([callbacks, id, target](std::string_view) {
         if (callbacks.onOpen) {
           try {
-            callbacks.onOpen(id);
+            callbacks.onOpen(id, target);
           } catch (...) {
           }
         }
@@ -673,6 +675,7 @@ struct ApiServer::Impl : public std::enable_shared_from_this<ApiServer::Impl> {
     std::map<std::string, std::string, std::less<>> requestHeaders;
     std::string requestBody;
     std::string websocketPath;
+    std::string websocketTarget;
     WebSocketCallbacks websocketCallbacks;
     bool bodyTooLarge = false;
   };

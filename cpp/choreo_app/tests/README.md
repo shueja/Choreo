@@ -18,6 +18,7 @@ ctest --test-dir .\cpp\choreo_app\build -N
 | `choreo_generation_process.real_differential` | `generation_process_test.cpp` | Launches the real generator for a two-waypoint differential trajectory. Checks the returned document, samples, frozen inputs, waypoint and event timing, notification, and undo. |
 | `choreo_generation_process.real_swerve` | `generation_process_test.cpp` | Launches the real generator for a two-waypoint swerve trajectory. Checks output type, frozen inputs, event timing, samples, and undo/redo. |
 | `choreo_generation_process.real_split` | `generation_process_test.cpp` | Launches the real generator for a three-waypoint differential trajectory. Checks an intermediate split, sample and waypoint timing, a UUID-targeted event, and undo. |
+| `choreo_application_api.integration` | `application_api_test.cpp` | Runs independent loopback tests for immediate operation acceptance, deferred picker open/cancel, new-session creation, snapshot loading, invalid paths, asynchronous save, generation status, child-process progress forwarding, and generated-output persistence. |
 | `choreo_document_core.shared` | `../../../document/cpp/tests/shared_test.cpp` | Shared C++ document serialization, validation, trajectory output, and robot-loader behavior; also writes JSON fixtures for schema validation. |
 | `choreolib.v4` | `../../../document/cpp/tests/choreolib_test.cpp` | Loads v4 swerve and differential samples through the C++ ChoreoLib string and file interfaces; checks missing-file errors. |
 
@@ -85,7 +86,9 @@ are outside this app-test inventory.
 - The real-generator tests are opt-in and currently use fixed interval counts;
   they do not establish the automatic-interval snapshot invariant or the
   behavior of a split flag on the final waypoint.
-- The handoff tests do not establish server transport, progress forwarding,
-  graceful cancellation, crash recovery, or durable multi-file commit behavior.
+- The application API test uses a fake generator to verify one diagnostic
+  progress message and a successful result; it does not establish progress
+  behavior with the real generator, graceful cancellation, crash recovery, or
+  durable multi-file commit behavior.
 - A successful test on one platform does not establish subprocess or filesystem
   behavior on the other supported operating systems.

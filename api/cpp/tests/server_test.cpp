@@ -132,10 +132,18 @@ int main() {
                                  request.pathParameters.at("projectId") + "\"}",
                              {}};
                        });
+  server.RegisterRoute(
+      "POST", "/api/v1/operations", [](const choreo::api::HttpRequest&) {
+        return choreo::api::HttpResponse{
+            202, "application/json", "{\"accepted\":true}", {}};
+      });
   server.RegisterWebSocketRoute(
-      "/api/v1/events",
-      choreo::api::WebSocketCallbacks{
-          [&](choreo::api::WebSocketId) { websocketOpened = true; }, {}, {}});
+      "/api/v1/events", choreo::api::WebSocketCallbacks{
+                            [&](choreo::api::WebSocketId, std::string_view) {
+                              websocketOpened = true;
+                            },
+                            {},
+                            {}});
 
   try {
     server.Start();
@@ -170,6 +178,22 @@ int main() {
   const auto response = ReadAll(socket);
   CloseSocket(socket);
 
+  Socket operationSocket = ConnectToPort(server.Port());
+  if (operationSocket == kInvalidSocket) {
+    server.Stop();
+#ifdef _WIN32
+    WSACleanup();
+#endif
+    return EXIT_FAILURE;
+  }
+  constexpr std::string_view operationRequest =
+      "POST /api/v1/operations HTTP/1.1\r\n"
+      "Host: 127.0.0.1\r\n"
+      "Connection: close\r\n\r\n";
+  const bool operationSent = SendAll(operationSocket, operationRequest);
+  const auto operationResponse = ReadAll(operationSocket);
+  CloseSocket(operationSocket);
+
   Socket websocket = ConnectToPort(server.Port());
   if (websocket == kInvalidSocket) {
     server.Stop();
@@ -196,9 +220,14 @@ int main() {
   WSACleanup();
 #endif
 
-  return sent && callbackCalled && handshakeSent && websocketOpened &&
+  return sent && callbackCalled && operationSent && handshakeSent &&
+                 websocketOpened &&
                  response.find("HTTP/1.1 200 OK") != std::string::npos &&
                  response.find("\"handled\":true") != std::string::npos &&
+                 operationResponse.find("HTTP/1.1 202 Accepted") !=
+                     std::string::npos &&
+                 operationResponse.find("\"accepted\":true") !=
+                     std::string::npos &&
                  handshakeResponse.find("101 Switching Protocols") !=
                      std::string::npos
              ? EXIT_SUCCESS

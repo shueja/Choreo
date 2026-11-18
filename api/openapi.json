@@ -3,7 +3,7 @@
   "info": {
     "title": "Choreo Local API",
     "version": "1.0.0",
-    "description": "Resource-oriented API for the locally running Choreo server. The server owns one active project. Mutations are validated and persisted before they are acknowledged. Subscribe to the WebSocket event channel before fetching a snapshot; events are not replayed, and clients must refetch the snapshot if they observe a revision gap."
+    "description": "Resource-oriented API for the locally running Choreo server. The server owns one active project. Session open/new/save and generation-start requests return 202 after enqueueing work; operation outcomes and generator progress arrive over the WebSocket event channel. Subscribe before issuing long-running requests. Events are not replayed, so clients must refetch the snapshot after a revision gap."
   },
   "servers": [
     {
@@ -33,12 +33,12 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "The project was opened or the picker was cancelled",
+          "202": {
+            "description": "Session open was accepted; completion is reported over the events WebSocket",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OpenSessionResult"
+                  "$ref": "#/components/schemas/SessionOperationAccepted"
                 }
               }
             }
@@ -66,18 +66,52 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectDocument"
+                "$ref": "#/components/schemas/NewSessionRequest"
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": "The new project is active",
+          "202": {
+            "description": "Session creation was accepted; completion is reported over the events WebSocket",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionSnapshot"
+                  "$ref": "#/components/schemas/SessionOperationAccepted"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/session/save": {
+      "post": {
+        "operationId": "saveSession",
+        "summary": "Persist the active project and trajectory files",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Session save was accepted; completion is reported over the events WebSocket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOperationAccepted"
                 }
               }
             }
@@ -1147,6 +1181,48 @@
       "Parameters": {
         "$ref": "../document/trajectory.schema.json#/$defs/Parameters"
       },
+      "NewSessionRequest": {
+        "type": "object",
+        "properties": {
+          "projectPath": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absolute local .chor destination path for the new session."
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectDocument"
+          }
+        },
+        "required": ["projectPath", "project"],
+        "additionalProperties": false
+      },
+      "SaveSessionRequest": {
+        "type": "object",
+        "properties": {
+          "projectPath": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional destination .chor path (save as)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionOperationAccepted": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "operation": {
+            "enum": ["open", "new", "save"]
+          },
+          "accepted": {
+            "const": true
+          }
+        },
+        "required": ["operationId", "operation", "accepted"],
+        "additionalProperties": false
+      },
       "OpenSessionRequest": {
         "oneOf": [
           {
@@ -1171,33 +1247,6 @@
               }
             },
             "required": ["source", "path"],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "OpenSessionResult": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "const": "opened"
-              },
-              "snapshot": {
-                "$ref": "#/components/schemas/SessionSnapshot"
-              }
-            },
-            "required": ["status", "snapshot"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "const": "cancelled"
-              }
-            },
-            "required": ["status"],
             "additionalProperties": false
           }
         ]
@@ -1475,6 +1524,10 @@
               "VALIDATION_ERROR",
               "OPERATION_NOT_FOUND",
               "OPERATION_NOT_CANCELLABLE",
+              "PICKER_UNAVAILABLE",
+              "SAVE_FAILED",
+              "GENERATOR_UNAVAILABLE",
+              "GENERATION_FAILED",
               "INTERNAL_ERROR"
             ]
           },
@@ -1514,7 +1567,13 @@
             "$ref": "#/components/schemas/DocumentChangedEvent"
           },
           {
+            "$ref": "#/components/schemas/SessionOperationEvent"
+          },
+          {
             "$ref": "#/components/schemas/GenerationProgressEvent"
+          },
+          {
+            "$ref": "#/components/schemas/GenerationStatusEvent"
           },
           {
             "$ref": "#/components/schemas/GenerationFinishedEvent"
@@ -1563,6 +1622,35 @@
         "required": ["type", "revision", "requestId", "resource"],
         "additionalProperties": false
       },
+      "SessionOperationEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "session.operation"
+          },
+          "operationId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "operation": {
+            "enum": ["open", "new", "save"]
+          },
+          "status": {
+            "enum": ["running", "succeeded", "failed", "cancelled"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": ["type", "operationId", "operation", "status"],
+        "additionalProperties": false
+      },
       "GenerationProgressEvent": {
         "type": "object",
         "properties": {
@@ -1582,9 +1670,39 @@
           },
           "message": {
             "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
           }
         },
-        "required": ["type", "operationId", "trajectoryId", "progress"],
+        "required": ["type", "operationId", "trajectoryId"],
+        "additionalProperties": false
+      },
+      "GenerationStatusEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "generation.status"
+          },
+          "operationId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "trajectoryId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "status": {
+            "enum": ["queued", "running", "cancelling"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["type", "operationId", "trajectoryId", "status"],
         "additionalProperties": false
       },
       "GenerationFinishedEvent": {
