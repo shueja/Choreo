@@ -299,7 +299,8 @@ std::pair<int, std::string> HttpRequest(std::uint16_t port,
     return {0, {}};
   }
   std::string request = std::string{method} + " " + std::string{path} +
-                        " HTTP/1.1\r\nHost: 127.0.0.1\r\n";
+                        " HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(port) +
+                        "\r\n";
   if (!body.empty()) {
     request += "Content-Type: application/json\r\nContent-Length: " +
                std::to_string(body.size()) + "\r\n";
@@ -551,11 +552,13 @@ class ApiTestFixture {
     if (!socket) {
       return {};
     }
-    const auto request = "GET " + std::string{kEventsPath} +
-                         " HTTP/1.1\r\nHost: 127.0.0.1\r\n"
-                         "Upgrade: websocket\r\nConnection: Upgrade\r\n"
-                         "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
-                         "Sec-WebSocket-Version: 13\r\n\r\n";
+    const auto request =
+        "GET " + std::string{kEventsPath} +
+        " HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(Port()) +
+        "\r\n"
+        "Upgrade: websocket\r\nConnection: Upgrade\r\n"
+        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+        "Sec-WebSocket-Version: 13\r\n\r\n";
     if (!SendAll(socket.Get(), request) ||
         ReadHeaders(socket.Get()).find("101 Switching Protocols") ==
             std::string::npos) {

@@ -313,8 +313,9 @@ HttpResponse ServeStaticFile(const std::filesystem::path& root,
     return ErrorResponse(400, "INVALID_PATH", "Static path is invalid");
   }
   std::filesystem::path relativePath{*decodedPath};
-  if (decodedPath->empty() || decodedPath->back() == '/' ||
-      relativePath.extension().empty()) {
+  if (decodedPath->empty() || relativePath.extension().empty()) {
+    relativePath = "index.html";
+  } else if (decodedPath->back() == '/') {
     relativePath /= "index.html";
   }
   std::error_code error;
