@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cstdlib>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -106,6 +107,17 @@ std::string ReadHttpHeaders(Socket socket) {
   return response;
 }
 
+std::string Exchange(std::uint16_t port, std::string_view request) {
+  Socket socket = ConnectToPort(port);
+  if (socket == kInvalidSocket) {
+    return {};
+  }
+  const bool sent = SendAll(socket, request);
+  auto response = sent ? ReadAll(socket) : std::string{};
+  CloseSocket(socket);
+  return response;
+}
+
 }  // namespace
 
 int main() {
@@ -117,8 +129,11 @@ int main() {
 #endif
 
   std::atomic_bool callbackCalled{false};
+  std::atomic_bool originProbeCalled{false};
   std::atomic_bool websocketOpened{false};
-  choreo::api::ApiServer server;
+  choreo::api::ServerOptions options;
+  options.allowedOrigins.emplace_back("tauri://localhost");
+  choreo::api::ApiServer server{options};
   server.RegisterRoute("GET", "/api/v1/projects/{projectId}",
                        [&](const choreo::api::HttpRequest& request) {
                          callbackCalled =
@@ -136,6 +151,11 @@ int main() {
       "POST", "/api/v1/operations", [](const choreo::api::HttpRequest&) {
         return choreo::api::HttpResponse{
             202, "application/json", "{\"accepted\":true}", {}};
+      });
+  server.RegisterRoute(
+      "POST", "/api/v1/origin-probe", [&](const choreo::api::HttpRequest&) {
+        originProbeCalled = true;
+        return choreo::api::HttpResponse{200, "application/json", "{}", {}};
       });
   server.RegisterWebSocketRoute(
       "/api/v1/events", choreo::api::WebSocketCallbacks{
@@ -161,38 +181,36 @@ int main() {
     return EXIT_FAILURE;
   }
 
-  Socket socket = ConnectToPort(server.Port());
-  if (socket == kInvalidSocket) {
-    server.Stop();
-#ifdef _WIN32
-    WSACleanup();
-#endif
-    return EXIT_FAILURE;
-  }
-  constexpr std::string_view request =
+  const auto host = "127.0.0.1:" + std::to_string(server.Port());
+  const auto origin = "http://" + host;
+  const auto request =
       "GET /api/v1/projects/550e8400-e29b-41d4-a716-446655440000 HTTP/1.1\r\n"
-      "Host: 127.0.0.1\r\n"
-      "X-Test: callback\r\n"
-      "Connection: close\r\n\r\n";
-  const bool sent = SendAll(socket, request);
-  const auto response = ReadAll(socket);
-  CloseSocket(socket);
-
-  Socket operationSocket = ConnectToPort(server.Port());
-  if (operationSocket == kInvalidSocket) {
-    server.Stop();
-#ifdef _WIN32
-    WSACleanup();
-#endif
-    return EXIT_FAILURE;
-  }
-  constexpr std::string_view operationRequest =
-      "POST /api/v1/operations HTTP/1.1\r\n"
-      "Host: 127.0.0.1\r\n"
-      "Connection: close\r\n\r\n";
-  const bool operationSent = SendAll(operationSocket, operationRequest);
-  const auto operationResponse = ReadAll(operationSocket);
-  CloseSocket(operationSocket);
+      "Host: " +
+      host + "\r\nOrigin: " + origin +
+      "\r\nX-Test: callback\r\nConnection: close\r\n\r\n";
+  const auto response = Exchange(server.Port(), request);
+  const auto invalidHostResponse = Exchange(
+      server.Port(),
+      "GET /api/v1/projects/550e8400-e29b-41d4-a716-446655440000 HTTP/1.1\r\n"
+      "Host: attacker.example:" +
+          std::to_string(server.Port()) + "\r\nConnection: close\r\n\r\n");
+  const auto invalidOriginResponse = Exchange(
+      server.Port(), "POST /api/v1/origin-probe HTTP/1.1\r\nHost: " + host +
+                         "\r\nOrigin: https://attacker.example\r\n"
+                         "Connection: close\r\n\r\n");
+  const bool invalidOriginDidNotReachHandler = !originProbeCalled;
+  const auto allowedOriginResponse = Exchange(
+      server.Port(), "POST /api/v1/origin-probe HTTP/1.1\r\nHost: " + host +
+                         "\r\nOrigin: tauri://localhost\r\n"
+                         "Connection: close\r\n\r\n");
+  const auto preflightResponse = Exchange(
+      server.Port(), "OPTIONS /api/v1/origin-probe HTTP/1.1\r\nHost: " + host +
+                         "\r\nOrigin: tauri://localhost\r\n"
+                         "Access-Control-Request-Method: POST\r\n"
+                         "Connection: close\r\n\r\n");
+  const auto operationResponse = Exchange(
+      server.Port(), "POST /api/v1/operations HTTP/1.1\r\nHost: " + host +
+                         "\r\nConnection: close\r\n\r\n");
 
   Socket websocket = ConnectToPort(server.Port());
   if (websocket == kInvalidSocket) {
@@ -202,31 +220,82 @@ int main() {
 #endif
     return EXIT_FAILURE;
   }
-  const auto origin = "http://127.0.0.1:" + std::to_string(server.Port());
-  const auto handshake =
+  const auto invalidHandshake =
       "GET /api/v1/events HTTP/1.1\r\n"
-      "Host: 127.0.0.1:" +
-      std::to_string(server.Port()) + "\r\n" + "Origin: " + origin +
+      "Host: attacker.example:" +
+      std::to_string(server.Port()) +
+      "\r\nOrigin: http://attacker.example:" + std::to_string(server.Port()) +
       "\r\n"
       "Upgrade: websocket\r\n"
       "Connection: Upgrade\r\n"
       "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
       "Sec-WebSocket-Version: 13\r\n\r\n";
-  const bool handshakeSent = SendAll(websocket, handshake);
+  const bool invalidHandshakeSent = SendAll(websocket, invalidHandshake);
+  const auto invalidHandshakeResponse = ReadHttpHeaders(websocket);
+  CloseSocket(websocket);
+
+  websocket = ConnectToPort(server.Port());
+  if (websocket == kInvalidSocket) {
+    server.Stop();
+#ifdef _WIN32
+    WSACleanup();
+#endif
+    return EXIT_FAILURE;
+  }
+  const auto allowedHandshake =
+      "GET /api/v1/events HTTP/1.1\r\n"
+      "Host: " +
+      host +
+      "\r\nOrigin: tauri://localhost\r\n"
+      "Upgrade: websocket\r\n"
+      "Connection: Upgrade\r\n"
+      "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+      "Sec-WebSocket-Version: 13\r\n\r\n";
+  const bool handshakeSent = SendAll(websocket, allowedHandshake);
   const auto handshakeResponse = ReadHttpHeaders(websocket);
   CloseSocket(websocket);
   server.Stop();
+
+  choreo::api::ServerOptions invalidBindOptions;
+  invalidBindOptions.bindAddress = "0.0.0.0";
+  choreo::api::ApiServer invalidBindServer{invalidBindOptions};
+  bool invalidBindRejected = false;
+  try {
+    invalidBindServer.Start();
+  } catch (const std::invalid_argument&) {
+    invalidBindRejected = true;
+  }
 #ifdef _WIN32
   WSACleanup();
 #endif
 
-  return sent && callbackCalled && operationSent && handshakeSent &&
-                 websocketOpened &&
+  return callbackCalled && originProbeCalled &&
+                 invalidOriginDidNotReachHandler && invalidBindRejected &&
+                 invalidHandshakeSent && handshakeSent && websocketOpened &&
                  response.find("HTTP/1.1 200 OK") != std::string::npos &&
                  response.find("\"handled\":true") != std::string::npos &&
+                 response.find("Access-Control-Allow-Origin: " + origin) !=
+                     std::string::npos &&
+                 invalidHostResponse.find("HTTP/1.1 403 Forbidden") !=
+                     std::string::npos &&
+                 invalidOriginResponse.find("HTTP/1.1 403 Forbidden") !=
+                     std::string::npos &&
+                 invalidOriginResponse.find("ORIGIN_NOT_ALLOWED") !=
+                     std::string::npos &&
+                 allowedOriginResponse.find("HTTP/1.1 200 OK") !=
+                     std::string::npos &&
+                 allowedOriginResponse.find(
+                     "Access-Control-Allow-Origin: tauri://localhost") !=
+                     std::string::npos &&
+                 preflightResponse.find("HTTP/1.1 204") != std::string::npos &&
+                 preflightResponse.find(
+                     "Access-Control-Allow-Origin: tauri://localhost") !=
+                     std::string::npos &&
                  operationResponse.find("HTTP/1.1 202 Accepted") !=
                      std::string::npos &&
                  operationResponse.find("\"accepted\":true") !=
+                     std::string::npos &&
+                 invalidHandshakeResponse.find("101 Switching Protocols") ==
                      std::string::npos &&
                  handshakeResponse.find("101 Switching Protocols") !=
                      std::string::npos

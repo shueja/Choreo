@@ -19,6 +19,7 @@
 
 #ifdef _WIN32
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
 #endif
@@ -107,6 +108,19 @@ bool IsToken(std::string_view value) {
 bool HasHeaderInjection(std::string_view value) {
   return value.find('\r') != std::string_view::npos ||
          value.find('\n') != std::string_view::npos;
+}
+
+bool ParseIPv4Address(std::string_view address, in_addr& parsed) {
+  const std::string addressString{address};
+#ifdef _WIN32
+  return InetPtonA(AF_INET, addressString.c_str(), &parsed) == 1;
+#else
+  return inet_pton(AF_INET, addressString.c_str(), &parsed) == 1;
+#endif
+}
+
+bool IsLoopbackAddress(const in_addr& address) {
+  return (ntohl(address.s_addr) >> 24) == 127;
 }
 
 std::vector<std::string_view> PathSegments(std::string_view path) {
@@ -256,9 +270,16 @@ struct ApiServer::Impl : public std::enable_shared_from_this<ApiServer::Impl> {
     if (running) {
       throw std::logic_error("API server is already running");
     }
+    in_addr requestedAddress{};
+    if (!ParseIPv4Address(options.bindAddress, requestedAddress) ||
+        !IsLoopbackAddress(requestedAddress)) {
+      throw std::invalid_argument(
+          "API server must bind to an IPv4 loopback address");
+    }
 
     std::string setupError;
     std::uint16_t boundPort = 0;
+    std::string boundHost;
     runner.ExecSync([&](wpi::net::uv::Loop& loop) {
       listener = wpi::net::uv::Tcp::Create(loop);
       if (!listener) {
@@ -284,18 +305,28 @@ struct ApiServer::Impl : public std::enable_shared_from_this<ApiServer::Impl> {
         listener.reset();
         return;
       }
-      boundPort =
-          ntohs(reinterpret_cast<const sockaddr_in*>(&address)->sin_port);
+      const auto* ipv4Address = reinterpret_cast<const sockaddr_in*>(&address);
+      if (!IsLoopbackAddress(ipv4Address->sin_addr) ||
+          ipv4Address->sin_addr.s_addr != requestedAddress.s_addr) {
+        setupError = "API server must bind its configured loopback address";
+        listener->Close();
+        listener.reset();
+        return;
+      }
+      boundPort = ntohs(ipv4Address->sin_port);
       if (boundPort == 0) {
         setupError = "failed to determine bound API port";
         listener->Close();
         listener.reset();
+        return;
       }
+      boundHost = options.bindAddress + ":" + std::to_string(boundPort);
     });
     if (!setupError.empty()) {
       throw std::runtime_error("failed to start API server: " + setupError);
     }
     port = boundPort;
+    expectedHost = std::move(boundHost);
     running = true;
   }
 
@@ -346,11 +377,17 @@ struct ApiServer::Impl : public std::enable_shared_from_this<ApiServer::Impl> {
   }
 
   HttpResponse Dispatch(HttpRequest request) {
+    const auto host = request.Header("host");
+    if (!IsHostAllowed(host)) {
+      return ErrorResponse(403, "HOST_NOT_ALLOWED",
+                           "Host does not match the bound loopback address");
+    }
+    const auto origin = request.Header("origin");
+    if (!origin.empty() && !IsOriginAllowed(origin, host)) {
+      return ErrorResponse(403, "ORIGIN_NOT_ALLOWED", "Origin is not allowed");
+    }
+
     if (request.method == "OPTIONS") {
-      if (!IsOriginAllowed(request.Header("origin"), request.Header("host"))) {
-        return ErrorResponse(403, "ORIGIN_NOT_ALLOWED",
-                             "Origin is not allowed");
-      }
       HttpResponse response;
       response.status = 204;
       response.contentType = "text/plain";
@@ -402,7 +439,14 @@ struct ApiServer::Impl : public std::enable_shared_from_this<ApiServer::Impl> {
     return ErrorResponse(404, "RESOURCE_NOT_FOUND", "Route was not found");
   }
 
+  bool IsHostAllowed(std::string_view host) const {
+    return !expectedHost.empty() && host == expectedHost;
+  }
+
   bool IsOriginAllowed(std::string_view origin, std::string_view host) const {
+    if (!IsHostAllowed(host)) {
+      return false;
+    }
     if (origin.empty()) {
       return true;
     }
@@ -472,6 +516,7 @@ struct ApiServer::Impl : public std::enable_shared_from_this<ApiServer::Impl> {
   std::vector<Route> routes;
   std::vector<WebSocketRoute> websocketRoutes;
   std::map<WebSocketId, WebSocketSession> websocketSessions;
+  std::string expectedHost;
   std::mutex registrationMutex;
   std::mutex lifecycleMutex;
   std::atomic<bool> running{false};
@@ -562,7 +607,8 @@ struct ApiServer::Impl : public std::enable_shared_from_this<ApiServer::Impl> {
       auto hostValue = host == requestHeaders.end()
                            ? std::string_view{}
                            : std::string_view{host->second};
-      if (!route || !owner->IsOriginAllowed(originValue, hostValue)) {
+      if (!route || !owner->IsHostAllowed(hostValue) ||
+          !owner->IsOriginAllowed(originValue, hostValue)) {
         m_stream.Close();
         return false;
       }
