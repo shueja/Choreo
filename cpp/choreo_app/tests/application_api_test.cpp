@@ -66,7 +66,9 @@ constexpr int kHttpBadRequest = 400;
 constexpr int kHttpConflict = 409;
 constexpr int kHttpNotFound = 404;
 constexpr std::size_t kExpectedTrajectoryCount = 1;
+constexpr std::size_t kExpectedSingleItemCollectionCount = 1;
 constexpr std::size_t kNoTrajectories = 0;
+constexpr std::size_t kNoEvents = 0;
 constexpr std::size_t kTemporaryDirectoryAttempts = 16;
 constexpr std::size_t kMaximumSessionOperationEvents = 8;
 constexpr std::size_t kMaximumGenerationEvents = 12;
@@ -554,6 +556,25 @@ class ApiTestFixture {
     return HttpRequest(Port(), "GET", path, {});
   }
 
+  std::pair<int, std::string> GetTrajectorySubresource(
+      std::string_view projectId, std::string_view trajectoryId,
+      std::string_view resource) const {
+    const auto path =
+        "/api/v1/projects/" + std::string{projectId} + "/trajectories/" +
+        std::string{trajectoryId} + "/" + std::string{resource};
+    return HttpRequest(Port(), "GET", path, {});
+  }
+
+  std::pair<int, std::string> GetTrajectorySubresourceItem(
+      std::string_view projectId, std::string_view trajectoryId,
+      std::string_view resource, std::string_view itemId) const {
+    const auto path =
+        "/api/v1/projects/" + std::string{projectId} + "/trajectories/" +
+        std::string{trajectoryId} + "/" + std::string{resource} + "/" +
+        std::string{itemId};
+    return HttpRequest(Port(), "GET", path, {});
+  }
+
   std::pair<int, std::string> Save() const {
     return HttpRequest(Port(), "POST", kSavePath, "{}");
   }
@@ -874,6 +895,75 @@ void TestTrajectoryCollectionReturnsRevisionAndItems(
           "unknown project collection should report RESOURCE_NOT_FOUND");
 }
 
+void TestTrajectorySubresourceReads(
+    const std::filesystem::path& executable) {
+  ApiTestFixture fixture{executable};
+  auto events = fixture.ConnectEvents();
+  Require(static_cast<bool>(events), "event WebSocket should connect");
+  const auto [openStatus, openBody] = fixture.OpenPath(fixture.ProjectPath());
+  const auto openOperationId =
+      AcceptedOperationId(openStatus, openBody, "open");
+  WaitForSessionOperation(events.Get(), openOperationId, "open", "succeeded");
+
+  const auto [waypointStatus, waypointBody] =
+      fixture.GetTrajectorySubresource(kTestProjectUuid, kTestTrajectoryUuid,
+                                       "waypoints");
+  Require(waypointStatus == kHttpOk,
+          "waypoint collection should return HTTP 200");
+  const auto waypoints =
+      Json::parse_or_throw(waypointBody).at("items").get_array();
+  Require(waypoints.size() == kExpectedSingleItemCollectionCount,
+          "waypoint collection should contain the trajectory waypoint");
+  const auto [singleWaypointStatus, singleWaypointBody] =
+      fixture.GetTrajectorySubresourceItem(
+          kTestProjectUuid, kTestTrajectoryUuid, "waypoints",
+          kTestWaypointUuid);
+  Require(singleWaypointStatus == kHttpOk,
+          "existing waypoint should return HTTP 200");
+  Require(Json::parse_or_throw(singleWaypointBody).at("uuid").get_string() ==
+              kTestWaypointUuid,
+          "waypoint response should preserve the requested UUID");
+
+  const auto [constraintStatus, constraintBody] =
+      fixture.GetTrajectorySubresource(kTestProjectUuid, kTestTrajectoryUuid,
+                                       "constraints");
+  Require(constraintStatus == kHttpOk,
+          "constraint collection should return HTTP 200");
+  Require(Json::parse_or_throw(constraintBody)
+                  .at("items")
+                  .get_array()
+                  .size() == kExpectedSingleItemCollectionCount,
+          "constraint collection should contain the trajectory constraint");
+  const auto [singleConstraintStatus, singleConstraintBody] =
+      fixture.GetTrajectorySubresourceItem(
+          kTestProjectUuid, kTestTrajectoryUuid, "constraints",
+          kTestConstraintUuid);
+  Require(singleConstraintStatus == kHttpOk,
+          "existing constraint should return HTTP 200");
+  Require(Json::parse_or_throw(singleConstraintBody)
+                  .at("uuid")
+                  .get_string() == kTestConstraintUuid,
+          "constraint response should preserve the requested UUID");
+
+  const auto [eventStatus, eventBody] =
+      fixture.GetTrajectorySubresource(kTestProjectUuid, kTestTrajectoryUuid,
+                                       "event-markers");
+  Require(eventStatus == kHttpOk,
+          "event-marker collection should return HTTP 200");
+  Require(Json::parse_or_throw(eventBody).at("items").get_array().size() ==
+              kNoEvents,
+          "event-marker collection should be empty when none are configured");
+  const auto [missingEventStatus, missingEventBody] =
+      fixture.GetTrajectorySubresourceItem(
+          kTestProjectUuid, kTestTrajectoryUuid, "event-markers",
+          "missing-event");
+  Require(missingEventStatus == kHttpNotFound,
+          "unknown event marker should return HTTP 404");
+  Require(Json::parse_or_throw(missingEventBody).at("code").get_string() ==
+              "RESOURCE_NOT_FOUND",
+          "unknown event marker should report RESOURCE_NOT_FOUND");
+}
+
 void TestSaveRestoresPersistedProjectFiles(
     const std::filesystem::path& executable) {
   ApiTestFixture fixture{executable};
@@ -983,7 +1073,7 @@ struct TestCase {
   void (*run)(const std::filesystem::path&);
 };
 
-constexpr std::array<TestCase, 11> kTestCases{{
+constexpr std::array<TestCase, 12> kTestCases{{
     {"picker open loads project snapshot", TestPickerOpenLoadsProjectSnapshot},
     {"picker cancellation leaves session closed",
      TestPickerCancellationLeavesSessionClosed},
@@ -998,6 +1088,7 @@ constexpr std::array<TestCase, 11> kTestCases{{
     {"project read returns active document", TestProjectReadReturnsActiveDocument},
     {"trajectory collection returns revision and items",
      TestTrajectoryCollectionReturnsRevisionAndItems},
+    {"trajectory subresource reads", TestTrajectorySubresourceReads},
     {"save restores persisted project files",
      TestSaveRestoresPersistedProjectFiles},
     {"generation publishes status and saves output",

@@ -251,6 +251,44 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             return self->TrajectoryResponse(request);
           });
         });
+    struct SubresourceRoute {
+      std::string_view path;
+      std::string_view field;
+      std::string_view itemParameter;
+    };
+    const std::array<SubresourceRoute, 3> subresources{{
+        {"waypoints", "waypoints", "waypointId"},
+        {"constraints", "constraints", "constraintId"},
+        {"event-markers", "events", "eventMarkerId"},
+    }};
+    for (const auto& [route, field, itemParameter] : subresources) {
+      const auto collectionPath =
+          "/api/v1/projects/{projectId}/trajectories/{trajectoryId}/" +
+          std::string{route};
+      const auto fieldName = std::string{field};
+      const auto itemParameterName = std::string{itemParameter};
+      server.RegisterRoute(
+          "GET", collectionPath,
+          [weak, fieldName](const choreo::api::HttpRequest& request) {
+            return WithHttpOwner(
+                weak, [&request, &fieldName](std::shared_ptr<Impl> self) {
+                  return self->TrajectorySubresourceResponse(request, fieldName,
+                                                             std::nullopt);
+                });
+          });
+      server.RegisterRoute(
+          "GET", collectionPath + "/{" + itemParameterName + "}",
+          [weak, fieldName, itemParameterName](
+              const choreo::api::HttpRequest& request) {
+            return WithHttpOwner(
+                weak, [&request, &fieldName, &itemParameterName](
+                          std::shared_ptr<Impl> self) {
+                  return self->TrajectorySubresourceResponse(
+                      request, fieldName,
+                      request.pathParameters.at(itemParameterName));
+                });
+          });
+    }
     server.RegisterRoute("POST", "/api/v1/session/save",
                          [weak](const choreo::api::HttpRequest& request) {
                            return WithHttpOwner(
@@ -746,6 +784,57 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       }
     }
     return ApiError(404, "RESOURCE_NOT_FOUND", "Trajectory was not found");
+  }
+
+  ApiResponse TrajectorySubresourceResponse(
+      const choreo::api::HttpRequest& request, std::string_view field,
+      const std::optional<std::string>& itemId) const {
+    auto snapshot = publishedSnapshot.load();
+    if (!snapshot) {
+      return ApiError(409, "SESSION_NOT_OPEN", "No project is open");
+    }
+    const auto projectId = request.pathParameters.at("projectId");
+    const auto trajectoryId = request.pathParameters.at("trajectoryId");
+    const auto snapshotJson = Json::parse_or_throw(snapshot->body);
+    if (snapshotJson.at("project").at("uuid").get_string() != projectId) {
+      return ApiError(404, "RESOURCE_NOT_FOUND", "Project was not found");
+    }
+    const Json* trajectory = nullptr;
+    for (const auto& candidate :
+         snapshotJson.at("trajectories").get_array()) {
+      if (candidate.at("uuid").get_string() == trajectoryId) {
+        trajectory = &candidate;
+        break;
+      }
+    }
+    if (trajectory == nullptr) {
+      return ApiError(404, "RESOURCE_NOT_FOUND", "Trajectory was not found");
+    }
+
+    const auto& items = field == "events"
+                            ? trajectory->at("events")
+                            : trajectory->at("params").at(field);
+    Json responseBody;
+    int status = 200;
+    if (itemId) {
+      const auto item =
+          std::find_if(items.get_array().begin(), items.get_array().end(),
+                       [&itemId](const Json& value) {
+                         return value.at("uuid").get_string() == *itemId;
+                       });
+      if (item == items.get_array().end()) {
+        return ApiError(404, "RESOURCE_NOT_FOUND", "Item was not found");
+      }
+      responseBody = *item;
+    } else {
+      responseBody =
+          Json::object("revision", snapshot->revision, "items", items);
+    }
+    ApiResponse response{status, "application/json", responseBody.to_string(),
+                         {}};
+    response.headers.emplace(
+        "ETag", "\"revision-" + std::to_string(snapshot->revision) + "\"");
+    return response;
   }
 
   ApiResponse ProjectResponse(
