@@ -94,7 +94,7 @@
     "/api/v1/session/close": {
       "post": {
         "operationId": "closeSession",
-        "summary": "Close the active project and cancel active generation",
+        "summary": "Save and close the active project, cancelling active generation",
         "responses": {
           "202": {
             "description": "Session close was accepted; completion is reported over the events WebSocket",
@@ -102,6 +102,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SessionOperationAccepted"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The project could not be saved; the session remains open",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }

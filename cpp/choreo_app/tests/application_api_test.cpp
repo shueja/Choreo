@@ -618,6 +618,9 @@ Json WaitForSessionOperation(Socket socket, std::string_view operationId,
       continue;
     }
     const auto status = event.at("status").get_string();
+    if (status == "failed" && expectedStatus == "failed") {
+      return event;
+    }
     if (status == "failed") {
       throw std::runtime_error("session operation failed: " +
                                event.at("error").at("message").get_string());
@@ -731,6 +734,33 @@ void TestCloseSessionClearsSnapshot(
           "closed session should report SESSION_NOT_OPEN");
 }
 
+void TestCloseSessionRetainsSessionWhenSaveFails(
+    const std::filesystem::path& executable) {
+  ApiTestFixture fixture{executable};
+  auto events = fixture.ConnectEvents();
+  Require(static_cast<bool>(events), "event WebSocket should connect");
+  const auto [openStatus, openBody] = fixture.OpenPath(fixture.ProjectPath());
+  const auto openOperationId =
+      AcceptedOperationId(openStatus, openBody, "open");
+  WaitForSessionOperation(events.Get(), openOperationId, "open", "succeeded");
+
+  std::filesystem::remove(fixture.ProjectPath());
+  std::filesystem::create_directory(fixture.ProjectPath());
+  const auto [closeStatus, closeBody] =
+      HttpRequest(fixture.Port(), "POST", kSessionClosePath, {});
+  const auto closeOperationId =
+      AcceptedOperationId(closeStatus, closeBody, "close");
+  const auto closeEvent =
+      WaitForSessionOperation(events.Get(), closeOperationId, "close", "failed");
+  Require(closeEvent.at("error").at("code").get_string() == "SAVE_FAILED",
+          "close should report the failed save");
+
+  const auto [snapshotStatus, snapshotBody] = fixture.Snapshot();
+  Require(snapshotStatus == kHttpOk,
+          "session should remain open when saving before close fails");
+  Require(!snapshotBody.empty(), "retained session should remain readable");
+}
+
 void TestSaveRestoresPersistedProjectFiles(
     const std::filesystem::path& executable) {
   ApiTestFixture fixture{executable};
@@ -840,7 +870,7 @@ struct TestCase {
   void (*run)(const std::filesystem::path&);
 };
 
-constexpr std::array<TestCase, 7> kTestCases{{
+constexpr std::array<TestCase, 8> kTestCases{{
     {"picker open loads project snapshot", TestPickerOpenLoadsProjectSnapshot},
     {"picker cancellation leaves session closed",
      TestPickerCancellationLeavesSessionClosed},
@@ -848,6 +878,8 @@ constexpr std::array<TestCase, 7> kTestCases{{
     {"new session completes asynchronously",
      TestNewSessionCompletesAsynchronously},
     {"close session clears snapshot", TestCloseSessionClearsSnapshot},
+    {"close retains session when saving fails",
+     TestCloseSessionRetainsSessionWhenSaveFails},
     {"save restores persisted project files",
      TestSaveRestoresPersistedProjectFiles},
     {"generation publishes status and saves output",

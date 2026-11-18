@@ -493,6 +493,26 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
     EmitSessionOperation(operationId, "close", "running", "Closing session");
     auto self = shared_from_this();
     QueueSessionOperation(operationId, "close", [self] {
+      if (self->store) {
+        const auto result = self->store->SaveFiles(self->documentFiles);
+        if (!result.Success()) {
+          std::vector<Json> details;
+          if (result.projectError) {
+            details.push_back(Json::object(
+                "path", self->documentFiles.project.string(), "message",
+                *result.projectError));
+          }
+          for (const auto& [id, error] : result.trajectoryErrors) {
+            details.push_back(Json::object(
+                "path", self->documentFiles.trajectories.at(id).string(),
+                "message", error));
+          }
+          return JsonResponse(
+              500, Json::object("code", "SAVE_FAILED", "message",
+                                "Session could not be saved before closing",
+                                "details", std::move(details)));
+        }
+      }
       self->StopGenerations();
       self->store.reset();
       self->documentFiles = {};
