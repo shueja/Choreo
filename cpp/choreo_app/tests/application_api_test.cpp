@@ -52,6 +52,7 @@ constexpr std::string_view kTrajectoryFileName = "Path.traj";
 constexpr std::string_view kNewProjectFileName = "Created.chor";
 constexpr std::string_view kSessionOpenPath = "/api/v1/session/open";
 constexpr std::string_view kSessionNewPath = "/api/v1/session/new";
+constexpr std::string_view kSessionClosePath = "/api/v1/session/close";
 constexpr std::string_view kSnapshotPath = "/api/v1/snapshot";
 constexpr std::string_view kSavePath = "/api/v1/session/save";
 constexpr std::string_view kEventsPath = "/api/v1/events";
@@ -706,6 +707,30 @@ void TestNewSessionCompletesAsynchronously(
           "new session should begin without trajectories");
 }
 
+void TestCloseSessionClearsSnapshot(
+    const std::filesystem::path& executable) {
+  ApiTestFixture fixture{executable};
+  auto events = fixture.ConnectEvents();
+  Require(static_cast<bool>(events), "event WebSocket should connect");
+  const auto [openStatus, openBody] = fixture.OpenPath(fixture.ProjectPath());
+  const auto openOperationId =
+      AcceptedOperationId(openStatus, openBody, "open");
+  WaitForSessionOperation(events.Get(), openOperationId, "open", "succeeded");
+
+  const auto [closeStatus, closeBody] =
+      HttpRequest(fixture.Port(), "POST", kSessionClosePath, {});
+  const auto closeOperationId =
+      AcceptedOperationId(closeStatus, closeBody, "close");
+  WaitForSessionOperation(events.Get(), closeOperationId, "close", "succeeded");
+
+  const auto [snapshotStatus, snapshotBody] = fixture.Snapshot();
+  Require(snapshotStatus == kHttpConflict,
+          "closed session should no longer have an available snapshot");
+  Require(Json::parse_or_throw(snapshotBody).at("code").get_string() ==
+              "SESSION_NOT_OPEN",
+          "closed session should report SESSION_NOT_OPEN");
+}
+
 void TestSaveRestoresPersistedProjectFiles(
     const std::filesystem::path& executable) {
   ApiTestFixture fixture{executable};
@@ -815,13 +840,14 @@ struct TestCase {
   void (*run)(const std::filesystem::path&);
 };
 
-constexpr std::array<TestCase, 6> kTestCases{{
+constexpr std::array<TestCase, 7> kTestCases{{
     {"picker open loads project snapshot", TestPickerOpenLoadsProjectSnapshot},
     {"picker cancellation leaves session closed",
      TestPickerCancellationLeavesSessionClosed},
     {"invalid project path is rejected", TestInvalidProjectPathIsRejected},
     {"new session completes asynchronously",
      TestNewSessionCompletesAsynchronously},
+    {"close session clears snapshot", TestCloseSessionClearsSnapshot},
     {"save restores persisted project files",
      TestSaveRestoresPersistedProjectFiles},
     {"generation publishes status and saves output",

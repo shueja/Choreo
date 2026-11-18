@@ -214,6 +214,13 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
                                  return self->NewSession(request);
                                });
                          });
+    server.RegisterRoute("POST", "/api/v1/session/close",
+                         [weak](const choreo::api::HttpRequest&) {
+                           return WithHttpOwner(
+                               weak, [](std::shared_ptr<Impl> self) {
+                                 return self->CloseSession();
+                               });
+                         });
     server.RegisterRoute(
         "GET", "/api/v1/snapshot", [weak](const choreo::api::HttpRequest&) {
           return WithHttpOwner(weak, [](std::shared_ptr<Impl> self) {
@@ -479,6 +486,20 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       return JsonResponse(201, Json::object("created", true));
     });
     return OperationAccepted(operationId, "new");
+  }
+
+  ApiResponse CloseSession() {
+    const auto operationId = NewUuid();
+    EmitSessionOperation(operationId, "close", "running", "Closing session");
+    auto self = shared_from_this();
+    QueueSessionOperation(operationId, "close", [self] {
+      self->StopGenerations();
+      self->store.reset();
+      self->documentFiles = {};
+      self->publishedSnapshot.store({});
+      return JsonResponse(200, Json::object("closed", true));
+    });
+    return OperationAccepted(operationId, "close");
   }
 
   ApiResponse SaveSession(const choreo::api::HttpRequest& request) {

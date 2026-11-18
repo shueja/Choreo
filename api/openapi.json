@@ -91,6 +91,27 @@
         }
       }
     },
+    "/api/v1/session/close": {
+      "post": {
+        "operationId": "closeSession",
+        "summary": "Close the active project and cancel active generation",
+        "responses": {
+          "202": {
+            "description": "Session close was accepted; completion is reported over the events WebSocket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOperationAccepted"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/api/v1/session/save": {
       "post": {
         "operationId": "saveSession",
