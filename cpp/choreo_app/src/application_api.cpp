@@ -227,6 +227,30 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             return self->SnapshotResponse();
           });
         });
+    server.RegisterRoute(
+        "GET",
+        "/api/v1/projects/{projectId}",
+        [weak](const choreo::api::HttpRequest& request) {
+          return WithHttpOwner(weak, [&request](std::shared_ptr<Impl> self) {
+            return self->ProjectResponse(request);
+          });
+        });
+    server.RegisterRoute(
+        "GET",
+        "/api/v1/projects/{projectId}/trajectories",
+        [weak](const choreo::api::HttpRequest& request) {
+          return WithHttpOwner(weak, [&request](std::shared_ptr<Impl> self) {
+            return self->TrajectoriesResponse(request);
+          });
+        });
+    server.RegisterRoute(
+        "GET",
+        "/api/v1/projects/{projectId}/trajectories/{trajectoryId}",
+        [weak](const choreo::api::HttpRequest& request) {
+          return WithHttpOwner(weak, [&request](std::shared_ptr<Impl> self) {
+            return self->TrajectoryResponse(request);
+          });
+        });
     server.RegisterRoute("POST", "/api/v1/session/save",
                          [weak](const choreo::api::HttpRequest& request) {
                            return WithHttpOwner(
@@ -695,6 +719,70 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       return ApiError(409, "SESSION_NOT_OPEN", "No project is open");
     }
     ApiResponse response{200, "application/json", snapshot->body, {}};
+    response.headers.emplace(
+        "ETag", "\"revision-" + std::to_string(snapshot->revision) + "\"");
+    return response;
+  }
+
+  ApiResponse TrajectoryResponse(
+      const choreo::api::HttpRequest& request) const {
+    auto snapshot = publishedSnapshot.load();
+    if (!snapshot) {
+      return ApiError(409, "SESSION_NOT_OPEN", "No project is open");
+    }
+    const auto projectId = request.pathParameters.at("projectId");
+    const auto trajectoryId = request.pathParameters.at("trajectoryId");
+    const auto snapshotJson = Json::parse_or_throw(snapshot->body);
+    if (snapshotJson.at("project").at("uuid").get_string() != projectId) {
+      return ApiError(404, "RESOURCE_NOT_FOUND", "Project was not found");
+    }
+    for (const auto& trajectory : snapshotJson.at("trajectories").get_array()) {
+      if (trajectory.at("uuid").get_string() == trajectoryId) {
+        ApiResponse response{200, "application/json", trajectory.to_string(),
+                             {}};
+        response.headers.emplace(
+            "ETag", "\"revision-" + std::to_string(snapshot->revision) + "\"");
+        return response;
+      }
+    }
+    return ApiError(404, "RESOURCE_NOT_FOUND", "Trajectory was not found");
+  }
+
+  ApiResponse ProjectResponse(
+      const choreo::api::HttpRequest& request) const {
+    auto snapshot = publishedSnapshot.load();
+    if (!snapshot) {
+      return ApiError(409, "SESSION_NOT_OPEN", "No project is open");
+    }
+    const auto projectId = request.pathParameters.at("projectId");
+    const auto snapshotJson = Json::parse_or_throw(snapshot->body);
+    const auto& project = snapshotJson.at("project");
+    if (project.at("uuid").get_string() != projectId) {
+      return ApiError(404, "RESOURCE_NOT_FOUND", "Project was not found");
+    }
+    ApiResponse response{200, "application/json", project.to_string(), {}};
+    response.headers.emplace(
+        "ETag", "\"revision-" + std::to_string(snapshot->revision) + "\"");
+    return response;
+  }
+
+  ApiResponse TrajectoriesResponse(
+      const choreo::api::HttpRequest& request) const {
+    auto snapshot = publishedSnapshot.load();
+    if (!snapshot) {
+      return ApiError(409, "SESSION_NOT_OPEN", "No project is open");
+    }
+    const auto projectId = request.pathParameters.at("projectId");
+    const auto snapshotJson = Json::parse_or_throw(snapshot->body);
+    if (snapshotJson.at("project").at("uuid").get_string() != projectId) {
+      return ApiError(404, "RESOURCE_NOT_FOUND", "Project was not found");
+    }
+    auto items = snapshotJson.at("trajectories");
+    ApiResponse response{
+        200, "application/json",
+        Json::object("revision", snapshot->revision, "items", std::move(items))
+            .to_string(),
+        {}};
     response.headers.emplace(
         "ETag", "\"revision-" + std::to_string(snapshot->revision) + "\"");
     return response;

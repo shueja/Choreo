@@ -64,6 +64,7 @@ constexpr int kHttpOk = 200;
 constexpr int kHttpAccepted = 202;
 constexpr int kHttpBadRequest = 400;
 constexpr int kHttpConflict = 409;
+constexpr int kHttpNotFound = 404;
 constexpr std::size_t kExpectedTrajectoryCount = 1;
 constexpr std::size_t kNoTrajectories = 0;
 constexpr std::size_t kTemporaryDirectoryAttempts = 16;
@@ -533,6 +534,26 @@ class ApiTestFixture {
     return HttpRequest(Port(), "GET", kSnapshotPath, {});
   }
 
+  std::pair<int, std::string> GetTrajectory(std::string_view projectId,
+                                           std::string_view trajectoryId) const {
+    const auto path =
+        "/api/v1/projects/" + std::string{projectId} + "/trajectories/" +
+        std::string{trajectoryId};
+    return HttpRequest(Port(), "GET", path, {});
+  }
+
+  std::pair<int, std::string> GetProject(std::string_view projectId) const {
+    const auto path = "/api/v1/projects/" + std::string{projectId};
+    return HttpRequest(Port(), "GET", path, {});
+  }
+
+  std::pair<int, std::string> ListTrajectories(
+      std::string_view projectId) const {
+    const auto path =
+        "/api/v1/projects/" + std::string{projectId} + "/trajectories";
+    return HttpRequest(Port(), "GET", path, {});
+  }
+
   std::pair<int, std::string> Save() const {
     return HttpRequest(Port(), "POST", kSavePath, "{}");
   }
@@ -720,6 +741,8 @@ void TestCloseSessionClearsSnapshot(
       AcceptedOperationId(openStatus, openBody, "open");
   WaitForSessionOperation(events.Get(), openOperationId, "open", "succeeded");
 
+  std::filesystem::remove(fixture.ProjectPath());
+  std::filesystem::remove(fixture.TrajectoryPath());
   const auto [closeStatus, closeBody] =
       HttpRequest(fixture.Port(), "POST", kSessionClosePath, {});
   const auto closeOperationId =
@@ -732,6 +755,14 @@ void TestCloseSessionClearsSnapshot(
   Require(Json::parse_or_throw(snapshotBody).at("code").get_string() ==
               "SESSION_NOT_OPEN",
           "closed session should report SESSION_NOT_OPEN");
+  Require(Json::parse_or_throw(ReadFileContents(fixture.ProjectPath()))
+                  .at("uuid")
+                  .get_string() == kTestProjectUuid,
+          "close should persist the project before releasing the session");
+  Require(Json::parse_or_throw(ReadFileContents(fixture.TrajectoryPath()))
+                  .at("uuid")
+                  .get_string() == kTestTrajectoryUuid,
+          "close should persist trajectories before releasing the session");
 }
 
 void TestCloseSessionRetainsSessionWhenSaveFails(
@@ -759,6 +790,88 @@ void TestCloseSessionRetainsSessionWhenSaveFails(
   Require(snapshotStatus == kHttpOk,
           "session should remain open when saving before close fails");
   Require(!snapshotBody.empty(), "retained session should remain readable");
+}
+
+void TestTrajectoryReadReturnsDocumentAndRejectsUnknownIds(
+    const std::filesystem::path& executable) {
+  ApiTestFixture fixture{executable};
+  auto events = fixture.ConnectEvents();
+  Require(static_cast<bool>(events), "event WebSocket should connect");
+  const auto [openStatus, openBody] = fixture.OpenPath(fixture.ProjectPath());
+  const auto openOperationId =
+      AcceptedOperationId(openStatus, openBody, "open");
+  WaitForSessionOperation(events.Get(), openOperationId, "open", "succeeded");
+
+  const auto [status, body] =
+      fixture.GetTrajectory(kTestProjectUuid, kTestTrajectoryUuid);
+  Require(status == kHttpOk, "existing trajectory should return HTTP 200");
+  const auto trajectory = Json::parse_or_throw(body);
+  Require(trajectory.at("uuid").get_string() == kTestTrajectoryUuid,
+          "trajectory response should preserve the requested UUID");
+
+  const auto [missingStatus, missingBody] =
+      fixture.GetTrajectory(kTestProjectUuid, "missing-trajectory");
+  Require(missingStatus == kHttpNotFound,
+          "unknown trajectory should return HTTP 404");
+  Require(Json::parse_or_throw(missingBody).at("code").get_string() ==
+              "RESOURCE_NOT_FOUND",
+          "unknown trajectory should report RESOURCE_NOT_FOUND");
+}
+
+void TestProjectReadReturnsActiveDocument(
+    const std::filesystem::path& executable) {
+  ApiTestFixture fixture{executable};
+  auto events = fixture.ConnectEvents();
+  Require(static_cast<bool>(events), "event WebSocket should connect");
+  const auto [openStatus, openBody] = fixture.OpenPath(fixture.ProjectPath());
+  const auto openOperationId =
+      AcceptedOperationId(openStatus, openBody, "open");
+  WaitForSessionOperation(events.Get(), openOperationId, "open", "succeeded");
+
+  const auto [status, body] = fixture.GetProject(kTestProjectUuid);
+  Require(status == kHttpOk, "existing project should return HTTP 200");
+  Require(Json::parse_or_throw(body).at("uuid").get_string() ==
+              kTestProjectUuid,
+          "project response should preserve the requested UUID");
+
+  const auto [missingStatus, missingBody] =
+      fixture.GetProject("missing-project");
+  Require(missingStatus == kHttpNotFound,
+          "unknown project should return HTTP 404");
+  Require(Json::parse_or_throw(missingBody).at("code").get_string() ==
+              "RESOURCE_NOT_FOUND",
+          "unknown project should report RESOURCE_NOT_FOUND");
+}
+
+void TestTrajectoryCollectionReturnsRevisionAndItems(
+    const std::filesystem::path& executable) {
+  ApiTestFixture fixture{executable};
+  auto events = fixture.ConnectEvents();
+  Require(static_cast<bool>(events), "event WebSocket should connect");
+  const auto [openStatus, openBody] = fixture.OpenPath(fixture.ProjectPath());
+  const auto openOperationId =
+      AcceptedOperationId(openStatus, openBody, "open");
+  WaitForSessionOperation(events.Get(), openOperationId, "open", "succeeded");
+
+  const auto [status, body] = fixture.ListTrajectories(kTestProjectUuid);
+  Require(status == kHttpOk, "trajectory collection should return HTTP 200");
+  const auto collection = Json::parse_or_throw(body);
+  Require(collection.at("revision").get_number() >= 0,
+          "trajectory collection should include the current revision");
+  const auto trajectories = collection.at("items").get_array();
+  Require(trajectories.size() == kExpectedTrajectoryCount,
+          "trajectory collection should include the active trajectories");
+  Require(trajectories.front().at("uuid").get_string() ==
+              kTestTrajectoryUuid,
+          "trajectory collection should preserve trajectory identity");
+
+  const auto [missingStatus, missingBody] =
+      fixture.ListTrajectories("missing-project");
+  Require(missingStatus == kHttpNotFound,
+          "unknown project collection should return HTTP 404");
+  Require(Json::parse_or_throw(missingBody).at("code").get_string() ==
+              "RESOURCE_NOT_FOUND",
+          "unknown project collection should report RESOURCE_NOT_FOUND");
 }
 
 void TestSaveRestoresPersistedProjectFiles(
@@ -870,7 +983,7 @@ struct TestCase {
   void (*run)(const std::filesystem::path&);
 };
 
-constexpr std::array<TestCase, 8> kTestCases{{
+constexpr std::array<TestCase, 11> kTestCases{{
     {"picker open loads project snapshot", TestPickerOpenLoadsProjectSnapshot},
     {"picker cancellation leaves session closed",
      TestPickerCancellationLeavesSessionClosed},
@@ -880,6 +993,11 @@ constexpr std::array<TestCase, 8> kTestCases{{
     {"close session clears snapshot", TestCloseSessionClearsSnapshot},
     {"close retains session when saving fails",
      TestCloseSessionRetainsSessionWhenSaveFails},
+    {"trajectory read returns document and rejects unknown IDs",
+     TestTrajectoryReadReturnsDocumentAndRejectsUnknownIds},
+    {"project read returns active document", TestProjectReadReturnsActiveDocument},
+    {"trajectory collection returns revision and items",
+     TestTrajectoryCollectionReturnsRevisionAndItems},
     {"save restores persisted project files",
      TestSaveRestoresPersistedProjectFiles},
     {"generation publishes status and saves output",

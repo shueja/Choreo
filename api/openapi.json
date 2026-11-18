@@ -213,6 +213,9 @@
           "404": {
             "$ref": "#/components/responses/ApiError"
           },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "default": {
             "$ref": "#/components/responses/ApiError"
           }
@@ -278,6 +281,9 @@
             }
           },
           "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
             "$ref": "#/components/responses/ApiError"
           },
           "default": {
@@ -355,6 +361,9 @@
             }
           },
           "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
             "$ref": "#/components/responses/ApiError"
           },
           "default": {
