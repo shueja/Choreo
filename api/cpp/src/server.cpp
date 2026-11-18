@@ -6,10 +6,14 @@
 #include <cctype>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <format>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -193,6 +197,149 @@ HttpResponse ErrorResponse(int status, std::string_view code,
   return response;
 }
 
+int HexValue(char character) {
+  if (character >= '0' && character <= '9') {
+    return character - '0';
+  }
+  if (character >= 'a' && character <= 'f') {
+    return character - 'a' + 10;
+  }
+  if (character >= 'A' && character <= 'F') {
+    return character - 'A' + 10;
+  }
+  return -1;
+}
+
+std::optional<std::string> DecodeStaticPath(std::string_view path) {
+  if (path.empty() || path.front() != '/') {
+    return std::nullopt;
+  }
+  path.remove_prefix(1);
+  std::string decoded;
+  decoded.reserve(path.size());
+  for (std::size_t index = 0; index < path.size(); ++index) {
+    char character = path[index];
+    if (character == '%') {
+      if (index + 2 >= path.size()) {
+        return std::nullopt;
+      }
+      const auto high = HexValue(path[index + 1]);
+      const auto low = HexValue(path[index + 2]);
+      if (high < 0 || low < 0) {
+        return std::nullopt;
+      }
+      character = static_cast<char>((high << 4) | low);
+      index += 2;
+    }
+    if (character == '\\' || character == '\0' || character == ':' ||
+        static_cast<unsigned char>(character) < 0x20) {
+      return std::nullopt;
+    }
+    decoded.push_back(character);
+  }
+  std::size_t start = 0;
+  while (start <= decoded.size()) {
+    auto end = decoded.find('/', start);
+    if (end == std::string::npos) {
+      end = decoded.size();
+    }
+    const auto segment = std::string_view{decoded}.substr(start, end - start);
+    if (segment == "." || segment == "..") {
+      return std::nullopt;
+    }
+    if (end == decoded.size()) {
+      break;
+    }
+    start = end + 1;
+  }
+  return decoded;
+}
+
+std::string ContentType(const std::filesystem::path& path) {
+  auto extension = Lower(path.extension().string());
+  if (extension == ".html") {
+    return "text/html; charset=utf-8";
+  }
+  if (extension == ".js" || extension == ".mjs") {
+    return "text/javascript; charset=utf-8";
+  }
+  if (extension == ".css") {
+    return "text/css; charset=utf-8";
+  }
+  if (extension == ".json" || extension == ".map") {
+    return "application/json";
+  }
+  if (extension == ".svg") {
+    return "image/svg+xml";
+  }
+  if (extension == ".png") {
+    return "image/png";
+  }
+  if (extension == ".jpg" || extension == ".jpeg") {
+    return "image/jpeg";
+  }
+  if (extension == ".gif") {
+    return "image/gif";
+  }
+  if (extension == ".ico") {
+    return "image/x-icon";
+  }
+  if (extension == ".woff2") {
+    return "font/woff2";
+  }
+  if (extension == ".txt") {
+    return "text/plain; charset=utf-8";
+  }
+  return "application/octet-stream";
+}
+
+bool IsWithinDirectory(const std::filesystem::path& root,
+                       const std::filesystem::path& candidate) {
+  const auto relative = candidate.lexically_relative(root);
+  return !relative.empty() && !relative.is_absolute() &&
+         *relative.begin() != "..";
+}
+
+HttpResponse ServeStaticFile(const std::filesystem::path& root,
+                             const HttpRequest& request) {
+  if (request.path.starts_with("/api/")) {
+    return ErrorResponse(404, "RESOURCE_NOT_FOUND", "Route was not found");
+  }
+  if (request.method != "GET") {
+    return ErrorResponse(405, "METHOD_NOT_ALLOWED", "Method is not allowed");
+  }
+  const auto decodedPath = DecodeStaticPath(request.path);
+  if (!decodedPath) {
+    return ErrorResponse(400, "INVALID_PATH", "Static path is invalid");
+  }
+  std::filesystem::path relativePath{*decodedPath};
+  if (decodedPath->empty() || decodedPath->back() == '/' ||
+      relativePath.extension().empty()) {
+    relativePath /= "index.html";
+  }
+  std::error_code error;
+  const auto candidate = std::filesystem::canonical(root / relativePath, error);
+  if (error || !IsWithinDirectory(root, candidate) ||
+      !std::filesystem::is_regular_file(candidate, error) || error) {
+    return ErrorResponse(404, "RESOURCE_NOT_FOUND", "File was not found");
+  }
+  constexpr std::uintmax_t kMaximumStaticFileBytes = 64 * 1024 * 1024;
+  const auto size = std::filesystem::file_size(candidate, error);
+  if (error || size > kMaximumStaticFileBytes) {
+    return ErrorResponse(404, "RESOURCE_NOT_FOUND", "File was not found");
+  }
+  std::ifstream input{candidate, std::ios::binary};
+  if (!input) {
+    return ErrorResponse(404, "RESOURCE_NOT_FOUND", "File was not found");
+  }
+  std::string body{std::istreambuf_iterator<char>{input},
+                   std::istreambuf_iterator<char>{}};
+  if (input.bad() || body.size() != size) {
+    return ErrorResponse(500, "FILE_READ_FAILED", "Could not read UI asset");
+  }
+  return HttpResponse{200, ContentType(candidate), std::move(body), {}};
+}
+
 }  // namespace
 
 std::string_view HttpRequest::Header(std::string_view name) const {
@@ -209,6 +356,32 @@ struct ApiServer::Impl : public std::enable_shared_from_this<ApiServer::Impl> {
     std::string pathTemplate;
     HttpHandler handler;
   };
+
+  void RegisterNotFoundHandler(HttpHandler handler) {
+    std::scoped_lock lock{registrationMutex};
+    if (running) {
+      throw std::logic_error("routes must be registered before server start");
+    }
+    if (!handler) {
+      throw std::invalid_argument("not-found handler must not be empty");
+    }
+    if (notFoundHandler) {
+      throw std::invalid_argument("not-found handler is already registered");
+    }
+    notFoundHandler = std::move(handler);
+  }
+
+  void RegisterStaticDirectory(std::filesystem::path root) {
+    std::error_code error;
+    root = std::filesystem::canonical(root, error);
+    if (error || !std::filesystem::is_directory(root, error) || error) {
+      throw std::invalid_argument("static root must be an existing directory");
+    }
+    RegisterNotFoundHandler(
+        [root = std::move(root)](const HttpRequest& request) {
+          return ServeStaticFile(root, request);
+        });
+  }
 
   struct WebSocketRoute {
     std::string path;
@@ -436,6 +609,15 @@ struct ApiServer::Impl : public std::enable_shared_from_this<ApiServer::Impl> {
       response.headers.emplace("Allow", std::move(allow));
       return response;
     }
+    if (notFoundHandler) {
+      try {
+        return notFoundHandler(request);
+      } catch (const std::exception&) {
+        return ErrorResponse(500, "INTERNAL_ERROR", "Not-found handler failed");
+      } catch (...) {
+        return ErrorResponse(500, "INTERNAL_ERROR", "Not-found handler failed");
+      }
+    }
     return ErrorResponse(404, "RESOURCE_NOT_FOUND", "Route was not found");
   }
 
@@ -514,6 +696,7 @@ struct ApiServer::Impl : public std::enable_shared_from_this<ApiServer::Impl> {
   std::shared_ptr<wpi::net::uv::Tcp> listener;
   std::vector<std::weak_ptr<ClientConnection>> connections;
   std::vector<Route> routes;
+  HttpHandler notFoundHandler;
   std::vector<WebSocketRoute> websocketRoutes;
   std::map<WebSocketId, WebSocketSession> websocketSessions;
   std::string expectedHost;
@@ -740,6 +923,14 @@ void ApiServer::RegisterRoute(std::string method, std::string pathTemplate,
                               HttpHandler handler) {
   m_impl->RegisterRoute(std::move(method), std::move(pathTemplate),
                         std::move(handler));
+}
+
+void ApiServer::RegisterNotFoundHandler(HttpHandler handler) {
+  m_impl->RegisterNotFoundHandler(std::move(handler));
+}
+
+void ApiServer::RegisterStaticDirectory(std::filesystem::path root) {
+  m_impl->RegisterStaticDirectory(std::move(root));
 }
 
 void ApiServer::RegisterWebSocketRoute(std::string path,

@@ -1,7 +1,10 @@
 #include "choreo/api/server.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -134,6 +137,19 @@ int main() {
   choreo::api::ServerOptions options;
   options.allowedOrigins.emplace_back("tauri://localhost");
   choreo::api::ApiServer server{options};
+  const auto staticRoot =
+      std::filesystem::temp_directory_path() /
+      ("choreo-api-static-" +
+       std::to_string(
+           std::chrono::steady_clock::now().time_since_epoch().count()));
+  std::filesystem::create_directories(staticRoot / "assets");
+  {
+    std::ofstream index{staticRoot / "index.html", std::ios::binary};
+    index << "<!doctype html><title>Choreo</title>";
+    std::ofstream script{staticRoot / "assets" / "app.js", std::ios::binary};
+    script << "console.log('Choreo');";
+  }
+  server.RegisterStaticDirectory(staticRoot);
   server.RegisterRoute("GET", "/api/v1/projects/{projectId}",
                        [&](const choreo::api::HttpRequest& request) {
                          callbackCalled =
@@ -211,6 +227,30 @@ int main() {
   const auto operationResponse = Exchange(
       server.Port(), "POST /api/v1/operations HTTP/1.1\r\nHost: " + host +
                          "\r\nConnection: close\r\n\r\n");
+  const auto staticIndexResponse =
+      Exchange(server.Port(), "GET / HTTP/1.1\r\nHost: " + host +
+                                  "\r\nConnection: close\r\n\r\n");
+  const auto staticAssetResponse = Exchange(
+      server.Port(), "GET /assets/app.js?v=1 HTTP/1.1\r\nHost: " + host +
+                         "\r\nConnection: close\r\n\r\n");
+  const auto spaFallbackResponse =
+      Exchange(server.Port(), "GET /editor/path HTTP/1.1\r\nHost: " + host +
+                                  "\r\nConnection: close\r\n\r\n");
+  const auto missingAssetResponse = Exchange(
+      server.Port(), "GET /assets/missing.js HTTP/1.1\r\nHost: " + host +
+                         "\r\nConnection: close\r\n\r\n");
+  const auto apiFallbackResponse =
+      Exchange(server.Port(), "GET /api/v1/unknown HTTP/1.1\r\nHost: " + host +
+                                  "\r\nConnection: close\r\n\r\n");
+  const auto traversalResponse = Exchange(
+      server.Port(), "GET /%2e%2e/secret.txt HTTP/1.1\r\nHost: " + host +
+                         "\r\nConnection: close\r\n\r\n");
+  const auto malformedPathResponse =
+      Exchange(server.Port(), "GET /assets/%GG.js HTTP/1.1\r\nHost: " + host +
+                                  "\r\nConnection: close\r\n\r\n");
+  const auto staticPostResponse =
+      Exchange(server.Port(), "POST /assets/app.js HTTP/1.1\r\nHost: " + host +
+                                  "\r\nConnection: close\r\n\r\n");
 
   Socket websocket = ConnectToPort(server.Port());
   if (websocket == kInvalidSocket) {
@@ -255,6 +295,7 @@ int main() {
   const auto handshakeResponse = ReadHttpHeaders(websocket);
   CloseSocket(websocket);
   server.Stop();
+  std::filesystem::remove_all(staticRoot);
 
   choreo::api::ServerOptions invalidBindOptions;
   invalidBindOptions.bindAddress = "0.0.0.0";
@@ -294,6 +335,30 @@ int main() {
                  operationResponse.find("HTTP/1.1 202 Accepted") !=
                      std::string::npos &&
                  operationResponse.find("\"accepted\":true") !=
+                     std::string::npos &&
+                 staticIndexResponse.find("HTTP/1.1 200 OK") !=
+                     std::string::npos &&
+                 staticIndexResponse.find(
+                     "Content-Type: text/html; charset=utf-8") !=
+                     std::string::npos &&
+                 staticIndexResponse.find("<title>Choreo</title>") !=
+                     std::string::npos &&
+                 staticAssetResponse.find(
+                     "Content-Type: text/javascript; charset=utf-8") !=
+                     std::string::npos &&
+                 staticAssetResponse.find("console.log('Choreo')") !=
+                     std::string::npos &&
+                 spaFallbackResponse.find("<title>Choreo</title>") !=
+                     std::string::npos &&
+                 missingAssetResponse.find("HTTP/1.1 404 Not Found") !=
+                     std::string::npos &&
+                 apiFallbackResponse.find("HTTP/1.1 404 Not Found") !=
+                     std::string::npos &&
+                 traversalResponse.find("HTTP/1.1 400 Bad Request") !=
+                     std::string::npos &&
+                 malformedPathResponse.find("HTTP/1.1 400 Bad Request") !=
+                     std::string::npos &&
+                 staticPostResponse.find("HTTP/1.1 405 Method Not Allowed") !=
                      std::string::npos &&
                  invalidHandshakeResponse.find("101 Switching Protocols") ==
                      std::string::npos &&

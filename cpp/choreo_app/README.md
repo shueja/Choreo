@@ -50,12 +50,13 @@ ephemeral port, and prints one JSON readiness record to stdout:
 {"type":"ready","url":"http://127.0.0.1:PORT"}
 ```
 
-Configure an optional generator path with `--generator PATH`; repeat
-`--allowed-origin ORIGIN` to permit cross-origin UI clients. The current host
-is an API process only: it does not yet serve the web UI, open a browser, or
-provide a native project picker. Open projects using the API's path-based
-session operation. Stop the process with Ctrl+C or SIGTERM. This is an
-integration foundation, not yet a standalone usable application.
+Pass the Vite output directory with `--web-root PATH` to serve its static
+assets, and configure an optional generator path with `--generator PATH`.
+Repeat `--allowed-origin ORIGIN` to permit cross-origin UI clients. The default
+Vite output directory is `dist`. The current host does not yet open a browser
+or provide a native project picker. Open projects using the API's path-based
+session operation. Stop the process with Ctrl+C or SIGTERM. The existing UI
+still uses Tauri commands, so static hosting is not yet a usable browser app.
 
 When `wpinet` is available, separate CTest cases cover the test-child handoff
 and real-generator differential, swerve, and split scenarios. Set

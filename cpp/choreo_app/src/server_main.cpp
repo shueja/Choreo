@@ -3,6 +3,7 @@
 #include <csignal>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -22,6 +23,7 @@ void RequestShutdown(int) {
 
 struct Arguments {
   std::uint16_t port = 0;
+  std::filesystem::path webRoot;
   std::string generator;
   std::vector<std::string> allowedOrigins;
   bool showHelp = false;
@@ -48,7 +50,7 @@ bool ParseArguments(int argc, char** argv, Arguments& arguments,
       continue;
     }
     if (argument != "--port" && argument != "--generator" &&
-        argument != "--allowed-origin") {
+        argument != "--allowed-origin" && argument != "--web-root") {
       error = "unknown argument: " + std::string{argument};
       return false;
     }
@@ -68,6 +70,8 @@ bool ParseArguments(int argc, char** argv, Arguments& arguments,
       }
     } else if (argument == "--generator") {
       arguments.generator = value;
+    } else if (argument == "--web-root") {
+      arguments.webRoot = value;
     } else {
       arguments.allowedOrigins.emplace_back(value);
     }
@@ -77,7 +81,7 @@ bool ParseArguments(int argc, char** argv, Arguments& arguments,
 
 void PrintUsage(std::ostream& output) {
   output << "Usage: choreo-server [--port PORT] [--generator PATH] "
-            "[--allowed-origin ORIGIN...]\n"
+            "[--web-root PATH] [--allowed-origin ORIGIN...]\n"
             "Starts the localhost Choreo application API. Port 0 selects "
             "an available port.\n";
 }
@@ -106,6 +110,9 @@ int main(int argc, char** argv) {
     serverOptions.port = arguments.port;
     serverOptions.allowedOrigins = std::move(arguments.allowedOrigins);
     choreo::api::ApiServer server{std::move(serverOptions)};
+    if (!arguments.webRoot.empty()) {
+      server.RegisterStaticDirectory(arguments.webRoot);
+    }
 
     choreo::document::ApplicationApi::Options applicationOptions;
     applicationOptions.generatorExecutable = arguments.generator;

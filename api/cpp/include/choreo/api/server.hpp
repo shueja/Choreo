@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
@@ -72,6 +73,8 @@ class ApiServer {
 
   void RegisterRoute(std::string method, std::string pathTemplate,
                      HttpHandler handler);
+  void RegisterNotFoundHandler(HttpHandler handler);
+  void RegisterStaticDirectory(std::filesystem::path root);
   void RegisterWebSocketRoute(std::string path, WebSocketCallbacks callbacks);
 
   void Start();
