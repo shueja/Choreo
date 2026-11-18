@@ -631,29 +631,95 @@ browser and OWASP guidance before implementation.
   cancellation while bounding intermediate samples and coordinating the
   subprocess lifecycle?
 
-## Suggested research order
+## Implementation sequence and exit criteria
 
-1. The Linux/GCC 14 WPIMath-only `wpilib-expression` configure/build/test with
-   `WPILIB_WITH_NTCORE=OFF` is verified. Separately prototype the selected
-   server transport and measure `wpinet` build/package footprint. Compare
-   cpp-httplib only if integration cost warrants it.
-2. Prototype port-0 binding, readiness reporting, browser launch, and direct
-   Tauri child-process lifecycle; verify the same server binary serves both
-   modes and that Tauri can load its UI origin.
-3. Add a dedicated server build/test/package path to CI for the retained
-   targets, starting with the platforms supported by the C++ dependencies;
-   investigate the Windows ARM64 gap, then verify the complete release matrix
-   including native Linux ARM64.
-4. Specify request/event envelopes and UUID-addressed document operations;
-  test acknowledgments, retry behavior, bounded snapshot-based reconnect,
-  revision gaps, and operation progress without durable event replay. Confirm
-  linked standards against live primary sources before treating them as
-  verified citations.
-5. Define and test expression request-size, setup-count, and complexity limits
-   and diagnostics around the required `wpilib-expression` integration.
-6. Design the document store's durable commit and multi-file recovery protocol;
-  test failures at each write and recovery step, including undo/redo and file
-  lifecycle operations on each supported operating system.
-7. Integrate the C++ generator as an app-managed subprocess, define the input,
-  progress, cancellation, stale-result, and event timing contracts, and test
-  child cleanup and durable publication with representative documents.
+Implement the system in dependency order. A phase is complete when its exit
+criteria pass; later phases may refine an earlier contract, but must not
+reintroduce a second authoritative document model or weaken the persistence
+and localhost security decisions above. The existing GUI remains available
+until the replacement has passed the end-to-end acceptance criteria.
+
+1. **Close design gates.** Select the HTTP/WebSocket transport after measuring
+   the `wpinet` build and packaging cost; the WPIMath-only expression build
+   with `WPILIB_WITH_NTCORE=OFF` is already verified on Linux/GCC 14. Specify
+   the API command/event envelopes, operation states, event timing and offset
+   semantics, stale-generation policy, process shutdown behavior, expression
+   limits, and recoverable multi-file commit protocol. Verify security and
+   platform API assumptions against current primary sources.
+   **Exit:** each unresolved decision in this plan has a recorded choice,
+   rationale, and tests required to validate it; no application behavior is
+   left to implicit transport or persistence assumptions.
+2. **Establish the native server foundation.** Build a first-class CMake
+   server executable and host lifecycle around the selected transport. Prove
+   loopback-only binding, dynamic-port selection, readiness reporting,
+   graceful shutdown, Host/Origin checks, and serving a production UI build.
+   Add initial configure/build/test jobs to C++ CI and test transport behavior
+   on supported operating systems as the dependency matrix permits.
+   **Exit:** the server can start, report its usable URL, serve static assets,
+   reject invalid origins/hosts, and shut down cleanly in automated tests.
+3. **Make document commits durable.** Extend the app document layer with
+   recoverable transactions spanning the project and trajectory files,
+   including create, delete, rename, edits, generation, undo, and redo. Persist
+   a candidate before publishing its revision or notifying subscribers; pause
+   mutations on persistence failure and reconcile before resuming. Add
+   failure-injection and startup-recovery tests for each transaction stage.
+   **Exit:** recovery yields a complete old or new document after simulated
+   failures, and no failed or incomplete commit is visible as successful.
+4. **Complete the application API and synchronization.** Add session
+   create/open/close, project and trajectory lifecycle, snapshot, mutation,
+   save-status, undo/redo, validation, and operation endpoints. Enforce
+   request correlation, stale-revision rejection, idempotent retry behavior,
+   structured object/field diagnostics, bounded WebSocket messages, and the
+   snapshot/subscription reconnect procedure described above. Test Host and
+   Origin rules on state-changing HTTP requests and WebSocket upgrades.
+   **Exit:** API integration tests cover successful and rejected commands,
+   ambiguous retries, revision gaps, reconnect/resnapshot, and persistence
+   failures without duplicate or partially published state.
+5. **Complete managed generation.** Use immutable evaluated inputs, identify
+   each operation and input revision, and return bounded progress plus a
+   candidate result from the child. Implement cancellation, shutdown cleanup,
+   stale-result rejection, result validation, event-time resolution, and
+   durable single-transaction publication through the app commit lane.
+   **Exit:** real-generator tests cover differential, swerve, and split paths,
+   progress and terminal states, cancellation and child cleanup, stale inputs,
+   event timing, persistence failure, and undo/redo of successful results.
+6. **Move the UI to the server contract.** Replace Tauri business-command
+   calls and client-authoritative document/evaluation/history behavior with
+   server REST commands and WebSocket snapshots/events. Keep only presentation
+   state in the client. Integrate server-side `wpilib-expression`, surface
+   object-specific validation and generation diagnostics, and preserve the
+   existing authoring, visualization, playback, and code-generation workflows.
+   **Exit:** browser-based workflow tests create/open a project, edit paths
+   and robot settings, generate and inspect trajectories, handle validation
+   errors, and save/reopen with state matching the server snapshot.
+7. **Add the optional Tauri launcher.** Make the launcher start and directly
+   own the same C++ server executable, wait for readiness, pass the selected
+   API URL to its packaged UI, request graceful shutdown, and reap or
+   terminate the child on exit. Remove Rust business logic from the new
+   application path; retain Rust only for launcher responsibilities.
+   **Exit:** packaged Tauri tests verify startup failure, early child exit,
+   normal shutdown, dynamic API connectivity, and the actual webview
+   Origin/CSP behavior on Windows, macOS, and Linux.
+8. **Ship and support the integrated app.** Package the server, UI assets, and
+   required runtime dependencies in the retained installer and standalone
+   formats. Complete configure/build/test/package CI for Windows x86_64 and
+   ARM64, macOS x86_64 and arm64, and Linux x86_64 and ARM64; resolve or
+   explicitly document any dependency blocker rather than silently dropping a
+   supported target. Update installation, usage, build, troubleshooting, and
+   safety documentation.
+   **Exit:** clean release builds produce and launch each supported artifact,
+   and user documentation describes installation, authoring, generation,
+   saving, robot integration, and limitations.
+
+## Definition of complete
+
+The architecture is integrated when all repository acceptance workflows in
+the [repository requirements](../../PROJECT_REQUIREMENTS.md) pass against the
+server-backed UI and CLI, and release artifacts pass their platform smoke
+tests. In particular, verify project authoring through save/reopen, useful
+failures for invalid data and infeasible paths, selected and all-trajectory
+CLI generation, ChoreoLib loading, dimension/type-checked expressions without
+partial updates, recoverable persistence and reconnect behavior, cancellable
+generation, and the documented supported-platform build matrix. The plan does
+not require replacing the existing CLI or ChoreoLib implementation where
+their documented behavior already meets these criteria.
