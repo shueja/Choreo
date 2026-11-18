@@ -77,13 +77,29 @@ TRAJ_SCHEMA_VERSION = {version}"""
 
 #pragma once
 
-#include <stdint.h>
+#include "choreo/document/trajectory_schema_version.hpp"
+
+#include <cstdint>
 
 namespace choreo {{
 
-inline constexpr uint32_t kTrajSchemaVersion = {version};
+inline constexpr std::uint32_t kTrajSchemaVersion = document::kTrajectorySchemaVersion;
 
 }}  // namespace choreo"""
+        ),
+    ),
+    Location(
+        relative_path=Path("document/cpp/include/choreo/document/trajectory_schema_version.hpp"),
+        template=lambda version: (
+            f"""#pragma once
+
+#include <cstdint>
+
+namespace choreo::document {{
+
+inline constexpr std::uint32_t kTrajectorySchemaVersion = {version};
+
+}}"""
         ),
     ),
 ]

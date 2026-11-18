@@ -32,6 +32,9 @@
     "Region2d": {
       "$ref": "./wpi.schema.json#/$defs/WpiRectangle2d"
     },
+    "Ellipse2d": {
+      "$ref": "./wpi.schema.json#/$defs/WpiEllipse2d"
+    },
     "Polygon2d": {
       "type": "object",
       "description": "An evaluated convex polygon with counter-clockwise vertices in metres.",
@@ -43,16 +46,6 @@
         }
       },
       "required": ["vertices"],
-      "additionalProperties": false
-    },
-    "Circle2d": {
-      "type": "object",
-      "description": "An evaluated circle with centre and radius in metres.",
-      "properties": {
-        "center": { "$ref": "#/$defs/Translation2d" },
-        "radius": { "type": "number", "minimum": 0 }
-      },
-      "required": ["center", "radius"],
       "additionalProperties": false
     },
     "TranslationExpr": {
@@ -105,12 +98,12 @@
       "required": ["exp", "val"],
       "additionalProperties": false
     },
-    "CircleExpr": {
+    "EllipseExpr": {
       "type": "object",
-      "description": "A MathJS geometry expression evaluated to a circle.",
+      "description": "A geometry expression evaluated to a WPILib ellipse.",
       "properties": {
         "exp": { "type": "string" },
-        "val": { "$ref": "#/$defs/Circle2d" }
+        "val": { "$ref": "#/$defs/Ellipse2d" }
       },
       "required": ["exp", "val"],
       "additionalProperties": false
@@ -123,7 +116,7 @@
         { "$ref": "#/$defs/PoseExpr" },
         { "$ref": "#/$defs/RegionExpr" },
         { "$ref": "#/$defs/PolygonExpr" },
-        { "$ref": "#/$defs/CircleExpr" }
+        { "$ref": "#/$defs/EllipseExpr" }
       ]
     },
     "DriveType": {

@@ -35,8 +35,8 @@
       "properties": {
         "type": { "type": "string", "const": "KeepInCircle" },
         "circle": {
-          "$ref": "./shared.schema.json#/$defs/CircleExpr",
-          "description": "Circle geometry expression (centre and radius in metres)"
+          "$ref": "./shared.schema.json#/$defs/EllipseExpr",
+          "description": "Ellipse expression with equal positive semi-axes (metres)"
         }
       },
       "required": ["type", "circle"],

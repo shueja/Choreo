@@ -174,6 +174,8 @@ A full Constraint is therefore serialized as:
 ```
 The v4 constraint variants are `MaxLinearVelocity`, `MaxAngularVelocity`, `KeepInCircle`,
 and `Heading`, with more to be added as part of v4 before it is finalized.
+`KeepInCircle.circle` is an `EllipseExpr`: its cached value uses WPILib's
+`Ellipse2d` JSON shape with a pose center and equal positive semi-axes.
 
 ## Project
 

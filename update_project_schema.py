@@ -35,6 +35,20 @@ export const PROJECT_SCHEMA_VERSION = {version};"""
 pub const PROJECT_SCHEMA_VERSION: u32 = {version};"""
         ),
     ),
+    Location(
+        relative_path=Path("document/cpp/include/choreo/document/project_schema_version.hpp"),
+        template=lambda version: (
+            f"""#pragma once
+
+#include <cstdint>
+
+namespace choreo::document {{
+
+inline constexpr std::uint32_t kProjectSchemaVersion = {version};
+
+}}"""
+        ),
+    ),
 ]
 
 

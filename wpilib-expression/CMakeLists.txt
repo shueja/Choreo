@@ -18,27 +18,29 @@ set(UNITS_ENABLE_TESTS OFF CACHE BOOL "Disable LLNL units tests")
 set(UNITS_INSTALL ON CACHE BOOL "Enable LLNL units install/export targets" FORCE)
 set(UNITS_BUILD_PYTHON_LIBRARY OFF CACHE BOOL "Disable LLNL units Python library")
 
-set(WPILIB_USE_SYSTEM_EIGEN ON CACHE BOOL "Use fetched Eigen")
-set(EIGEN_BUILD_CMAKE_PACKAGE TRUE)
-FetchContent_Declare(
-    Eigen3
-    GIT_REPOSITORY https://github.com/eigen-mirror/eigen.git
-    GIT_TAG b7f6aed1b9974fd56cce651b4ff059c3bfc67782
-    SYSTEM
-    OVERRIDE_FIND_PACKAGE
-)
-FetchContent_MakeAvailable(Eigen3)
+if(NOT TARGET wpimath::wpimath AND NOT TARGET wpimath)
+    set(WPILIB_USE_SYSTEM_EIGEN ON CACHE BOOL "Use fetched Eigen")
+    set(EIGEN_BUILD_CMAKE_PACKAGE TRUE)
+    FetchContent_Declare(
+        Eigen3
+        GIT_REPOSITORY https://github.com/eigen-mirror/eigen.git
+        GIT_TAG b7f6aed1b9974fd56cce651b4ff059c3bfc67782
+        SYSTEM
+        OVERRIDE_FIND_PACKAGE
+    )
+    FetchContent_MakeAvailable(Eigen3)
 
-set(WPILIB_USE_SYSTEM_SLEIPNIR OFF CACHE INTERNAL "Use bundled Sleipnir")
-FetchContent_Declare(
-    wpilib
-    GIT_REPOSITORY https://github.com/wpilibsuite/allwpilib.git
-    GIT_TAG f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a
-    EXCLUDE_FROM_ALL
-    SYSTEM
-    UPDATE_DISCONNECTED TRUE
-)
-FetchContent_MakeAvailable(wpilib)
+    set(WPILIB_USE_SYSTEM_SLEIPNIR OFF CACHE INTERNAL "Use bundled Sleipnir")
+    FetchContent_Declare(
+        wpilib
+        GIT_REPOSITORY https://github.com/wpilibsuite/allwpilib.git
+        GIT_TAG f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a
+        EXCLUDE_FROM_ALL
+        SYSTEM
+        UPDATE_DISCONNECTED TRUE
+    )
+    FetchContent_MakeAvailable(wpilib)
+endif()
 
 FetchContent_Declare(
     chaiscript
@@ -75,10 +77,12 @@ if(TARGET wpiutil AND NOT TARGET wpiutil::wpiutil)
     add_library(wpiutil::wpiutil ALIAS wpiutil)
 endif()
 
-add_subdirectory(
-    "${CMAKE_CURRENT_SOURCE_DIR}/../wpilib-extras"
-    "${CMAKE_CURRENT_BINARY_DIR}/wpilib-extras"
-)
+if(NOT TARGET wpi::extras)
+    add_subdirectory(
+        "${CMAKE_CURRENT_SOURCE_DIR}/../wpilib-extras"
+        "${CMAKE_CURRENT_BINARY_DIR}/wpilib-extras"
+    )
+endif()
 
 set(CHAISCRIPT_COMPAT_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/chaiscript-compat/include")
 file(COPY "${CHAISCRIPT_INCLUDE_DIR}/chaiscript" DESTINATION "${CHAISCRIPT_COMPAT_INCLUDE_DIR}")

@@ -4,10 +4,12 @@
 
 #pragma once
 
-#include <stdint.h>
+#include "choreo/document/trajectory_schema_version.hpp"
+
+#include <cstdint>
 
 namespace choreo {
 
-inline constexpr uint32_t kTrajSchemaVersion = 3;
+inline constexpr std::uint32_t kTrajSchemaVersion = document::kTrajectorySchemaVersion;
 
 }  // namespace choreo

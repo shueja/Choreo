@@ -1,0 +1,25 @@
+cmake_minimum_required(VERSION 3.21)
+project(choreo_composition_test LANGUAGES CXX)
+
+set(BUILD_TESTING OFF CACHE BOOL "Disable dependency tests" FORCE)
+set(repository "${CMAKE_CURRENT_LIST_DIR}/../../../..")
+option(CHOREO_TEST_DOCUMENT_FIRST "Configure the shared document project first" ON)
+option(CHOREO_TEST_EXTERNAL_DEPENDENCIES "Provide existing dependency targets" OFF)
+
+if(CHOREO_TEST_EXTERNAL_DEPENDENCIES)
+    add_library(wpimath::wpimath INTERFACE IMPORTED GLOBAL)
+    add_library(wpi::extras INTERFACE IMPORTED GLOBAL)
+    add_library(choreo::document_core INTERFACE IMPORTED GLOBAL)
+    set(FETCHCONTENT_SOURCE_DIR_WPILIB "${CMAKE_CURRENT_BINARY_DIR}/must-not-fetch-wpilib")
+    add_subdirectory("${repository}/cpp/choreo_app" choreo-app)
+elseif(CHOREO_TEST_DOCUMENT_FIRST)
+    add_subdirectory("${repository}/document/cpp" choreo-document)
+    add_subdirectory("${repository}/cpp/choreo_app" choreo-app)
+else()
+    add_subdirectory("${repository}/cpp/choreo_app" choreo-app)
+endif()
+
+if(NOT TARGET choreo::document_core OR NOT TARGET choreo::document_app OR
+   NOT TARGET wpilib::expression OR NOT TARGET wpi::extras)
+    message(FATAL_ERROR "Composed projects must expose their shared dependency targets")
+endif()

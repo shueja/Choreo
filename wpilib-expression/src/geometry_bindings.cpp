@@ -273,6 +273,9 @@ void ConfigureGeometryBindings(chaiscript::ChaiScript& engine) {
 
   BIND_CONSTRUCTOR(Ellipse2d, const Pose2d&, meter_t, meter_t);
   BIND_CONSTRUCTOR(Ellipse2d, const Translation2d&, double);
+  BIND_LAMBDA(Ellipse2d, [](const Translation2d& center, meter_t radius) {
+    return Ellipse2d{center, radius.value()};
+  });
   BIND_COPY_METHOD(Ellipse2d, Center);
   BIND_COPY_METHOD(Ellipse2d, Rotation);
   BIND_METHOD(Ellipse2d, XSemiAxis);

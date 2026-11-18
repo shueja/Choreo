@@ -63,6 +63,12 @@ task cppHeadersZip(type: Zip) {
     from('src/main/native/include') {
         into '/'
     }
+    from('../document/cpp/include') {
+        into '/'
+    }
+    from('../wpilib-extras/include') {
+        into '/'
+    }
 }
 
 task cppSourceZip(type: Zip) {
@@ -75,6 +81,9 @@ task cppSourceZip(type: Zip) {
     }
 
     from('src/main/native/cpp') {
+        into '/'
+    }
+    from('../document/cpp/src') {
         into '/'
     }
 }

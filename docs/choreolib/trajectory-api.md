@@ -3,7 +3,7 @@
 !!! tip
     Java users are recommended to use an [Auto Factory](./auto-factory.md) instead of the Trajectory API for loading and following trajectories, as it provides a more user-friendly experience for developing complex autonomous routines.
 
-To begin utilizing trajectories created by Choreo, you must first load a `Trajectory` ([Java](/api/choreolib/java/choreo/trajectory/Trajectory.html), [C++](/api/choreolib/cpp/classchoreo_1_1Trajectory.html)) from its corresponding file.
+To begin utilizing trajectories created by Choreo, first load a trajectory from its corresponding file. Java uses [Trajectory](/api/choreolib/java/choreo/trajectory/Trajectory.html); C++ exposes WPILib trajectory and sample types.
 
 === "Java"
 
@@ -16,12 +16,16 @@ To begin utilizing trajectories created by Choreo, you must first load a `Trajec
 === "C++"
 
     ```cpp
-    // Loads from deploy/choreo/myTrajectory.traj
-    // std::nullopt is returned if the file does not exist or is invalid
-    auto trajectory = choreo::Choreo::LoadTrajectory<choreo::SwerveSample>("myTrajectory"); // (1)
+    // Load a v4 file; an exception is thrown if it is missing or invalid.
+    auto path = std::filesystem::path{wpi::filesystem::GetDeployDirectory()} /
+                "choreo" / "myTrajectory.traj";
+    auto trajectory = choreo::Choreo::LoadTrajectory(path);
+    const auto& samples = std::get<std::optional<wpi::math::HolonomicTrajectory>>(
+        trajectory.output.trajectory);
     ```
 
-    1. Use `DifferentialSample` instead of `SwerveSample` if the robot uses a differential (tank) drive
+    Use `wpi::math::DifferentialTrajectory` for a differential drive. Unresolved
+    events are omitted and reported in `trajectory.warnings`.
 
 === "Python"
 
@@ -94,29 +98,18 @@ See [Getting Started](./getting-started.md/#setting-up-the-drive-subsystem) for 
 
         ```cpp title="Robot.cpp"
         void Robot::AutonomousInit() {
-            if (trajectory.has_value()) {
-                // Get the initial pose of the trajectory
-                if (auto initialPose = trajectory.value().GetInitialPose(IsRedAlliance())) {
-                    // Reset odometry to the start of the trajectory
-                    driveSubsystem.ResetOdometry(initialPose.value());
-                }
-            }
+            const auto& path = std::get<std::optional<wpi::math::HolonomicTrajectory>>(
+                trajectory.output.trajectory);
+            drive.ResetOdometry(path->Start().pose);
 
             // Reset and start the timer when the autonomous period begins
             timer.Restart();
         }
 
         void Robot::AutonomousPeriodic() {
-            if (trajectory.has_value()) {
-                // Sample the trajectory at the current time into the autonomous period
-                if (auto sample = trajectory.value().SampleAt(timer.Get(), IsRedAlliance())) {
-                    driveSubsystem.FollowTrajectory(sample.value());
-                }
-            }
-        }
-
-        bool Robot::IsRedAlliance() {
-            return wpi::MatchState::GetAlliance().value_or(wpi::Alliance::BLUE) == wpi::Alliance::RED;
+            const auto& path = std::get<std::optional<wpi::math::HolonomicTrajectory>>(
+                trajectory.output.trajectory);
+            drive.FollowTrajectory(path->SampleAt(timer.Get()));
         }
         ```
 
@@ -129,14 +122,17 @@ See [Getting Started](./getting-started.md/#setting-up-the-drive-subsystem) for 
                 void AutonomousPeriodic() override;
 
             private:
-                // Loads a swerve trajectory, alternatively use DifferentialSample if the robot is tank drive
-                std::optional<choreo::Trajectory<choreo::SwerveSample>> trajectory =
-                    choreo::Choreo::LoadTrajectory<choreo::SwerveSample>("myTrajectory");
+                choreo::Trajectory trajectory = choreo::Choreo::LoadTrajectory(
+                    std::filesystem::path{wpi::filesystem::GetDeployDirectory()} /
+                    "choreo" / "myTrajectory.traj");
 
                 Drive drive;
                 wpi::Timer timer;
         };
         ```
+
+    This example uses the stored field coordinates directly. Apply the
+    appropriate alliance transform before following the trajectory when needed.
 
 === "Python"
 

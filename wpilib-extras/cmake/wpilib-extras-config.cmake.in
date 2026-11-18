@@ -1,5 +1,7 @@
 @PACKAGE_INIT@
 
 include(CMakeFindDependencyMacro)
-find_dependency(wpimath CONFIG REQUIRED)
+if(NOT TARGET wpimath::wpimath)
+	find_dependency(wpimath CONFIG REQUIRED)
+endif()
 include("${CMAKE_CURRENT_LIST_DIR}/wpilib-extras-targets.cmake")

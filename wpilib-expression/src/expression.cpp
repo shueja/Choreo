@@ -295,35 +295,6 @@ void CollectReferenceEdits(const chaiscript::AST_Node& node, std::string_view so
   }
 }
 
-std::string RewriteVariableReferences(std::string_view source, std::string_view target,
-                                      std::string_view replacement) {
-  auto expanded = detail::ExpandUnitSuffixes(source);
-  chaiscript::ChaiScript parser{{}, {},
-                                {chaiscript::Options::No_Load_Modules,
-                                 chaiscript::Options::No_External_Scripts},
-                                {chaiscript::Library_Options::No_IO}};
-  chaiscript::AST_NodePtr parsed;
-  try {
-    parsed = parser.parse(expanded);
-  } catch (const chaiscript::exception::eval_error& error) {
-    throw SyntaxError(error);
-  }
-  std::vector<std::pair<std::size_t, std::string>> edits;
-  CollectReferenceEdits(*parsed, expanded, target, replacement, edits);
-  if (edits.empty()) {
-    return std::string(source);
-  }
-  std::sort(edits.begin(), edits.end(),
-            [](const auto& left, const auto& right) { return left.first > right.first; });
-  for (const auto& [offset, text] : edits) {
-    expanded.replace(offset, target.find('.') == std::string_view::npos
-                                 ? target.size()
-                                 : target.substr(target.rfind('.') + 1).size(),
-                     text);
-  }
-  return expanded;
-}
-
 bool HasVariableReference(std::string_view source, std::string_view target) {
   auto expanded = detail::ExpandUnitSuffixes(source);
   chaiscript::ChaiScript parser{{}, {},
@@ -773,7 +744,15 @@ Result EvaluateResult(Cache& engineCache, const detail::Variables& variables,
   detail::ConfigureGlobals(cache.engine, variables);
   auto result = [&]() -> Result {
     try {
-      return cache.engine.template eval<Result>(expanded);
+      if constexpr (std::is_same_v<Result, detail::Polygon2d>) {
+        auto value = UnboxVariableValue(cache.engine, cache.engine.eval(expanded), "expression");
+        if (auto* polygon = std::get_if<detail::Polygon2d>(&value)) {
+          return std::move(*polygon);
+        }
+        throw std::invalid_argument("expression result is not a polygon");
+      } else {
+        return cache.engine.template eval<Result>(expanded);
+      }
     } catch (const chaiscript::exception::eval_error& error) {
       throw SyntaxError(error);
     }
@@ -1103,11 +1082,13 @@ void EvaluationContext::SetVariables(std::vector<VariableDefinition> definitions
   expanded.reserve(definitions.size());
   expressions.reserve(definitions.size());
   for (const auto& definition : definitions) {
-    expanded.push_back(detail::ExpandUnitSuffixes(definition.expression));
     try {
+      expanded.push_back(detail::ExpandUnitSuffixes(definition.expression));
       expressions.push_back(parser.parse(expanded.back()));
     } catch (const chaiscript::exception::eval_error& error) {
-      throw SyntaxError(error);
+      throw VariableEvaluationError{definition.id, SyntaxError(error).what()};
+    } catch (const std::logic_error& error) {
+      throw VariableEvaluationError{definition.id, error.what()};
     }
   }
 
@@ -1186,55 +1167,68 @@ void EvaluationContext::SetVariables(std::vector<VariableDefinition> definitions
     }
   }
 
-  chaiscript::ChaiScript evaluator{{}, {},
-                                  {chaiscript::Options::No_Load_Modules,
-                                   chaiscript::Options::No_External_Scripts},
-                                  {chaiscript::Library_Options::No_IO}};
+  chaiscript::ChaiScript evaluator{{},
+                                   {},
+                                   {chaiscript::Options::No_Load_Modules,
+                                    chaiscript::Options::No_External_Scripts},
+                                   {chaiscript::Library_Options::No_IO}};
   detail::ConfigureEngine(evaluator, replacement->variables);
   for (auto index : order) {
     const auto& definition = definitions[index];
-    auto qualifiedName = definition.namespacePath.empty()
-                             ? definition.name
-                             : definition.namespacePath + "." + definition.name;
-    ValidateExpression(*expressions[index], replacement->variables, namespacePaths,
-                       declaredVariables);
-    detail::ConfigureGlobals(evaluator, replacement->variables);
-    chaiscript::Boxed_Value boxed;
     try {
-      boxed = evaluator.eval(expanded[index]);
-    } catch (const chaiscript::exception::eval_error& error) {
-      throw SyntaxError(error);
-    }
-    auto value = UnboxVariableValue(evaluator, boxed, qualifiedName);
-    const auto actualType = detail::GetDeclaredType(value);
-    if (definition.expectedType) {
-      const auto expectedType = static_cast<detail::VariableType>(*definition.expectedType);
-      if (expectedType != actualType.type) {
-        throw std::invalid_argument("variable type does not match its persisted declaration: " +
-                                    qualifiedName);
+      auto qualifiedName =
+          definition.namespacePath.empty()
+              ? definition.name
+              : definition.namespacePath + "." + definition.name;
+      ValidateExpression(*expressions[index], replacement->variables,
+                         namespacePaths, declaredVariables);
+      detail::ConfigureGlobals(evaluator, replacement->variables);
+      chaiscript::Boxed_Value boxed;
+      try {
+        boxed = evaluator.eval(expanded[index]);
+      } catch (const chaiscript::exception::eval_error& error) {
+        throw SyntaxError(error);
       }
-      if (expectedType == detail::VariableType::Quantity) {
-        if (!definition.expectedDimension ||
-            definition.expectedDimension->base_units() != actualType.dimension.base_units()) {
+      auto value = UnboxVariableValue(evaluator, boxed, qualifiedName);
+      const auto actualType = detail::GetDeclaredType(value);
+      if (definition.expectedType) {
+        const auto expectedType =
+            static_cast<detail::VariableType>(*definition.expectedType);
+        if (expectedType != actualType.type) {
           throw std::invalid_argument(
-              "variable dimension does not match its persisted declaration: " + qualifiedName);
+              "variable type does not match its persisted declaration: " +
+              qualifiedName);
+        }
+        if (expectedType == detail::VariableType::Quantity) {
+          if (!definition.expectedDimension ||
+              definition.expectedDimension->base_units() !=
+                  actualType.dimension.base_units()) {
+            throw std::invalid_argument(
+                "variable dimension does not match its persisted "
+                "declaration: " +
+                qualifiedName);
+          }
+        } else if (definition.expectedDimension) {
+          throw std::invalid_argument(
+              "geometry variable cannot declare a scalar dimension: " +
+              qualifiedName);
         }
       } else if (definition.expectedDimension) {
-        throw std::invalid_argument("geometry variable cannot declare a scalar dimension: " +
-                                    qualifiedName);
+        throw std::invalid_argument(
+            "variable dimension requires a declared quantity type: " +
+            qualifiedName);
       }
-    } else if (definition.expectedDimension) {
-      throw std::invalid_argument("variable dimension requires a declared quantity type: " +
-                                  qualifiedName);
+      const auto* previous = FindVariableById(oldVariables, definition.id);
+      detail::Variables* destination = &replacement->variables;
+      if (!definition.namespacePath.empty()) {
+        destination = &namespaces.at(definition.namespacePath)->members;
+      }
+      detail::StoreVariable(*destination, definition.name, std::move(value),
+                            previous, definition.id, definition.expression,
+                            !definition.namespacePath.empty());
+    } catch (const std::logic_error& error) {
+      throw VariableEvaluationError{definition.id, error.what()};
     }
-    const auto* previous = FindVariableById(oldVariables, definition.id);
-    detail::Variables* destination = &replacement->variables;
-    if (!definition.namespacePath.empty()) {
-      destination = &namespaces.at(definition.namespacePath)->members;
-    }
-    detail::StoreVariable(*destination, definition.name, std::move(value), previous,
-                          definition.id, definition.expression,
-                          !definition.namespacePath.empty());
   }
   impl_ = std::move(replacement);
 }
@@ -1269,6 +1263,12 @@ std::vector<std::string> EvaluationContext::FindReferences(std::string_view vari
   return references;
 }
 
+std::string RenameQualifiedVariableReferences(std::string_view source,
+                                              std::string_view qualifiedName,
+                                              std::string_view newName) {
+  return detail::RenameQualifiedVariableReferences(source, qualifiedName, newName);
+}
+
 void EvaluationContext::RenameVariable(std::string_view variableId, std::string newName) {
   auto variables = GetVariables();
   auto target = std::find_if(variables.begin(), variables.end(),
@@ -1287,8 +1287,8 @@ void EvaluationContext::RenameVariable(std::string_view variableId, std::string 
   target->definition.name = std::move(newName);
   for (auto& variable : variables) {
     variable.definition.expression =
-        RewriteVariableReferences(variable.definition.expression, oldName,
-                                  target->definition.name);
+        detail::RenameQualifiedVariableReferences(variable.definition.expression, oldName,
+                    target->definition.name);
   }
   std::vector<VariableDefinition> definitions;
   definitions.reserve(variables.size());
@@ -1397,6 +1397,12 @@ Translation2d EvaluationContext::EvaluateTranslation2d(std::string_view source) 
   static const detail::Variables emptyVariables;
   return EvaluateResult<Translation2d>(*engineCache_,
                                        impl_ ? impl_->variables : emptyVariables, source);
+}
+
+wpi::math::Polygon2d EvaluationContext::EvaluatePolygon2d(std::string_view source) const {
+  static const detail::Variables emptyVariables;
+  return EvaluateResult<detail::Polygon2d>(*engineCache_,
+                                           impl_ ? impl_->variables : emptyVariables, source);
 }
 
 Rotation2d EvaluationContext::EvaluateRotation2d(std::string_view source) const {

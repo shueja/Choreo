@@ -31,6 +31,9 @@ struct SetupVariable {
 
 std::string RenameVariableReferences(std::string_view source, std::string_view oldName,
                                      std::string_view newName);
+std::string RenameQualifiedVariableReferences(std::string_view source,
+                                              std::string_view qualifiedName,
+                                              std::string_view newName);
 std::vector<SetupVariable> RenameSetupVariable(std::span<const SetupVariable> variables,
                                                std::string_view id, std::string_view newName);
 
@@ -38,6 +41,16 @@ class SetupVariableError : public std::invalid_argument {
  public:
   SetupVariableError(std::string id, std::string message)
       : std::invalid_argument("setup variable '" + id + "': " + message), id_(std::move(id)) {}
+  const std::string& Id() const noexcept { return id_; }
+
+ private:
+  std::string id_;
+};
+
+class VariableEvaluationError : public std::invalid_argument {
+ public:
+  VariableEvaluationError(std::string id, std::string message)
+      : std::invalid_argument(std::move(message)), id_(std::move(id)) {}
   const std::string& Id() const noexcept { return id_; }
 
  private:
@@ -106,6 +119,7 @@ class EvaluationContext {
   bool EvaluateBoolean(std::string_view source) const;
   wpi::math::Pose2d EvaluatePose2d(std::string_view source) const;
   wpi::math::Translation2d EvaluateTranslation2d(std::string_view source) const;
+  wpi::math::Polygon2d EvaluatePolygon2d(std::string_view source) const;
   wpi::math::Rotation2d EvaluateRotation2d(std::string_view source) const;
   wpi::math::Transform2d EvaluateTransform2d(std::string_view source) const;
   wpi::math::Twist2d EvaluateTwist2d(std::string_view source) const;

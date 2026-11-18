@@ -6,5 +6,6 @@
         "*.py": "python",
         "*.traj": "json"
     },
-    "java.configuration.updateBuildConfiguration": "interactive"
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "cmake.sourceDirectory": "C:/Users/jashu/git/Choreo-2026/wpilib-expression"
 }

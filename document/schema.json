@@ -16,13 +16,13 @@
     "Pose2d": { "$ref": "./shared.schema.json#/$defs/Pose2d" },
     "Region2d": { "$ref": "./shared.schema.json#/$defs/Region2d" },
     "Polygon2d": { "$ref": "./shared.schema.json#/$defs/Polygon2d" },
-    "Circle2d": { "$ref": "./shared.schema.json#/$defs/Circle2d" },
+    "Ellipse2d": { "$ref": "./shared.schema.json#/$defs/Ellipse2d" },
     "TranslationExpr": { "$ref": "./shared.schema.json#/$defs/TranslationExpr" },
     "RotationExpr": { "$ref": "./shared.schema.json#/$defs/RotationExpr" },
     "PoseExpr": { "$ref": "./shared.schema.json#/$defs/PoseExpr" },
     "RegionExpr": { "$ref": "./shared.schema.json#/$defs/RegionExpr" },
     "PolygonExpr": { "$ref": "./shared.schema.json#/$defs/PolygonExpr" },
-    "CircleExpr": { "$ref": "./shared.schema.json#/$defs/CircleExpr" },
+    "EllipseExpr": { "$ref": "./shared.schema.json#/$defs/EllipseExpr" },
     "GeometryExpr": { "$ref": "./shared.schema.json#/$defs/GeometryExpr" },
     "ScalarDimension": {
       "$ref": "./project.schema.json#/$defs/ScalarDimension"

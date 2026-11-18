@@ -1308,6 +1308,43 @@ int TestGeometryOperations() {
 
 int TestShapes() {
   EvaluationContext context;
+  if (wpilib::expression::RenameQualifiedVariableReferences(
+          "field . /* keep */ width + 2 m + other.field.width // field.width",
+          "field.width", "span") !=
+      "field . /* keep */ span + 2 m + other.field.width // field.width") {
+    std::println(stderr, "qualified rename did not preserve source");
+    return 1;
+  }
+  if (wpilib::expression::RenameQualifiedVariableReferences(
+          "1e3 + .5E-2 + e3 + R\"(e3)\" + other.e3", "e3", "count") !=
+      "1e3 + .5E-2 + count + R\"(e3)\" + other.e3") {
+    std::println(stderr, "qualified rename changed a literal or member");
+    return 1;
+  }
+  if (wpilib::expression::RenameQualifiedVariableReferences(
+          "field::width + field.width.X() + field.width() + field.widthSuffix + \"field.width\"",
+          "field.width", "span") !=
+      "field::span + field.span.X() + field.width() + field.widthSuffix + \"field.width\"") {
+    std::println(stderr, "qualified rename changed a function, string, or unrelated name");
+    return 1;
+  }
+  auto polygon = context.EvaluatePolygon2d(
+      "[Translation2d(0 m, 0 m), Translation2d(1 m, 0 m), Translation2d(0 m, 1 m)]");
+  if (polygon.Size() != 3 || polygon.At(1).X().value() != 1.0) {
+    std::println(stderr, "polygon expression returned the wrong vertices");
+    return 1;
+  }
+  context.SetVariable("polygon", polygon);
+  if (context.EvaluatePolygon2d("polygon").Size() != 3) {
+    std::println(stderr, "polygon variable did not evaluate");
+    return 1;
+  }
+  try {
+    context.EvaluatePolygon2d("[Translation2d(), 1]");
+    std::println(stderr, "invalid polygon expression was accepted");
+    return 1;
+  } catch (const std::exception&) {
+  }
   if (!context.EvaluateBoolean("Rectangle2d(Pose2d(), 4 m, 2 m).Contains(Translation2d(1 m, 0 m))") ||
       !context.EvaluateBoolean("Ellipse2d(Pose2d(), 2 m, 1 m).Intersects(Translation2d(2 m, 0 m))") ||
       !EvaluatesTo(context, "Rectangle2d(Pose2d(), 4 m, 2 m).XWidth()", 4.0, "m") ||
@@ -1345,7 +1382,8 @@ int TestShapes() {
       !EvaluatesTo(shapes, "rect.RotateBy(Rotation2d(90 deg)).Rotation().Degrees()", 90.0, "deg") ||
       !EvaluatesTo(shapes, "ellipse.RotateBy(Rotation2d(90 deg)).Rotation().Degrees()", 90.0, "deg") ||
       !EvaluatesTo(shapes, "Rectangle2d(Translation2d(0 m, 0 m), Translation2d(4 m, 2 m)).Center().X()", 2.0, "m") ||
-      !EvaluatesTo(shapes, "Ellipse2d(Translation2d(0 m, 0 m), 2.0).YSemiAxis()", 2.0, "m")) {
+      !EvaluatesTo(shapes, "Ellipse2d(Translation2d(0 m, 0 m), 2.0).YSemiAxis()", 2.0, "m") ||
+      !EvaluatesTo(shapes, "Ellipse2d(Translation2d(0 m, 0 m), 2 ft).YSemiAxis()", 0.6096, "m")) {
     std::println(stderr, "shape method, constructor, or setup binding returned the wrong value");
     return 1;
   }

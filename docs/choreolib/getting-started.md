@@ -29,7 +29,7 @@ In general, trajectory followers accept trajectory "samples" that represent the 
 
 === "Swerve"
 
-    The `SwerveSample` ([Java](/api/choreolib/java/choreo/trajectory/SwerveSample.html), [C++](/api/choreolib/cpp/classchoreo_1_1SwerveSample.html)) class represents a single swerve drive sample along a trajectory. This example applies a given sample's velocity to the drivetrain, as well as additional feedback based on the robot's distance from the sample to "push" the robot back to the trajectory, if it is off-course.
+    A `SwerveSample` in Java or `wpi::math::HolonomicSample` in C++ represents a single swerve drive sample along a trajectory. This example applies a given sample's velocity to the drivetrain, as well as additional feedback based on the robot's distance from the sample to "push" the robot back to the trajectory, if it is off-course.
 
     === "Java"
 
@@ -72,22 +72,22 @@ In general, trajectory followers accept trajectory "samples" that represent the 
                 headingController.EnableContinuousInput(-M_PI, M_PI);
             };
 
-            void Drive::FollowTrajectory(const choreo::SwerveSample& sample) {
+            void Drive::FollowTrajectory(const wpi::math::HolonomicSample& sample) {
                 // Get the current pose of the robot
                 wpi::math::Pose2d pose = GetPose();
 
                 // Calculate feedback velocities
-                wpi::units::meters_per_second_t xFeedback{xController.Calculate(pose.X().value(), sample.x.value())};
-                wpi::units::meters_per_second_t yFeedback{yController.Calculate(pose.Y().value(), sample.y.value())};
+                wpi::units::meters_per_second_t xFeedback{xController.Calculate(pose.X().value(), sample.pose.X().value())};
+                wpi::units::meters_per_second_t yFeedback{yController.Calculate(pose.Y().value(), sample.pose.Y().value())};
                 wpi::units::radians_per_second_t headingFeedback{
-                    headingController.Calculate(pose.Rotation().Radians().value(), sample.heading.value())
+                    headingController.Calculate(pose.Rotation().Radians().value(), sample.pose.Rotation().Radians().value())
                 };
 
                 // Generate the next velocities for the robot
                 wpi::math::ChassisVelocities velocities{
-                    sample.vx + xFeedback,
-                    sample.vy + yFeedback,
-                    sample.omega + headingFeedback
+                    sample.velocity.vx + xFeedback,
+                    sample.velocity.vy + yFeedback,
+                    sample.velocity.omega + headingFeedback
                 };
 
                 // Apply the generated velocities
@@ -100,7 +100,7 @@ In general, trajectory followers accept trajectory "samples" that represent the 
             ```cpp title="Drive.h"
             class Drive : public frc2::SubsystemBase {
                 public:
-                    void FollowTrajectory(const choreo::SwerveSample& sample);
+                    void FollowTrajectory(const wpi::math::HolonomicSample& sample);
 
                 private:
                     wpi::math::PIDController xController{10.0, 0.0, 0.0};
@@ -142,7 +142,7 @@ In general, trajectory followers accept trajectory "samples" that represent the 
 
 === "Differential (Tank)"
 
-    The `DifferentialSample` ([Java](/api/choreolib/java/choreo/trajectory/DifferentialSample.html), [C++](/api/choreolib/cpp/classchoreo_1_1DifferentialSample.html)) class represents a single differential drive sample along a trajectory. This example applies a given sample's velocity to the drivetrain, as well as additional feedback based on the robot's distance from the sample to "push" the robot back to the trajectory, if it is off-course.
+    A `DifferentialSample` in Java or `wpi::math::DifferentialSample` in C++ represents a single differential drive sample along a trajectory. This example applies a given sample's velocity to the drivetrain, as well as additional feedback based on the robot's distance from the sample to "push" the robot back to the trajectory, if it is off-course.
 
     === "Java"
 
@@ -182,19 +182,19 @@ In general, trajectory followers accept trajectory "samples" that represent the 
         === "Source"
 
             ```cpp title="Drive.cpp"
-            void Drive::FollowTrajectory(const choreo::DifferentialSample& sample) {
+            void Drive::FollowTrajectory(const wpi::math::DifferentialSample& sample) {
                 // Get the current pose of the robot
                 wpi::math::Pose2d pose = GetPose();
 
                 // Get the velocity feedforward specified by the sample
-                wpi::math::ChassisVelocities ff = sample.GetChassisVelocities();
+                wpi::math::ChassisVelocities ff = sample.velocity;
 
                 // Generate the next velocities for the robot
                 wpi::math::ChassisVelocities velocities = controller.Calculate(
                     pose,
-                    sample.GetPose(),
+                    sample.pose,
                     ff.vx,
-                    ff.vy
+                    ff.omega
                 );
 
                 // Apply the generated velocities
@@ -213,7 +213,7 @@ In general, trajectory followers accept trajectory "samples" that represent the 
             ```cpp title="Drive.h"
             class Drive : public frc2::SubsystemBase {
                 public:
-                    void FollowTrajectory(const choreo::DifferentialSample& sample);
+                    void FollowTrajectory(const wpi::math::DifferentialSample& sample);
 
                 private:
                     wpi::math::LTVUnicycleController controller{0.02_s};

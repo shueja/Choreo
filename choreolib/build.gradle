@@ -117,11 +117,11 @@ model {
             sources {
                 cpp {
                     source {
-                        srcDirs 'src/main/native/cpp'
+                        srcDirs 'src/main/native/cpp', '../document/cpp/src'
                         include '**/*.cpp'
                     }
                     exportedHeaders {
-                        srcDirs 'src/main/native/include'
+                        srcDirs 'src/main/native/include', '../document/cpp/include', '../wpilib-extras/include'
                     }
                 }
             }

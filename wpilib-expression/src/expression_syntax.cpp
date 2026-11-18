@@ -5,10 +5,176 @@
 #include <cctype>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace wpilib::expression::detail {
 
-std::string RenameVariableReferences(std::string_view source, std::string_view oldName,
+std::string RenameQualifiedVariableReferences(std::string_view source,
+                                              std::string_view qualifiedName,
+                                              std::string_view newName) {
+  auto isStart = [](char character) {
+    return std::isalpha(static_cast<unsigned char>(character)) ||
+           character == '_';
+  };
+  auto isPart = [](char character) {
+    return std::isalnum(static_cast<unsigned char>(character)) ||
+           character == '_';
+  };
+  auto isIdentifier = [&](std::string_view name) {
+    if (name.empty() || !isStart(name.front())) {
+      return false;
+    }
+    for (char character : name.substr(1)) {
+      if (!isPart(character)) {
+        return false;
+      }
+    }
+    return true;
+  };
+  if (!isIdentifier(newName)) {
+    throw std::invalid_argument("invalid variable name");
+  }
+  std::vector<std::string_view> parts;
+  for (std::size_t start = 0; start <= qualifiedName.size();) {
+    auto end = qualifiedName.find('.', start);
+    auto part = qualifiedName.substr(
+        start, end == std::string_view::npos ? end : end - start);
+    if (!isIdentifier(part)) {
+      throw std::invalid_argument("invalid qualified variable name");
+    }
+    parts.push_back(part);
+    if (end == std::string_view::npos) {
+      break;
+    }
+    start = end + 1;
+  }
+
+  struct Token {
+    std::size_t start;
+    std::size_t length;
+    std::string_view text;
+  };
+  std::vector<Token> tokens;
+  for (std::size_t position = 0; position < source.size();) {
+    const auto start = position;
+    if (std::isspace(static_cast<unsigned char>(source[position]))) {
+      ++position;
+      continue;
+    }
+    if (source[position] == '#' || source.substr(position, 2) == "//") {
+      position = source.find('\n', position);
+      if (position == std::string_view::npos) {
+        position = source.size();
+      }
+      continue;
+    }
+    if (source.substr(position, 2) == "/*") {
+      auto end = source.find("*/", position + 2);
+      position = end == std::string_view::npos ? source.size() : end + 2;
+      continue;
+    }
+    if (source.substr(position, 2) == "R\"") {
+      auto open = source.find('(', position + 2);
+      if (open == std::string_view::npos) {
+        position = source.size();
+      } else {
+        auto closing =
+            ")" +
+            std::string(source.substr(position + 2, open - position - 2)) +
+            "\"";
+        auto end = source.find(closing, open + 1);
+        position = end == std::string_view::npos ? source.size()
+                                                 : end + closing.size();
+      }
+    } else if (source[position] == '"' || source[position] == '\'') {
+      const char quote = source[position++];
+      bool escaped = false;
+      while (position < source.size()) {
+        const char character = source[position++];
+        if (!escaped && character == quote) {
+          break;
+        }
+        escaped = !escaped && character == '\\';
+      }
+    } else if (std::isdigit(static_cast<unsigned char>(source[position])) ||
+               (source[position] == '.' && position + 1 < source.size() &&
+                std::isdigit(
+                    static_cast<unsigned char>(source[position + 1])))) {
+      while (position < source.size() &&
+             std::isdigit(static_cast<unsigned char>(source[position]))) {
+        ++position;
+      }
+      if (position < source.size() && source[position] == '.') {
+        ++position;
+        while (position < source.size() &&
+               std::isdigit(static_cast<unsigned char>(source[position]))) {
+          ++position;
+        }
+      }
+      if (position < source.size() &&
+          (source[position] == 'e' || source[position] == 'E')) {
+        auto exponent = position + 1;
+        if (exponent < source.size() &&
+            (source[exponent] == '+' || source[exponent] == '-')) {
+          ++exponent;
+        }
+        if (exponent < source.size() &&
+            std::isdigit(static_cast<unsigned char>(source[exponent]))) {
+          position = exponent + 1;
+          while (position < source.size() &&
+                 std::isdigit(static_cast<unsigned char>(source[position]))) {
+            ++position;
+          }
+        }
+      }
+    } else if (isStart(source[position])) {
+      ++position;
+      while (position < source.size() && isPart(source[position])) {
+        ++position;
+      }
+    } else if (source.substr(position, 2) == "::") {
+      position += 2;
+    } else {
+      ++position;
+    }
+    tokens.push_back(
+        {start, position - start, source.substr(start, position - start)});
+  }
+
+  std::string result;
+  std::size_t copied = 0;
+  for (std::size_t index = 0; index < tokens.size(); ++index) {
+    if (tokens[index].text != parts.front() ||
+        (index > 0 &&
+         (tokens[index - 1].text == "." || tokens[index - 1].text == "::"))) {
+      continue;
+    }
+    std::size_t match = index;
+    bool found = true;
+    for (std::size_t part = 1; part < parts.size(); ++part) {
+      if (match + 2 >= tokens.size() ||
+          (tokens[match + 1].text != "." && tokens[match + 1].text != "::") ||
+          tokens[match + 2].text != parts[part]) {
+        found = false;
+        break;
+      }
+      match += 2;
+    }
+    if (!found ||
+        (match + 1 < tokens.size() && tokens[match + 1].text == "(")) {
+      continue;
+    }
+    result.append(source.substr(copied, tokens[match].start - copied));
+    result.append(newName);
+    copied = tokens[match].start + tokens[match].length;
+    index = match;
+  }
+  result.append(source.substr(copied));
+  return result;
+}
+
+std::string RenameVariableReferences(std::string_view source,
+                                     std::string_view oldName,
                                      std::string_view newName) {
   std::string result;
   result.reserve(source.size());

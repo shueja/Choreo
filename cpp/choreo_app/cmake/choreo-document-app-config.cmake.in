@@ -1,0 +1,10 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+if(NOT TARGET choreo::document_core)
+	find_dependency(choreo-document-core CONFIG REQUIRED)
+endif()
+if(NOT TARGET wpilib::expression)
+	find_dependency(wpilib-expression CONFIG REQUIRED)
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/choreo-document-app-targets.cmake")

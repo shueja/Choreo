@@ -1,0 +1,7 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+if(NOT TARGET wpi::extras)
+	find_dependency(wpilib-extras CONFIG REQUIRED)
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/choreo-document-core-targets.cmake")
