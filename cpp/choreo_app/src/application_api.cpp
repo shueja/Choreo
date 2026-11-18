@@ -513,6 +513,9 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
   ApiResponse OpenProject(const std::filesystem::path& projectPath) {
     auto files = DiscoverFiles(projectPath);
     auto document = ReadDocument(files);
+    if (auto failure = PersistActiveSession()) {
+      return *failure;
+    }
     StopGenerations();
     auto replacement = std::make_unique<DocumentStore>(std::move(document));
     replacement->ReloadFiles(files);
@@ -536,6 +539,9 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       const auto path =
           NormalizeProjectPath(requestBody.at("projectPath").get_string());
       auto project = requestBody.at("project").get<Project>();
+      if (auto failure = self->PersistActiveSession()) {
+        return *failure;
+      }
       self->StopGenerations();
       Document document;
       document.project = std::move(project);
@@ -555,25 +561,8 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
     EmitSessionOperation(operationId, "close", "running", "Closing session");
     auto self = shared_from_this();
     QueueSessionOperation(operationId, "close", [self] {
-      if (self->store) {
-        const auto result = self->store->SaveFiles(self->documentFiles);
-        if (!result.Success()) {
-          std::vector<Json> details;
-          if (result.projectError) {
-            details.push_back(Json::object(
-                "path", self->documentFiles.project.string(), "message",
-                *result.projectError));
-          }
-          for (const auto& [id, error] : result.trajectoryErrors) {
-            details.push_back(Json::object(
-                "path", self->documentFiles.trajectories.at(id).string(),
-                "message", error));
-          }
-          return JsonResponse(
-              500, Json::object("code", "SAVE_FAILED", "message",
-                                "Session could not be saved before closing",
-                                "details", std::move(details)));
-        }
+      if (auto failure = self->PersistActiveSession()) {
+        return *failure;
       }
       self->StopGenerations();
       self->store.reset();
@@ -616,27 +605,55 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         return ApiError(422, "VALIDATION_ERROR",
                         "A project path is required for the first save");
       }
-      auto result = self->store->SaveFiles(files);
-      if (!result.Success()) {
-        std::vector<Json> details;
-        if (result.projectError) {
-          details.push_back(Json::object("path", files.project.string(),
-                                         "message", *result.projectError));
-        }
-        for (const auto& [id, error] : result.trajectoryErrors) {
-          details.push_back(Json::object(
-              "path", files.trajectories.at(id).string(), "message", error));
-        }
-        return JsonResponse(
-            500, Json::object("code", "SAVE_FAILED", "message",
-                              "One or more files could not be saved", "details",
-                              std::move(details)));
+      if (auto failure = self->PersistFiles(files)) {
+        return *failure;
       }
       self->documentFiles = std::move(files);
       return JsonResponse(200, Json::object("saved", true, "revision",
                                             self->store->Revision()));
     });
     return OperationAccepted(operationId, "save");
+  }
+
+  std::optional<ApiResponse> PersistActiveSession() {
+    if (!store) {
+      return std::nullopt;
+    }
+    if (documentFiles.project.empty()) {
+      return ApiError(
+          422, "VALIDATION_ERROR",
+          "A project path is required before replacing the session");
+    }
+    bool dirty = store->IsProjectDirty();
+    for (const auto& [id, path] : documentFiles.trajectories) {
+      static_cast<void>(path);
+      dirty = dirty || store->IsTrajectoryDirty(id);
+    }
+    if (!dirty) {
+      return std::nullopt;
+    }
+    return PersistFiles(documentFiles);
+  }
+
+  std::optional<ApiResponse> PersistFiles(const DocumentFiles& files) {
+    const auto result = store->SaveFiles(files);
+    if (result.Success()) {
+      return std::nullopt;
+    }
+    std::vector<Json> details;
+    if (result.projectError) {
+      details.push_back(Json::object("path", files.project.string(), "message",
+                                     *result.projectError));
+    }
+    for (const auto& [id, error] : result.trajectoryErrors) {
+      details.push_back(
+          Json::object("path", files.trajectories.at(id).string(), "message",
+                       error));
+    }
+    return JsonResponse(
+        500, Json::object("code", "SAVE_FAILED",
+                          "message", "One or more files could not be saved",
+                          "details", std::move(details)));
   }
 
   ApiResponse StartGeneration(const choreo::api::HttpRequest& request) {

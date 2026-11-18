@@ -532,6 +532,16 @@ class ApiTestFixture {
         Json::object("source", "path", "path", path.string()).to_string());
   }
 
+  std::pair<int, std::string> NewSession(
+      const std::filesystem::path& path, const Json& project) const {
+    const auto body =
+        Json::object("projectPath", path.string(), "project", project)
+            .to_string();
+    const auto headers =
+        "Idempotency-Key: " + std::string{kNewSessionIdempotencyKey} + "\r\n";
+    return HttpRequest(Port(), "POST", kSessionNewPath, body, headers);
+  }
+
   std::pair<int, std::string> Snapshot() const {
     return HttpRequest(Port(), "GET", kSnapshotPath, {});
   }
@@ -732,13 +742,8 @@ void TestNewSessionCompletesAsynchronously(
       Json::parse_or_throw(ReadFileContents(fixture.ProjectPath()));
   const auto newProjectPath =
       fixture.ProjectPath().parent_path() / kNewProjectFileName;
-  const auto body =
-      Json::object("projectPath", newProjectPath.string(), "project", project)
-          .to_string();
-  const auto headers =
-      "Idempotency-Key: " + std::string{kNewSessionIdempotencyKey} + "\r\n";
   const auto [status, responseBody] =
-      HttpRequest(fixture.Port(), "POST", kSessionNewPath, body, headers);
+      fixture.NewSession(newProjectPath, project);
   const auto operationId = AcceptedOperationId(status, responseBody, "new");
   WaitForSessionOperation(events.Get(), operationId, "new", "succeeded");
 
@@ -757,13 +762,14 @@ void TestCloseSessionClearsSnapshot(
   ApiTestFixture fixture{executable};
   auto events = fixture.ConnectEvents();
   Require(static_cast<bool>(events), "event WebSocket should connect");
-  const auto [openStatus, openBody] = fixture.OpenPath(fixture.ProjectPath());
-  const auto openOperationId =
-      AcceptedOperationId(openStatus, openBody, "open");
-  WaitForSessionOperation(events.Get(), openOperationId, "open", "succeeded");
+  const auto project =
+      Json::parse_or_throw(ReadFileContents(fixture.ProjectPath()));
+  const auto [newStatus, newBody] =
+      fixture.NewSession(fixture.ProjectPath(), project);
+  const auto newOperationId = AcceptedOperationId(newStatus, newBody, "new");
+  WaitForSessionOperation(events.Get(), newOperationId, "new", "succeeded");
 
   std::filesystem::remove(fixture.ProjectPath());
-  std::filesystem::remove(fixture.TrajectoryPath());
   const auto [closeStatus, closeBody] =
       HttpRequest(fixture.Port(), "POST", kSessionClosePath, {});
   const auto closeOperationId =
@@ -780,10 +786,6 @@ void TestCloseSessionClearsSnapshot(
                   .at("uuid")
                   .get_string() == kTestProjectUuid,
           "close should persist the project before releasing the session");
-  Require(Json::parse_or_throw(ReadFileContents(fixture.TrajectoryPath()))
-                  .at("uuid")
-                  .get_string() == kTestTrajectoryUuid,
-          "close should persist trajectories before releasing the session");
 }
 
 void TestCloseSessionRetainsSessionWhenSaveFails(
@@ -791,10 +793,12 @@ void TestCloseSessionRetainsSessionWhenSaveFails(
   ApiTestFixture fixture{executable};
   auto events = fixture.ConnectEvents();
   Require(static_cast<bool>(events), "event WebSocket should connect");
-  const auto [openStatus, openBody] = fixture.OpenPath(fixture.ProjectPath());
-  const auto openOperationId =
-      AcceptedOperationId(openStatus, openBody, "open");
-  WaitForSessionOperation(events.Get(), openOperationId, "open", "succeeded");
+  const auto project =
+      Json::parse_or_throw(ReadFileContents(fixture.ProjectPath()));
+  const auto [newStatus, newBody] =
+      fixture.NewSession(fixture.ProjectPath(), project);
+  const auto newOperationId = AcceptedOperationId(newStatus, newBody, "new");
+  WaitForSessionOperation(events.Get(), newOperationId, "new", "succeeded");
 
   std::filesystem::remove(fixture.ProjectPath());
   std::filesystem::create_directory(fixture.ProjectPath());
@@ -811,6 +815,60 @@ void TestCloseSessionRetainsSessionWhenSaveFails(
   Require(snapshotStatus == kHttpOk,
           "session should remain open when saving before close fails");
   Require(!snapshotBody.empty(), "retained session should remain readable");
+}
+
+void TestSessionReplacementRetainsActiveSessionWhenSaveFails(
+    const std::filesystem::path& executable) {
+  ApiTestFixture fixture{executable};
+  auto events = fixture.ConnectEvents();
+  Require(static_cast<bool>(events), "event WebSocket should connect");
+  const auto project =
+      Json::parse_or_throw(ReadFileContents(fixture.ProjectPath()));
+  const auto [initialNewStatus, initialNewBody] =
+      fixture.NewSession(fixture.ProjectPath(), project);
+  const auto initialNewOperationId =
+      AcceptedOperationId(initialNewStatus, initialNewBody, "new");
+  WaitForSessionOperation(events.Get(), initialNewOperationId, "new",
+                          "succeeded");
+
+  const auto alternateDirectory =
+      fixture.ProjectPath().parent_path() / "alternate-project";
+  std::filesystem::create_directory(alternateDirectory);
+  const auto alternateProjectPath = alternateDirectory / kProjectFileName;
+  std::filesystem::copy_file(fixture.ProjectPath(), alternateProjectPath);
+  std::filesystem::copy_file(fixture.TrajectoryPath(),
+                             alternateDirectory / kTrajectoryFileName);
+  std::filesystem::remove(fixture.ProjectPath());
+  std::filesystem::create_directory(fixture.ProjectPath());
+
+  const auto [replacementStatus, replacementBody] =
+      fixture.OpenPath(alternateProjectPath);
+  const auto replacementOperationId =
+      AcceptedOperationId(replacementStatus, replacementBody, "open");
+  const auto replacementEvent = WaitForSessionOperation(
+      events.Get(), replacementOperationId, "open", "failed");
+  Require(replacementEvent.at("error").at("code").get_string() ==
+              "SAVE_FAILED",
+          "open should report failure to persist the active session");
+
+  const auto newProjectPath = alternateDirectory / kNewProjectFileName;
+  const auto [replacementNewStatus, replacementNewBody] =
+      fixture.NewSession(newProjectPath, project);
+  const auto replacementNewOperationId =
+      AcceptedOperationId(replacementNewStatus, replacementNewBody, "new");
+  const auto newEvent = WaitForSessionOperation(
+      events.Get(), replacementNewOperationId, "new", "failed");
+  Require(newEvent.at("error").at("code").get_string() == "SAVE_FAILED",
+          "new should report failure to persist the active session");
+
+  const auto [snapshotStatus, snapshotBody] = fixture.Snapshot();
+  Require(snapshotStatus == kHttpOk,
+          "failed replacement should leave the active session readable");
+  Require(Json::parse_or_throw(snapshotBody)
+                  .at("project")
+                  .at("uuid")
+                  .get_string() == kTestProjectUuid,
+          "failed replacement should preserve the original project");
 }
 
 void TestTrajectoryReadReturnsDocumentAndRejectsUnknownIds(
@@ -1073,7 +1131,7 @@ struct TestCase {
   void (*run)(const std::filesystem::path&);
 };
 
-constexpr std::array<TestCase, 12> kTestCases{{
+constexpr std::array<TestCase, 13> kTestCases{{
     {"picker open loads project snapshot", TestPickerOpenLoadsProjectSnapshot},
     {"picker cancellation leaves session closed",
      TestPickerCancellationLeavesSessionClosed},
@@ -1083,6 +1141,8 @@ constexpr std::array<TestCase, 12> kTestCases{{
     {"close session clears snapshot", TestCloseSessionClearsSnapshot},
     {"close retains session when saving fails",
      TestCloseSessionRetainsSessionWhenSaveFails},
+    {"session replacement retains current document when save fails",
+     TestSessionReplacementRetainsActiveSessionWhenSaveFails},
     {"trajectory read returns document and rejects unknown IDs",
      TestTrajectoryReadReturnsDocumentAndRejectsUnknownIds},
     {"project read returns active document", TestProjectReadReturnsActiveDocument},

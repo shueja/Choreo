@@ -55,10 +55,10 @@ assets, and configure an optional generator path with `--generator PATH`.
 Repeat `--allowed-origin ORIGIN` to permit cross-origin UI clients. The default
 Vite output directory is `dist`. The current host does not yet open a browser
 or provide a native project picker. Open projects using the API's path-based
-session operation. Closing a session first saves its project and trajectory
-files; if saving fails, the session remains open. Stop the process with Ctrl+C
-or SIGTERM. The existing UI still uses Tauri commands, so static hosting is
-not yet a usable browser app.
+session operation. Closing or replacing a session first saves any modified
+project and trajectory files; if saving fails, the current session remains
+open. Stop the process with Ctrl+C or SIGTERM. The existing UI still uses
+Tauri commands, so static hosting is not yet a usable browser app.
 
 When `wpinet` is available, separate CTest cases cover the test-child handoff
 and real-generator differential, swerve, and split scenarios. Set

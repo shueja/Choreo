@@ -21,7 +21,7 @@
     "/api/v1/session/open": {
       "post": {
         "operationId": "openSession",
-        "summary": "Open a project or show the server's file picker",
+        "summary": "Save modified active files, then open a project or show the file picker",
         "requestBody": {
           "required": true,
           "content": {
@@ -34,7 +34,7 @@
         },
         "responses": {
           "202": {
-            "description": "Session open was accepted; completion is reported over the events WebSocket",
+            "description": "Session open was accepted; completion is reported over the events WebSocket. If saving modified current files fails, the current session remains active.",
             "content": {
               "application/json": {
                 "schema": {
@@ -55,7 +55,7 @@
     "/api/v1/session/new": {
       "post": {
         "operationId": "createSession",
-        "summary": "Create the active project from a v4 project document",
+        "summary": "Save modified active files, then create a project from a v4 document",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -73,7 +73,7 @@
         },
         "responses": {
           "202": {
-            "description": "Session creation was accepted; completion is reported over the events WebSocket",
+            "description": "Session creation was accepted; completion is reported over the events WebSocket. If saving modified current files fails, the current session remains active.",
             "content": {
               "application/json": {
                 "schema": {
@@ -94,7 +94,7 @@
     "/api/v1/session/close": {
       "post": {
         "operationId": "closeSession",
-        "summary": "Save and close the active project, cancelling active generation",
+        "summary": "Save modified files and close the active project, cancelling active generation",
         "responses": {
           "202": {
             "description": "Session close was accepted; completion is reported over the events WebSocket",
