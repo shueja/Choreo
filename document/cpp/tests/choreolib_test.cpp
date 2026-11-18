@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
   }
   wpi::math::HolonomicSample sample;
   const auto root = wpi::util::json::object(
-      "uuid", "path", "version", 4, "name", "Path", "config", nullptr,
+      "uuid", "00000000-0000-4000-8000-000000000100", "version", 4, "name", "Path", "config", nullptr,
       "snapshot", nullptr, "params",
       wpi::util::json::object(
           "waypoints", wpi::util::json::array(), "constraints",

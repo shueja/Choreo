@@ -12,6 +12,23 @@
 #include "choreo/document/evaluation.hpp"
 #include "choreo/document/history.hpp"
 
+namespace {
+
+constexpr char kProjectUuid[] = "00000000-0000-4000-8000-000000001001";
+constexpr char kLengthVariableUuid[] = "00000000-0000-4000-8000-000000001002";
+constexpr char kTwiceVariableUuid[] = "00000000-0000-4000-8000-000000001003";
+constexpr char kOccupiedVariableUuid[] = "00000000-0000-4000-8000-000000001009";
+constexpr char kCandidateTrajectoryUuid[] =
+  "00000000-0000-4000-8000-000000001004";
+constexpr char kWaypointUuid[] = "00000000-0000-4000-8000-000000001005";
+constexpr char kConstraintUuid[] = "00000000-0000-4000-8000-000000001006";
+constexpr char kSecondTrajectoryUuid[] =
+  "00000000-0000-4000-8000-000000001007";
+constexpr char kStandaloneTrajectoryUuid[] =
+  "00000000-0000-4000-8000-000000001008";
+
+}
+
 template <typename ExpressionType>
 bool CheckDimension(wpilib::expression::EvaluationContext& context,
                     const char* source, double expected) {
@@ -133,28 +150,33 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
   Project variablesProject;
-  variablesProject.uuid = "project";
+    variablesProject.uuid = kProjectUuid;
   variablesProject.variables.emplace(
-      "length", Variable{"length", "", "2 m", VariableType::Quantity,
+      kLengthVariableUuid,
+      Variable{"length", "", "2 m", VariableType::Quantity,
                          std::map<std::string, int>{{"meter", 1}}, 0.0});
   variablesProject.variables.emplace(
-      "twice", Variable{"twice", "", "length * 2", VariableType::Quantity,
+      kTwiceVariableUuid,
+      Variable{"twice", "", "length * 2", VariableType::Quantity,
                         std::map<std::string, int>{{"meter", 1}}, 0.0});
   auto evaluated = evaluation::EvaluateVariables(variablesProject);
-  if (std::get<double>(evaluated.variables.at("twice").value) != 4.0 ||
-      std::get<double>(variablesProject.variables.at("twice").value) != 0.0) {
+  if (std::get<double>(evaluated.variables.at(kTwiceVariableUuid).value) !=
+          4.0 ||
+      std::get<double>(variablesProject.variables.at(kTwiceVariableUuid).value) !=
+          0.0) {
     return EXIT_FAILURE;
   }
-  variablesProject.variables.at("length").expression = "twice";
+  variablesProject.variables.at(kLengthVariableUuid).expression = "twice";
   try {
     evaluation::EvaluateVariables(variablesProject);
     return EXIT_FAILURE;
   } catch (const std::exception&) {
   }
-  if (std::get<double>(variablesProject.variables.at("length").value) != 0.0) {
+  if (std::get<double>(variablesProject.variables.at(kLengthVariableUuid).value) !=
+      0.0) {
     return EXIT_FAILURE;
   }
-  variablesProject.variables.at("length").expression = "1 s";
+  variablesProject.variables.at(kLengthVariableUuid).expression = "1 s";
   try {
     evaluation::EvaluateVariables(variablesProject);
     return EXIT_FAILURE;
@@ -163,7 +185,7 @@ int main(int argc, char** argv) {
       return EXIT_FAILURE;
     }
   }
-  variablesProject.variables.at("length").expression = "2 m";
+  variablesProject.variables.at(kLengthVariableUuid).expression = "2 m";
   auto& evaluatedConfig = variablesProject.config;
   evaluatedConfig.mass.source = "5 kg";
   evaluatedConfig.inertia.source = "3 kg*m^2";
@@ -184,10 +206,10 @@ int main(int argc, char** argv) {
   Document candidate;
   candidate.project = variablesProject;
   Trajectory candidateTrajectory;
-  candidateTrajectory.uuid = "candidate";
+    candidateTrajectory.uuid = kCandidateTrajectoryUuid;
   candidateTrajectory.params.targetDt.source = "0.02 s";
   candidateTrajectory.params.waypoints.push_back(
-      Waypoint{"point",
+      Waypoint{kWaypointUuid,
                {"Pose2d(length, 0 m, 0 rad)", wpi::math::Pose2d{}},
                1,
                false,
@@ -195,24 +217,24 @@ int main(int argc, char** argv) {
                true,
                false});
   candidateTrajectory.params.constraints.push_back(
-      Constraint{"circle", WaypointBoundary::First, std::nullopt,
+      Constraint{kConstraintUuid, WaypointBoundary::First, std::nullopt,
                  KeepInCircle{EllipseExpression{
                      "Ellipse2d(Translation2d(), 2 m)",
                      wpi::math::Ellipse2d{wpi::math::Translation2d{}, 1.0}}},
                  true});
   candidateTrajectory.snapshot = candidateTrajectory.params;
   candidate.trajectories =
-      candidate.trajectories.set("candidate", candidateTrajectory);
+      candidate.trajectories.set(kCandidateTrajectoryUuid, candidateTrajectory);
   const auto evaluatedDocument = evaluation::EvaluateDocument(candidate);
   const auto& evaluatedTrajectory =
-      evaluatedDocument.trajectories.at("candidate");
+      evaluatedDocument.trajectories.at(kCandidateTrajectoryUuid);
   if (evaluatedTrajectory.params.waypoints[0].pose.value.X().value() != 2.0 ||
       std::get<KeepInCircle>(evaluatedTrajectory.params.constraints[0].data)
               .circle.value.XSemiAxis()
               .value() != 2.0 ||
       evaluatedTrajectory.snapshot->waypoints[0].pose.value.X().value() !=
           0.0 ||
-      candidate.trajectories.at("candidate")
+      candidate.trajectories.at(kCandidateTrajectoryUuid)
               .params.waypoints[0]
               .pose.value.X()
               .value() != 0.0) {
@@ -223,7 +245,8 @@ int main(int argc, char** argv) {
       .circle.source = "Ellipse2d(Translation2d(), -1.0)";
   auto invalidCircleDocument = candidate;
   invalidCircleDocument.trajectories =
-      invalidCircleDocument.trajectories.set("candidate", invalidCircle);
+      invalidCircleDocument.trajectories.set(kCandidateTrajectoryUuid,
+                          invalidCircle);
   try {
     evaluation::EvaluateDocument(invalidCircleDocument);
     return EXIT_FAILURE;
@@ -232,7 +255,8 @@ int main(int argc, char** argv) {
   std::get<KeepInCircle>(invalidCircle.params.constraints[0].data)
       .circle.source = "Ellipse2d(Translation2d(), 0.0)";
   invalidCircleDocument.trajectories =
-      invalidCircleDocument.trajectories.set("candidate", invalidCircle);
+      invalidCircleDocument.trajectories.set(kCandidateTrajectoryUuid,
+                          invalidCircle);
   try {
     evaluation::EvaluateDocument(invalidCircleDocument);
     return EXIT_FAILURE;
@@ -241,7 +265,8 @@ int main(int argc, char** argv) {
   std::get<KeepInCircle>(invalidCircle.params.constraints[0].data)
       .circle.source = "Ellipse2d(Pose2d(), 1 m, 2 m)";
   invalidCircleDocument.trajectories =
-      invalidCircleDocument.trajectories.set("candidate", invalidCircle);
+      invalidCircleDocument.trajectories.set(kCandidateTrajectoryUuid,
+                          invalidCircle);
   try {
     evaluation::EvaluateDocument(invalidCircleDocument);
     return EXIT_FAILURE;
@@ -284,39 +309,48 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
   auto namespaced = candidate;
-  namespaced.project.variables.at("length").namespacePath = "field";
-  namespaced.project.variables.at("twice").expression = "field.length * 2";
+  namespaced.project.variables.at(kLengthVariableUuid).namespacePath = "field";
+  namespaced.project.variables.at(kTwiceVariableUuid).expression =
+      "field.length * 2";
   namespaced.project.variables.emplace(
-      "occupied", Variable{"occupied", "field", "1 m", VariableType::Quantity,
-                           std::map<std::string, int>{{"meter", 1}}, 0.0});
+      kOccupiedVariableUuid,
+      Variable{"occupied", "field", "1 m", VariableType::Quantity,
+               std::map<std::string, int>{{"meter", 1}}, 0.0});
   namespaced.project.config.wheels.differential->trackwidth.source =
       "field.length / 4";
-  auto namespacedTrajectory = namespaced.trajectories.at("candidate");
+  auto namespacedTrajectory =
+      namespaced.trajectories.at(kCandidateTrajectoryUuid);
   namespacedTrajectory.params.waypoints[0].pose.source =
       "Pose2d(field.length + 0 m, 0 m, 0 rad)";
   namespaced.trajectories =
-      namespaced.trajectories.set("candidate", namespacedTrajectory);
+      namespaced.trajectories.set(kCandidateTrajectoryUuid,
+                    namespacedTrajectory);
   auto secondTrajectory = namespacedTrajectory;
-  secondTrajectory.uuid = "second";
+    secondTrajectory.uuid = kSecondTrajectoryUuid;
   namespaced.trajectories =
-      namespaced.trajectories.set("second", secondTrajectory);
+      namespaced.trajectories.set(kSecondTrajectoryUuid, secondTrajectory);
   DocumentStore renameStore{namespaced};
   const auto beforeRename = renameStore.Snapshot();
   renameStore.RenameVariable("length", "width");
   const auto renamed = renameStore.Snapshot();
-  if (renamed->project.variables.at("length").name != "width" ||
-      renamed->project.variables.at("twice").expression != "field.width * 2" ||
+    if (renamed->project.variables.at(kLengthVariableUuid).name != "width" ||
+      renamed->project.variables.at(kTwiceVariableUuid).expression !=
+        "field.width * 2" ||
       renamed->project.config.wheels.differential->trackwidth.source !=
           "field.width / 4" ||
-      renamed->trajectories.at("second").params.waypoints[0].pose.source !=
+        renamed->trajectories.at(kSecondTrajectoryUuid)
+            .params.waypoints[0]
+            .pose.source !=
           "Pose2d(field.width + 0 m, 0 m, 0 rad)" ||
-      renamed->trajectories.at("candidate")
+        renamed->trajectories.at(kCandidateTrajectoryUuid)
               .snapshot->waypoints[0]
-              .pose.source != beforeRename->trajectories.at("candidate")
+            .pose.source != beforeRename->trajectories
+                      .at(kCandidateTrajectoryUuid)
                                   .snapshot->waypoints[0]
                                   .pose.source ||
       !renameStore.Undo() ||
-      renameStore.Snapshot()->project.variables.at("length").name != "length" ||
+        renameStore.Snapshot()->project.variables.at(kLengthVariableUuid).name !=
+          "length" ||
       !renameStore.Redo()) {
     return EXIT_FAILURE;
   }
@@ -333,15 +367,17 @@ int main(int argc, char** argv) {
   }
   const auto oldSnapshot = store.Snapshot();
   auto invalidReference = *oldSnapshot;
-  auto invalidTrajectory = invalidReference.trajectories.at("candidate");
+  auto invalidTrajectory =
+      invalidReference.trajectories.at(kCandidateTrajectoryUuid);
   invalidTrajectory.params.constraints[0].from = std::string{"missing"};
   invalidReference.trajectories =
-      invalidReference.trajectories.set("candidate", invalidTrajectory);
+      invalidReference.trajectories.set(kCandidateTrajectoryUuid,
+                      invalidTrajectory);
   try {
     store.Commit(invalidReference);
     return EXIT_FAILURE;
   } catch (const evaluation::EvaluationError& error) {
-    if (error.ObjectId() != "circle" || error.Field() != "from") {
+    if (error.ObjectId() != kConstraintUuid || error.Field() != "from") {
       return EXIT_FAILURE;
     }
   }
@@ -353,14 +389,14 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
   auto changed = *oldSnapshot;
-  changed.project.variables.at("length").expression = "3 m";
+  changed.project.variables.at(kLengthVariableUuid).expression = "3 m";
   store.Commit(changed, store.Revision());
   if (store.Snapshot()
-              ->trajectories.at("candidate")
+              ->trajectories.at(kCandidateTrajectoryUuid)
               .params.waypoints[0]
               .pose.value.X()
               .value() != 3.0 ||
-      oldSnapshot->trajectories.at("candidate")
+      oldSnapshot->trajectories.at(kCandidateTrajectoryUuid)
               .params.waypoints[0]
               .pose.value.X()
               .value() != 2.0 ||
@@ -372,7 +408,7 @@ int main(int argc, char** argv) {
   store.Reload(serialized);
   if (store.Revision() <= revisionBeforeReload || store.CanUndo() ||
       store.Snapshot()
-              ->trajectories.at("candidate")
+              ->trajectories.at(kCandidateTrajectoryUuid)
               .params.waypoints[0]
               .pose.value.X()
               .value() != 3.0) {
@@ -396,9 +432,10 @@ int main(int argc, char** argv) {
   }
   const std::filesystem::path testDirectory{argv[1]};
   DocumentFiles files{testDirectory / "document-test.chor",
-                      {{"candidate", testDirectory / "document-test.traj"}}};
+                      {{kCandidateTrajectoryUuid,
+                        testDirectory / "document-test.traj"}}};
   auto duplicateFiles = files;
-  duplicateFiles.trajectories["candidate"] = files.project;
+  duplicateFiles.trajectories[kCandidateTrajectoryUuid] = files.project;
   try {
     store.SaveFiles(duplicateFiles);
     return EXIT_FAILURE;
@@ -406,7 +443,7 @@ int main(int argc, char** argv) {
   }
 #if defined(_WIN32)
   duplicateFiles.project = testDirectory / "document-case.chor";
-  duplicateFiles.trajectories["candidate"] =
+  duplicateFiles.trajectories[kCandidateTrajectoryUuid] =
       testDirectory / "DOCUMENT-CASE.CHOR";
   try {
     store.SaveFiles(duplicateFiles);
@@ -417,36 +454,39 @@ int main(int argc, char** argv) {
   if (!store.SaveFiles(files).Success()) {
     return EXIT_FAILURE;
   }
-  if (store.IsProjectDirty() || store.IsTrajectoryDirty("candidate")) {
+  if (store.IsProjectDirty() ||
+      store.IsTrajectoryDirty(kCandidateTrajectoryUuid)) {
     std::cerr << "dirty immediately after save\n";
     return EXIT_FAILURE;
   }
   auto unsaved = *store.Snapshot();
-  unsaved.project.variables.at("length").expression = "4 m";
+    unsaved.project.variables.at(kLengthVariableUuid).expression = "4 m";
   store.Commit(unsaved);
-  if (!store.IsProjectDirty() || !store.IsTrajectoryDirty("candidate") ||
+    if (!store.IsProjectDirty() ||
+      !store.IsTrajectoryDirty(kCandidateTrajectoryUuid) ||
       !store.Undo() || store.IsProjectDirty() ||
-      store.IsTrajectoryDirty("candidate")) {
+      store.IsTrajectoryDirty(kCandidateTrajectoryUuid)) {
     std::cerr << "dirty tracking failed across edit and undo\n";
     return EXIT_FAILURE;
   }
   store.ReloadFiles(files);
   if (store.Snapshot()
-          ->trajectories.at("candidate")
+      ->trajectories.at(kCandidateTrajectoryUuid)
           .params.waypoints[0]
           .pose.value.X()
           .value() != 3.0) {
     return EXIT_FAILURE;
   }
   auto brokenFiles = files;
-  brokenFiles.trajectories["candidate"] =
+  brokenFiles.trajectories[kCandidateTrajectoryUuid] =
       testDirectory / "missing-directory" / "document-test.traj";
   const auto partialSave = store.SaveFiles(brokenFiles);
   if (partialSave.projectError ||
-      !partialSave.trajectoryErrors.contains("candidate")) {
+      !partialSave.trajectoryErrors.contains(kCandidateTrajectoryUuid)) {
     return EXIT_FAILURE;
   }
-  if (store.IsProjectDirty() || !store.IsTrajectoryDirty("candidate")) {
+  if (store.IsProjectDirty() ||
+      !store.IsTrajectoryDirty(kCandidateTrajectoryUuid)) {
     std::cerr << "incorrect dirty state after partial save\n";
     return EXIT_FAILURE;
   }
@@ -460,16 +500,17 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
   std::filesystem::remove(files.project);
-  std::filesystem::remove(files.trajectories.at("candidate"));
+    std::filesystem::remove(files.trajectories.at(kCandidateTrajectoryUuid));
   candidateTrajectory.params.waypoints[0].pose.source =
       "Pose2d(length, 0 s, 0 rad)";
   candidate.trajectories =
-      candidate.trajectories.set("candidate", candidateTrajectory);
+      candidate.trajectories.set(kCandidateTrajectoryUuid,
+                   candidateTrajectory);
   try {
     evaluation::EvaluateDocument(candidate);
     return EXIT_FAILURE;
   } catch (const evaluation::EvaluationError& error) {
-    if (error.ObjectId() != "point" || error.Field() != "pose") {
+    if (error.ObjectId() != kWaypointUuid || error.Field() != "pose") {
       return EXIT_FAILURE;
     }
   }
@@ -477,7 +518,7 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
   Trajectory trajectory;
-  trajectory.uuid = "trajectory";
+  trajectory.uuid = kStandaloneTrajectoryUuid;
   trajectory.name = "Path";
   trajectory.params.waypoints = std::vector<Waypoint>{waypoint};
   Document original;
@@ -487,9 +528,11 @@ int main(int argc, char** argv) {
   trajectory.name = "Updated";
   Document updated = original;
   updated.trajectories = original.trajectories.set(trajectory.uuid, trajectory);
-  if (original.trajectories.at("trajectory").name != "Path" ||
-      updated.trajectories.at("trajectory").name != "Updated" ||
-      original.trajectories.at("trajectory").params.waypoints[0].pose.source !=
+    if (original.trajectories.at(kStandaloneTrajectoryUuid).name != "Path" ||
+      updated.trajectories.at(kStandaloneTrajectoryUuid).name != "Updated" ||
+      original.trajectories.at(kStandaloneTrajectoryUuid)
+          .params.waypoints[0]
+          .pose.source !=
           "Pose2d()") {
     return EXIT_FAILURE;
   }
@@ -498,8 +541,9 @@ int main(int argc, char** argv) {
       {}, {}, std::optional<wpi::math::DifferentialTrajectory>{}};
   trajectory.output = emptyDifferential;
   updated.trajectories = updated.trajectories.set(trajectory.uuid, trajectory);
-  const auto& output = updated.trajectories.at("trajectory").output;
-  if (original.trajectories.at("trajectory").output || !output ||
+  const auto& output =
+      updated.trajectories.at(kStandaloneTrajectoryUuid).output;
+  if (original.trajectories.at(kStandaloneTrajectoryUuid).output || !output ||
       !std::holds_alternative<std::optional<wpi::math::DifferentialTrajectory>>(
           output->trajectory) ||
       std::get<std::optional<wpi::math::DifferentialTrajectory>>(
@@ -511,16 +555,18 @@ int main(int argc, char** argv) {
   auto initial = history.Snapshot();
   history.Commit(updated);
   if (!history.CanUndo() || history.Revision() != 1 || !history.Undo() ||
-      history.Snapshot()->trajectories.at("trajectory").name != "Path" ||
+      history.Snapshot()->trajectories.at(kStandaloneTrajectoryUuid).name !=
+        "Path" ||
       !history.Redo() ||
-      history.Snapshot()->trajectories.at("trajectory").name != "Updated") {
+      history.Snapshot()->trajectories.at(kStandaloneTrajectoryUuid).name !=
+        "Updated") {
     return EXIT_FAILURE;
   }
   Document next = *history.Snapshot();
   next.project.name = "New project";
   history.Commit(next);
   if (!history.Undo() || history.Undo() || !history.CanRedo() ||
-      initial->trajectories.at("trajectory").name != "Path") {
+      initial->trajectories.at(kStandaloneTrajectoryUuid).name != "Path") {
     return EXIT_FAILURE;
   }
   history.Commit(original);

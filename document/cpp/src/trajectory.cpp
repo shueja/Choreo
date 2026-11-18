@@ -11,6 +11,7 @@ namespace choreo::document {
 using wpi::util::json;
 
 void to_json(json& serialized, const Trajectory& trajectory) {
+  detail::CheckUuid(trajectory.uuid);
   if (trajectory.version != kTrajectorySchemaVersion) {
     throw std::invalid_argument("unsupported trajectory schema version");
   }
@@ -33,6 +34,7 @@ void from_json(const json& root, Trajectory& trajectory) {
   }
   Trajectory result;
   result.uuid = root.at("uuid").get_string();
+  detail::CheckUuid(result.uuid);
   result.name = root.at("name").get_string();
   if (!root.at("config").is_null()) {
     result.config = root.at("config").get<RobotConfig>();

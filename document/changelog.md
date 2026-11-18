@@ -9,6 +9,9 @@
    * Constraints and event markers refer to waypoints by `"first" | "last" | {"uuid":"waypointUUID"}`
 * Removed the concept that a "snapshot" of trajectory parameters and/or robot config is a variant of the structure, but with doubles instead of `{exp, val}` expressions. There is still snapshotting functionality but it uses the full structure for simplicity. This also better enables reverting to the last successful generation.
 
+## UUID representation
+* UUIDs use canonical 8-4-4-4-12 hexadecimal strings in persisted files and API resource identifiers.
+
 ## Shared
 * `Expr`:
 The `val` is the value of the expression string in a base SI unit which is usage-dependent.

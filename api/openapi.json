@@ -1,0 +1,1621 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Choreo Local API",
+    "version": "1.0.0",
+    "description": "Resource-oriented API for the locally running Choreo server. The server owns one active project. Mutations are validated and persisted before they are acknowledged. Subscribe to the WebSocket event channel before fetching a snapshot; events are not replayed, and clients must refetch the snapshot if they observe a revision gap."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:{port}",
+      "description": "Locally running Choreo server",
+      "variables": {
+        "port": {
+          "default": "8080"
+        }
+      }
+    }
+  ],
+  "security": [],
+  "paths": {
+    "/api/v1/session/open": {
+      "post": {
+        "operationId": "openSession",
+        "summary": "Open a project or show the server's file picker",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The project was opened or the picker was cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenSessionResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/session/new": {
+      "post": {
+        "operationId": "createSession",
+        "summary": "Create the active project from a v4 project document",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDocument"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new project is active",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionSnapshot"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/snapshot": {
+      "get": {
+        "operationId": "getSnapshot",
+        "summary": "Get the full active document state and revision",
+        "responses": {
+          "200": {
+            "description": "Current logical project state",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/RevisionTag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionSnapshot"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        }
+      ],
+      "get": {
+        "operationId": "getProject",
+        "summary": "Get the active project document",
+        "responses": {
+          "200": {
+            "description": "Project document",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/RevisionTag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDocument"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchProject",
+        "summary": "Update editable project fields",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/merge-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/MutationAck"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/trajectories": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        }
+      ],
+      "get": {
+        "operationId": "listTrajectories",
+        "summary": "List trajectories in the active project",
+        "responses": {
+          "200": {
+            "description": "Trajectory collection",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/RevisionTag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrajectoryCollection"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createTrajectory",
+        "summary": "Add a trajectory to the project",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrajectoryDocument"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Trajectory added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/trajectories/{trajectoryId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "$ref": "#/components/parameters/TrajectoryId"
+        }
+      ],
+      "get": {
+        "operationId": "getTrajectory",
+        "summary": "Get one trajectory document",
+        "responses": {
+          "200": {
+            "description": "Trajectory document",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/RevisionTag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrajectoryDocument"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchTrajectory",
+        "summary": "Update editable trajectory fields",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/merge-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrajectoryPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/MutationAck"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTrajectory",
+        "summary": "Remove a trajectory",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/MutationAck"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/trajectories/{trajectoryId}/waypoints": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "$ref": "#/components/parameters/TrajectoryId"
+        }
+      ],
+      "get": {
+        "operationId": "listWaypoints",
+        "summary": "List editable waypoints",
+        "responses": {
+          "200": {
+            "description": "Waypoint collection",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/RevisionTag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaypointCollection"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createWaypoint",
+        "summary": "Add a waypoint",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Waypoint"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Waypoint added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/trajectories/{trajectoryId}/waypoints/{waypointId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "$ref": "#/components/parameters/TrajectoryId"
+        },
+        {
+          "$ref": "#/components/parameters/WaypointId"
+        }
+      ],
+      "get": {
+        "operationId": "getWaypoint",
+        "summary": "Get one waypoint by UUID",
+        "responses": {
+          "200": {
+            "description": "Waypoint",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/RevisionTag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Waypoint"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchWaypoint",
+        "summary": "Update a waypoint without changing its UUID",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/merge-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/WaypointPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/MutationAck"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteWaypoint",
+        "summary": "Remove a waypoint by UUID",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/MutationAck"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/trajectories/{trajectoryId}/constraints": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "$ref": "#/components/parameters/TrajectoryId"
+        }
+      ],
+      "get": {
+        "operationId": "listConstraints",
+        "summary": "List trajectory constraints",
+        "responses": {
+          "200": {
+            "description": "Constraint collection",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/RevisionTag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConstraintCollection"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createConstraint",
+        "summary": "Add a constraint",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Constraint"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Constraint added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/trajectories/{trajectoryId}/constraints/{constraintId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "$ref": "#/components/parameters/TrajectoryId"
+        },
+        {
+          "$ref": "#/components/parameters/ConstraintId"
+        }
+      ],
+      "get": {
+        "operationId": "getConstraint",
+        "summary": "Get one constraint by UUID",
+        "responses": {
+          "200": {
+            "description": "Constraint",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/RevisionTag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Constraint"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchConstraint",
+        "summary": "Update a constraint without changing its UUID",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/merge-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConstraintPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/MutationAck"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteConstraint",
+        "summary": "Remove a constraint by UUID",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/MutationAck"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/trajectories/{trajectoryId}/event-markers": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "$ref": "#/components/parameters/TrajectoryId"
+        }
+      ],
+      "get": {
+        "operationId": "listEventMarkers",
+        "summary": "List trajectory event markers",
+        "responses": {
+          "200": {
+            "description": "Event marker collection",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/RevisionTag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventMarkerCollection"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createEventMarker",
+        "summary": "Add an event marker",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventMarker"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Event marker added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/trajectories/{trajectoryId}/event-markers/{eventMarkerId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "$ref": "#/components/parameters/TrajectoryId"
+        },
+        {
+          "$ref": "#/components/parameters/EventMarkerId"
+        }
+      ],
+      "get": {
+        "operationId": "getEventMarker",
+        "summary": "Get one event marker by UUID",
+        "responses": {
+          "200": {
+            "description": "Event marker",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/RevisionTag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventMarker"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchEventMarker",
+        "summary": "Update an event marker without changing its UUID",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/merge-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventMarkerPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/MutationAck"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteEventMarker",
+        "summary": "Remove an event marker by UUID",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/MutationAck"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/session/undo": {
+      "post": {
+        "operationId": "undo",
+        "summary": "Undo the most recent committed document change",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/MutationAck"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/session/redo": {
+      "post": {
+        "operationId": "redo",
+        "summary": "Redo the most recently undone document change",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/MutationAck"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/trajectories/{trajectoryId}/generations": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "$ref": "#/components/parameters/TrajectoryId"
+        }
+      ],
+      "post": {
+        "operationId": "startGeneration",
+        "summary": "Start generation for a trajectory",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Generation accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationAccepted"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/trajectories/{trajectoryId}/generations/{operationId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "$ref": "#/components/parameters/TrajectoryId"
+        },
+        {
+          "$ref": "#/components/parameters/OperationId"
+        }
+      ],
+      "delete": {
+        "operationId": "cancelGeneration",
+        "summary": "Cancel an active generation",
+        "responses": {
+          "202": {
+            "description": "Cancellation requested",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationCancellation"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "ProjectId": {
+        "name": "projectId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/UUID"
+        }
+      },
+      "TrajectoryId": {
+        "name": "trajectoryId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/UUID"
+        }
+      },
+      "WaypointId": {
+        "name": "waypointId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/UUID"
+        }
+      },
+      "ConstraintId": {
+        "name": "constraintId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/UUID"
+        }
+      },
+      "EventMarkerId": {
+        "name": "eventMarkerId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/UUID"
+        }
+      },
+      "OperationId": {
+        "name": "operationId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/UUID"
+        }
+      },
+      "IfMatch": {
+        "name": "If-Match",
+        "in": "header",
+        "required": true,
+        "description": "Current entity tag, returned by GET as ETag.",
+        "schema": {
+          "type": "string",
+          "pattern": "^\"revision-[0-9]+\"$"
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "UUID identifying this mutation; retries with the same request replay its result.",
+        "schema": {
+          "$ref": "#/components/schemas/UUID"
+        }
+      }
+    },
+    "headers": {
+      "RevisionTag": {
+        "description": "Current session revision, formatted as an entity tag.",
+        "schema": {
+          "type": "string",
+          "pattern": "^\"revision-[0-9]+\"$"
+        }
+      }
+    },
+    "responses": {
+      "ApiError": {
+        "description": "Structured API error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "RevisionConflict": {
+        "description": "The supplied If-Match does not match the current revision",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "MutationAck": {
+        "description": "Mutation committed and persisted",
+        "headers": {
+          "ETag": {
+            "$ref": "#/components/headers/RevisionTag"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MutationResult"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "UUID": {
+        "$ref": "../document/shared.schema.json#/$defs/UUID"
+      },
+      "ProjectDocument": {
+        "$ref": "../document/project.schema.json#/$defs/ProjectFile"
+      },
+      "TrajectoryDocument": {
+        "$ref": "../document/trajectory.schema.json#/$defs/TrajectoryFile"
+      },
+      "Waypoint": {
+        "$ref": "../document/trajectory.schema.json#/$defs/Waypoint"
+      },
+      "Constraint": {
+        "$ref": "../document/trajectory.schema.json#/$defs/Constraint"
+      },
+      "EventMarker": {
+        "$ref": "../document/trajectory.schema.json#/$defs/EventMarker"
+      },
+      "Parameters": {
+        "$ref": "../document/trajectory.schema.json#/$defs/Parameters"
+      },
+      "OpenSessionRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "source": {
+                "const": "picker"
+              }
+            },
+            "required": ["source"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "source": {
+                "const": "path"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": ["source", "path"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "OpenSessionResult": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "opened"
+              },
+              "snapshot": {
+                "$ref": "#/components/schemas/SessionSnapshot"
+              }
+            },
+            "required": ["status", "snapshot"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "cancelled"
+              }
+            },
+            "required": ["status"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "SessionSnapshot": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectDocument"
+          },
+          "trajectories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrajectoryDocument"
+            }
+          }
+        },
+        "required": ["revision", "project", "trajectories"],
+        "additionalProperties": false
+      },
+      "TrajectoryCollection": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrajectoryDocument"
+            }
+          }
+        },
+        "required": ["revision", "items"],
+        "additionalProperties": false
+      },
+      "WaypointCollection": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Waypoint"
+            }
+          }
+        },
+        "required": ["revision", "items"],
+        "additionalProperties": false
+      },
+      "ConstraintCollection": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Constraint"
+            }
+          }
+        },
+        "required": ["revision", "items"],
+        "additionalProperties": false
+      },
+      "EventMarkerCollection": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventMarker"
+            }
+          }
+        },
+        "required": ["revision", "items"],
+        "additionalProperties": false
+      },
+      "ProjectPatch": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "../document/shared.schema.json#/$defs/DriveType"
+          },
+          "variables": {
+            "$ref": "../document/project.schema.json#/$defs/Variables"
+          },
+          "config": {
+            "$ref": "../document/project.schema.json#/$defs/RobotConfig"
+          },
+          "codegen": {
+            "$ref": "../document/project.schema.json#/$defs/CodeGenConfig"
+          }
+        },
+        "minProperties": 1,
+        "additionalProperties": false
+      },
+      "TrajectoryPatch": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "params": {
+            "$ref": "#/components/schemas/Parameters"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventMarker"
+            }
+          }
+        },
+        "minProperties": 1,
+        "additionalProperties": false
+      },
+      "WaypointPatch": {
+        "type": "object",
+        "properties": {
+          "pose": {
+            "$ref": "../document/shared.schema.json#/$defs/PoseExpr"
+          },
+          "intervals": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "split": {
+            "type": "boolean"
+          },
+          "fixTranslation": {
+            "type": "boolean"
+          },
+          "fixHeading": {
+            "type": "boolean"
+          },
+          "overrideIntervals": {
+            "type": "boolean"
+          }
+        },
+        "minProperties": 1,
+        "additionalProperties": false
+      },
+      "ConstraintPatch": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "$ref": "../document/shared.schema.json#/$defs/WaypointID"
+          },
+          "to": {
+            "$ref": "../document/shared.schema.json#/$defs/WaypointID"
+          },
+          "data": {
+            "$ref": "../document/constraints.schema.json#/$defs/ConstraintVariant"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "minProperties": 1,
+        "additionalProperties": false
+      },
+      "EventMarkerPatch": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "from": {
+            "$ref": "../document/trajectory.schema.json#/$defs/EventMarkerData"
+          }
+        },
+        "minProperties": 1,
+        "additionalProperties": false
+      },
+      "GenerationRequest": {
+        "type": "object",
+        "properties": {
+          "options": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "GenerationAccepted": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "acceptedRevision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["operationId", "acceptedRevision"],
+        "additionalProperties": false
+      },
+      "OperationCancellation": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "status": {
+            "const": "cancellation-requested"
+          }
+        },
+        "required": ["operationId", "status"],
+        "additionalProperties": false
+      },
+      "MutationResult": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "resource": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "enum": [
+                  "project",
+                  "trajectory",
+                  "waypoint",
+                  "constraint",
+                  "event-marker"
+                ]
+              },
+              "id": {
+                "$ref": "#/components/schemas/UUID"
+              }
+            },
+            "required": ["type", "id"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["requestId", "revision"],
+        "additionalProperties": false
+      },
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "SESSION_NOT_OPEN",
+              "RESOURCE_NOT_FOUND",
+              "REVISION_CONFLICT",
+              "IDEMPOTENCY_KEY_REUSE",
+              "VALIDATION_ERROR",
+              "OPERATION_NOT_FOUND",
+              "OPERATION_NOT_CANCELLABLE",
+              "INTERNAL_ERROR"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "currentRevision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": ["path", "message"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "ServerEvent": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/DocumentChangedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/GenerationProgressEvent"
+          },
+          {
+            "$ref": "#/components/schemas/GenerationFinishedEvent"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type"
+        }
+      },
+      "DocumentChangedEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "document.changed"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "resource": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "enum": [
+                  "project",
+                  "trajectory",
+                  "waypoint",
+                  "constraint",
+                  "event-marker"
+                ]
+              },
+              "id": {
+                "$ref": "#/components/schemas/UUID"
+              },
+              "action": {
+                "enum": ["created", "updated", "deleted"]
+              }
+            },
+            "required": ["type", "id", "action"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "revision", "requestId", "resource"],
+        "additionalProperties": false
+      },
+      "GenerationProgressEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "generation.progress"
+          },
+          "operationId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "trajectoryId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "progress": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "operationId", "trajectoryId", "progress"],
+        "additionalProperties": false
+      },
+      "GenerationFinishedEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "generation.finished"
+          },
+          "operationId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "trajectoryId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "status": {
+            "enum": ["succeeded", "failed", "cancelled"]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": ["type", "operationId", "trajectoryId", "status"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "x-websocket": {
+    "url": "ws://127.0.0.1:{port}/api/v1/events",
+    "messages": {
+      "$ref": "#/components/schemas/ServerEvent"
+    }
+  }
+}

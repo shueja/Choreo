@@ -2,12 +2,13 @@
 
 ## Goal
 
-Deliver two independent CMake projects under this directory:
+This plan covers the expression subsystem and its Choreo document-evaluation integration. Repository-wide scope is defined in [PROJECT_REQUIREMENTS.md](PROJECT_REQUIREMENTS.md).
 
 - `wpilib-expression/`: an installable/exported C++ library for expression evaluation.
+- `cpp/choreo_app/`: document evaluation using the public expression library API.
 - `sample-project/`: a separate interactive sample app that consumes the installed library through its public CMake package.
 
-Use ChaiScript for expression evaluation, a runtime quantity wrapper for dimensioned scalar arithmetic, and actual WPILib units and geometry types at validated boundaries. Support Math.js-like bare unit suffixes and WPILib-style geometry method calls. Do not integrate into Choreo or continue testing other parser candidates.
+Use ChaiScript for expression evaluation, runtime quantities for dimensioned arithmetic, and WPILib units and geometry types at validated boundaries. Support bare unit suffixes and WPILib-style geometry calls. Do not test other parser candidates.
 
 ## Implementation Steps
 
@@ -21,7 +22,7 @@ Use ChaiScript for expression evaluation, a runtime quantity wrapper for dimensi
 
 5. **Create a separate sample consumer.** Give `sample-project/` its own CMake project. It should use `find_package` on the installed/exported library target rather than compiling library sources directly. Provide a small REPL or command-line expression runner, example expressions, and setup instructions for building/installing the library and configuring the sample. The sample must not depend on Choreo application targets.
 
-6. **Test and document the chosen stack.** Add CTest coverage to the library and smoke tests for the sample. Document syntax, public API, dependencies/build steps, unsupported operations, diagnostics, and unit-name ambiguities. Leave the other candidate experiment projects present but untouched; do not run or expand their suites.
+6. **Test and document the chosen stack.** Add CTest coverage to the library and smoke tests for the sample and document evaluation. Document syntax, public API, dependencies/build steps, unsupported operations, diagnostics, and unit-name ambiguities. Leave the other candidate experiment projects present but untouched; do not run or expand their suites.
 
 ## Acceptance Tests
 
@@ -32,7 +33,7 @@ Use ChaiScript for expression evaluation, a runtime quantity wrapper for dimensi
 - Bare suffix cases `2 m`, `90 deg`, `6000 RPM`, `2 m/s^2`, and `0.018 N*m/A` work, as do target-unit conversions. Test scientific notation, parentheses, explicit multiplication, malformed suffixes, unknown symbols, and unit/variable name collisions.
 - Geometry expressions such as `Pose2d(3 m, 4 m, 90 deg)`, `pose.X()`, `pose.RotateBy(rotation).RelativeTo(origin)`, and `translation.Distance(other)` produce actual WPILib values and expected results.
 - Invalid geometry argument dimensions produce useful errors; failed evaluations do not corrupt subsequent evaluations.
-- No Choreo application/schema or allwpilib files are modified.
+- Choreo document evaluation uses the expression package without changing the document schema; no allwpilib files are modified.
 
 ## Reference Files
 
@@ -44,7 +45,7 @@ Use ChaiScript for expression evaluation, a runtime quantity wrapper for dimensi
 ## Decisions
 
 - ChaiScript is selected; no further candidate testing.
-- Deliver a reusable, installable C++ library plus an independent sample consumer; no production integration.
+- Deliver a reusable, installable C++ library, integrate it with Choreo document evaluation, and provide an independent sample consumer.
 - Parsed scalar intermediates use a runtime quantity wrapper with explicit dimension metadata, converted to WPILib compile-time units and geometry at checked boundaries.
 - Use actual WPILib geometry types wherever available; add custom types only for Choreo concepts WPILib does not provide.
 - Bare suffix syntax is Math.js-like and handled by a focused tokenizer/preprocessor, not indiscriminate whitespace multiplication.

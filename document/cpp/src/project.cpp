@@ -10,6 +10,7 @@ namespace choreo::document {
 using wpi::util::json;
 
 void to_json(json& serialized, const Project& project) {
+  detail::CheckUuid(project.uuid);
   if (project.version != kProjectSchemaVersion ||
       (project.type != DriveType::Swerve &&
        project.type != DriveType::Differential)) {
@@ -17,6 +18,7 @@ void to_json(json& serialized, const Project& project) {
   }
   json variables = json::object();
   for (const auto& [id, variable] : project.variables) {
+    detail::CheckUuid(id);
     variables[id] = variable;
   }
   serialized = json::object(
@@ -36,6 +38,7 @@ void from_json(const json& serialized, Project& project) {
   }
   Project result;
   result.uuid = serialized.at("uuid").get_string();
+  detail::CheckUuid(result.uuid);
   result.name = serialized.at("name").get_string();
   const auto& type = serialized.at("type").get_string();
   if (type == "Swerve") {
@@ -47,6 +50,7 @@ void from_json(const json& serialized, Project& project) {
   }
   for (const auto& [id, variable] :
        serialized.at("variables").at("variables").get_object()) {
+    detail::CheckUuid(id);
     result.variables.emplace(id, variable.get<Variable>());
   }
   result.config = serialized.at("config").get<RobotConfig>();

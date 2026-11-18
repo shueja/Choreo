@@ -8,6 +8,7 @@
 namespace choreo::document {
 
 void to_json(wpi::util::json& json, const Constraint& value) {
+  detail::CheckUuid(value.uuid);
   auto data = std::visit(
       [](const auto& variant) { return wpi::util::json{variant}; }, value.data);
   json = wpi::util::json::object("uuid", value.uuid, "from",
@@ -22,6 +23,7 @@ void from_json(const wpi::util::json& json, Constraint& value) {
   detail::CheckProperties(json, {"uuid", "from", "to", "data", "enabled"});
   Constraint result;
   result.uuid = json.at("uuid").get_string();
+  detail::CheckUuid(result.uuid);
   result.from = ReadWaypointId(json.at("from"));
   if (json.contains("to")) {
     result.to = ReadWaypointId(json.at("to"));

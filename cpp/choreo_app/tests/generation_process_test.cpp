@@ -54,7 +54,7 @@ int FakeGenerator(int argc, char** argv) {
       trajectory.snapshot->targetDt.source = "0.03 s";
     }
     if (trajectory.name == "wrong-id") {
-      trajectory.uuid = "wrong";
+      trajectory.uuid = kTestWrongTrajectoryUuid;
     }
     if (trajectory.name == "missing-output") {
       trajectory.output.reset();
@@ -88,7 +88,7 @@ int main(int argc, char** argv) {
       ++processNotifications;
     });
     GenerationProcess process{std::filesystem::u8path(argv[0]), processStore,
-                              "candidate"};
+                              kTestTrajectoryUuid};
     try {
       process.CommitResult(processStore);
       return EXIT_FAILURE;
@@ -100,9 +100,9 @@ int main(int argc, char** argv) {
     }
     process.CommitResult(processStore);
     if (processStore.Revision() != 1 || processNotifications != 1 ||
-        !processStore.Snapshot()->trajectories.at("candidate").output ||
+      !processStore.Snapshot()->trajectories.at(kTestTrajectoryUuid).output ||
         !processStore.Undo() ||
-        processStore.Snapshot()->trajectories.at("candidate").output ||
+      processStore.Snapshot()->trajectories.at(kTestTrajectoryUuid).output ||
         !processStore.Redo()) {
       return EXIT_FAILURE;
     }
@@ -112,7 +112,7 @@ int main(int argc, char** argv) {
     } catch (const std::runtime_error&) {
     }
     GenerationProcess staleProcess{std::filesystem::u8path(argv[0]),
-                                   processStore, "candidate"};
+                                   processStore, kTestTrajectoryUuid};
     auto changedDuringGeneration = *processStore.Snapshot();
     changedDuringGeneration.project.name = "changed";
     processStore.Commit(std::move(changedDuringGeneration));
@@ -128,7 +128,7 @@ int main(int argc, char** argv) {
     }
     DocumentStore otherStore{candidate};
     GenerationProcess wrongOwner{std::filesystem::u8path(argv[0]), processStore,
-                                 "candidate"};
+                                 kTestTrajectoryUuid};
     wrongOwner.Wait();
     try {
       wrongOwner.CommitResult(otherStore);
@@ -143,13 +143,15 @@ int main(int argc, char** argv) {
           "changed-params", "changed-config", "changed-snapshot", "wrong-id",
           "missing-output"}) {
       auto failureDocument = candidate;
-      auto failureTrajectory = failureDocument.trajectories.at("candidate");
+        auto failureTrajectory =
+          failureDocument.trajectories.at(kTestTrajectoryUuid);
       failureTrajectory.name = failure;
       failureDocument.trajectories =
-          failureDocument.trajectories.set("candidate", failureTrajectory);
+          failureDocument.trajectories.set(kTestTrajectoryUuid,
+                           failureTrajectory);
       DocumentStore failureStore{failureDocument};
       GenerationProcess failureProcess{std::filesystem::u8path(argv[0]),
-                                       failureStore, "candidate"};
+                         failureStore, kTestTrajectoryUuid};
       failureProcess.Wait();
       try {
         failureProcess.CommitResult(failureStore);
@@ -161,7 +163,7 @@ int main(int argc, char** argv) {
       }
     }
     GenerationProcess cancelledProcess{std::filesystem::u8path(argv[0]),
-                                       processStore, "candidate"};
+                                       processStore, kTestTrajectoryUuid};
     cancelledProcess.Cancel();
     cancelledProcess.Wait();
     try {
@@ -181,26 +183,27 @@ int main(int argc, char** argv) {
     }
     auto realDocument = candidate;
     realDocument.project.type = DriveType::Differential;
-    auto realTrajectory = realDocument.trajectories.at("candidate");
+    auto realTrajectory =
+      realDocument.trajectories.at(kTestTrajectoryUuid);
     realTrajectory.params.constraints.clear();
     realTrajectory.params.waypoints[0].overrideIntervals = true;
     realTrajectory.params.waypoints[0].intervals = 8;
     auto endWaypoint = realTrajectory.params.waypoints[0];
-    endWaypoint.uuid = "end";
+    endWaypoint.uuid = kTestEndWaypointUuid;
     endWaypoint.pose.source = "Pose2d(length + 1 m, 0 m, 0 rad)";
     realTrajectory.params.waypoints.push_back(endWaypoint);
     realTrajectory.events.push_back(
-        EventMarker{"event", "start",
+        EventMarker{kTestStartEventUuid, "start",
                     EventMarkerData{WaypointBoundary::First,
                                     std::nullopt,
                                     {"0.1 s", wpi::units::second_t{0.1}}}});
     realTrajectory.events.push_back(
-        EventMarker{"end-event", "end",
+        EventMarker{kTestEndEventUuid, "end",
                     EventMarkerData{WaypointBoundary::Last,
                                     std::nullopt,
                                     {"0.2 s", wpi::units::second_t{0.2}}}});
     realDocument.trajectories =
-        realDocument.trajectories.set("candidate", realTrajectory);
+      realDocument.trajectories.set(kTestTrajectoryUuid, realTrajectory);
     if (mode == "--real-differential") {
       DocumentStore realStore{realDocument};
       const auto originalDocument = realStore.Snapshot();
@@ -209,11 +212,13 @@ int main(int argc, char** argv) {
         ++realNotifications;
       });
       GenerationProcess realProcess{std::filesystem::u8path(realGenerator),
-                                    realStore, "candidate"};
+                      realStore, kTestTrajectoryUuid};
       realProcess.Wait();
       realProcess.CommitResult(realStore);
-      const auto& result = realStore.Snapshot()->trajectories.at("candidate");
-      const auto& original = originalDocument->trajectories.at("candidate");
+        const auto& result =
+          realStore.Snapshot()->trajectories.at(kTestTrajectoryUuid);
+        const auto& original =
+          originalDocument->trajectories.at(kTestTrajectoryUuid);
       if (realStore.Revision() != 1 || realNotifications != 1 ||
           !result.output || !result.snapshot || !result.config ||
           result.name != original.name || result.version != original.version ||
@@ -248,7 +253,8 @@ int main(int argc, char** argv) {
           std::abs((*samples)->Samples().back().time.value() -
                    result.output->waypoints.back()) > 1e-9 ||
           !realStore.Undo() || realNotifications != 2 ||
-          wpi::util::json{realStore.Snapshot()->trajectories.at("candidate")} !=
+            wpi::util::json{realStore.Snapshot()->trajectories.at(
+              kTestTrajectoryUuid)} !=
               wpi::util::json{original}) {
         std::cerr << "real generator samples or undo failed\n";
         return EXIT_FAILURE;
@@ -266,16 +272,16 @@ int main(int argc, char** argv) {
       DocumentStore swerveStore{realDocument};
       const auto originalSwerve = swerveStore.Snapshot();
       GenerationProcess swerveProcess{std::filesystem::u8path(realGenerator),
-                                      swerveStore, "candidate"};
+                                      swerveStore, kTestTrajectoryUuid};
       swerveProcess.Wait();
       swerveProcess.CommitResult(swerveStore);
-      const auto& swerve = swerveStore.Snapshot()->trajectories.at("candidate");
+      const auto& swerve = swerveStore.Snapshot()->trajectories.at(kTestTrajectoryUuid);
       if (swerveStore.Revision() != 1 || !swerve.output || !swerve.snapshot ||
           !swerve.config || swerve.output->waypoints.size() != 2 ||
           swerve.output->splits != std::vector<std::uint32_t>{0} ||
           wpi::util::json{swerve.params} !=
               wpi::util::json{
-                  originalSwerve->trajectories.at("candidate").params} ||
+                originalSwerve->trajectories.at(kTestTrajectoryUuid).params} ||
           wpi::util::json{*swerve.snapshot} != wpi::util::json{swerve.params} ||
           wpi::util::json{*swerve.config} !=
               wpi::util::json{originalSwerve->project.config} ||
@@ -294,10 +300,11 @@ int main(int argc, char** argv) {
       if (!swerveSamples || !*swerveSamples ||
           (*swerveSamples)->Samples().size() != 9 || !swerveStore.Undo() ||
           wpi::util::json{
-              swerveStore.Snapshot()->trajectories.at("candidate")} !=
-              wpi::util::json{originalSwerve->trajectories.at("candidate")} ||
+              swerveStore.Snapshot()->trajectories.at(kTestTrajectoryUuid)} !=
+              wpi::util::json{
+                originalSwerve->trajectories.at(kTestTrajectoryUuid)} ||
           !swerveStore.Redo() ||
-          !swerveStore.Snapshot()->trajectories.at("candidate").output) {
+            !swerveStore.Snapshot()->trajectories.at(kTestTrajectoryUuid).output) {
         std::cerr << "swerve generator samples or history failed\n";
         return EXIT_FAILURE;
       }
@@ -305,28 +312,29 @@ int main(int argc, char** argv) {
 
     if (mode == "--real-split") {
       realDocument.project.type = DriveType::Differential;
-      auto splitTrajectory = realDocument.trajectories.at("candidate");
+      auto splitTrajectory =
+          realDocument.trajectories.at(kTestTrajectoryUuid);
       auto middle = splitTrajectory.params.waypoints.front();
-      middle.uuid = "middle";
+      middle.uuid = kTestMiddleWaypointUuid;
       middle.pose.source = "Pose2d(length + 0.5 m, 0 m, 0 rad)";
       middle.split = true;
       splitTrajectory.params.waypoints.insert(
           splitTrajectory.params.waypoints.begin() + 1, middle);
       splitTrajectory.events.push_back(
-          EventMarker{"middle-event", "middle",
-                      EventMarkerData{std::string{"middle"},
+          EventMarker{kTestMiddleEventUuid, "middle",
+                EventMarkerData{std::string{kTestMiddleWaypointUuid},
                                       std::nullopt,
                                       {"0.3 s", wpi::units::second_t{0.3}}}});
       realDocument.trajectories =
-          realDocument.trajectories.set("candidate", splitTrajectory);
+          realDocument.trajectories.set(kTestTrajectoryUuid, splitTrajectory);
       DocumentStore splitStore{realDocument};
       const auto originalSplit = splitStore.Snapshot();
       GenerationProcess splitProcess{std::filesystem::u8path(realGenerator),
-                                     splitStore, "candidate"};
+                       splitStore, kTestTrajectoryUuid};
       splitProcess.Wait();
       splitProcess.CommitResult(splitStore);
       const auto& splitResult =
-          splitStore.Snapshot()->trajectories.at("candidate");
+          splitStore.Snapshot()->trajectories.at(kTestTrajectoryUuid);
       if (!splitResult.output || !splitResult.snapshot ||
           splitResult.output->waypoints.size() != 3 ||
           splitResult.output->splits != std::vector<std::uint32_t>{0, 8} ||
@@ -336,7 +344,7 @@ int main(int argc, char** argv) {
                    splitResult.output->waypoints[1]) > 1e-9 ||
           wpi::util::json{splitResult.params} !=
               wpi::util::json{
-                  originalSplit->trajectories.at("candidate").params}) {
+                originalSplit->trajectories.at(kTestTrajectoryUuid).params}) {
         std::cerr << "intermediate split or UUID event invariant failed\n";
         return EXIT_FAILURE;
       }
@@ -349,8 +357,9 @@ int main(int argc, char** argv) {
                    splitResult.output->waypoints[1]) > 1e-9 ||
           !splitStore.Undo() ||
           wpi::util::json{
-              splitStore.Snapshot()->trajectories.at("candidate")} !=
-              wpi::util::json{originalSplit->trajectories.at("candidate")}) {
+              splitStore.Snapshot()->trajectories.at(kTestTrajectoryUuid)} !=
+              wpi::util::json{
+                originalSplit->trajectories.at(kTestTrajectoryUuid)}) {
         std::cerr << "intermediate split samples or undo failed\n";
         return EXIT_FAILURE;
       }

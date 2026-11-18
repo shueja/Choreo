@@ -2,7 +2,7 @@ import argparse
 import json
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
 
 
@@ -23,7 +23,11 @@ def main() -> None:
         ("trajectory.schema.json", "schema-trajectory.json"),
     ):
         document = json.loads((args.build_directory / document_name).read_text(encoding="utf-8"))
-        Draft202012Validator(schemas[schema_name], registry=registry).validate(document)
+        Draft202012Validator(
+            schemas[schema_name],
+            registry=registry,
+            format_checker=FormatChecker(),
+        ).validate(document)
     print("Serialized project and trajectory conform to their schemas")
 
 

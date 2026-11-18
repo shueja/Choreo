@@ -9,6 +9,7 @@
 #include <wpilib-expression/expression.hpp>
 
 #include "choreo/document/evaluation.hpp"
+#include "choreo/document/json_validation.hpp"
 
 namespace choreo::document::evaluation {
 namespace {
@@ -215,6 +216,7 @@ void EvaluateParameters(Parameters& parameters,
                         const std::string& trajectoryId) {
   std::set<std::string> waypointIds;
   for (const auto& waypoint : parameters.waypoints) {
+    detail::CheckUuid(waypoint.uuid);
     if (waypoint.uuid.empty() || !waypointIds.insert(waypoint.uuid).second) {
       throw EvaluationError{
           trajectoryId, "params.waypoints",
@@ -223,6 +225,7 @@ void EvaluateParameters(Parameters& parameters,
   }
   auto validateReference = [&](const WaypointId& reference) {
     if (const auto* uuid = std::get_if<std::string>(&reference)) {
+      detail::CheckUuid(*uuid);
       if (!waypointIds.contains(*uuid)) {
         throw std::invalid_argument("unknown waypoint UUID: " + *uuid);
       }
@@ -244,6 +247,7 @@ void EvaluateParameters(Parameters& parameters,
   }
   std::set<std::string> constraintIds;
   for (auto& constraint : parameters.constraints) {
+    detail::CheckUuid(constraint.uuid);
     if (constraint.uuid.empty() ||
         !constraintIds.insert(constraint.uuid).second) {
       throw EvaluationError{
@@ -290,11 +294,19 @@ void EvaluateParameters(Parameters& parameters,
 }
 
 Project EvaluateVariables(const Project& project) {
+  detail::CheckUuid(project.uuid);
+  for (const auto& [id, unused] : project.variables) {
+    detail::CheckUuid(id);
+  }
   return EvaluateAt(project.uuid, "variables",
                     [&] { return BuildVariables(project).project; });
 }
 
 Document EvaluateDocument(const Document& document) {
+  detail::CheckUuid(document.project.uuid);
+  for (const auto& [id, unused] : document.project.variables) {
+    detail::CheckUuid(id);
+  }
   if (document.project.uuid.empty() ||
       document.project.version != kProjectSchemaVersion) {
     throw EvaluationError{document.project.uuid, "project",
@@ -306,6 +318,8 @@ Document EvaluateDocument(const Document& document) {
   result.project = std::move(evaluated.project);
   EvaluateConfig(result.project.config, evaluated.context, result.project.uuid);
   for (const auto& [id, original] : document.trajectories) {
+    detail::CheckUuid(id);
+    detail::CheckUuid(original.uuid);
     auto trajectory = original;
     if (id.empty() || id != trajectory.uuid ||
         trajectory.version != kTrajectorySchemaVersion) {
@@ -319,6 +333,7 @@ Document EvaluateDocument(const Document& document) {
     }
     std::set<std::string> eventIds;
     for (auto& event : trajectory.events) {
+      detail::CheckUuid(event.uuid);
       if (event.uuid.empty() || !eventIds.insert(event.uuid).second) {
         throw EvaluationError{
             trajectory.uuid, "events",
@@ -326,6 +341,7 @@ Document EvaluateDocument(const Document& document) {
       }
       EvaluateAt(event.uuid, "from.target", [&] {
         if (const auto* uuid = std::get_if<std::string>(&event.from.target)) {
+          detail::CheckUuid(*uuid);
           if (!waypointIds.contains(*uuid)) {
             throw std::invalid_argument("unknown event waypoint UUID: " +
                                         *uuid);

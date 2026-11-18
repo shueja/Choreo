@@ -18,11 +18,14 @@ WaypointId ReadWaypointId(const wpi::util::json& value) {
     throw std::invalid_argument("invalid waypoint boundary");
   }
   detail::CheckProperties(value, {"uuid"});
-  return value.at("uuid").get_string();
+  auto uuid = value.at("uuid").get_string();
+  detail::CheckUuid(uuid);
+  return uuid;
 }
 
 wpi::util::json WriteWaypointId(const WaypointId& waypoint) {
   if (auto* uuid = std::get_if<std::string>(&waypoint)) {
+    detail::CheckUuid(*uuid);
     return wpi::util::json::object("uuid", *uuid);
   }
   switch (std::get<WaypointBoundary>(waypoint)) {

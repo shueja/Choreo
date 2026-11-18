@@ -25,7 +25,8 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
   choreo::document::Waypoint waypoint{
-      "waypoint", {"Pose2d()", wpi::math::Pose2d{}}, 10, false, true, true,
+      "550e8400-e29b-41d4-a716-446655440000",
+      {"Pose2d()", wpi::math::Pose2d{}}, 10, false, true, true,
       false};
   const auto restored =
       wpi::util::json{waypoint}.get<choreo::document::Waypoint>();
@@ -35,9 +36,23 @@ int main(int argc, char** argv) {
       restored.intervals != waypoint.intervals) {
     return EXIT_FAILURE;
   }
+  auto invalidWaypoint = wpi::util::json{waypoint};
+  invalidWaypoint["uuid"] = "not-a-uuid";
+  try {
+    invalidWaypoint.get<choreo::document::Waypoint>();
+    return EXIT_FAILURE;
+  } catch (const std::exception&) {
+  }
+  auto invalidWaypointModel = waypoint;
+  invalidWaypointModel.uuid = "not-a-uuid";
+  try {
+    invalidWaypointModel.ToJson();
+    return EXIT_FAILURE;
+  } catch (const std::exception&) {
+  }
 
   choreo::document::Project project;
-  project.uuid = "project";
+  project.uuid = "00000000-0000-4000-8000-000000000001";
   project.name = "Project";
   project.config.wheels.differential = choreo::document::DifferentialWheels{};
   const std::vector<wpi::math::Translation2d> triangle{
@@ -51,48 +66,49 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
   project.variables.emplace(
-      "length",
+      "00000000-0000-4000-8000-000000000002",
       choreo::document::Variable{
           "length", "field", "2 m", choreo::document::VariableType::Quantity,
           std::map<std::string, int>{{"meter", 1}}, 2.0});
   project.variables.emplace(
-      "pose", choreo::document::Variable{"pose", "", "Pose2d()",
+      "00000000-0000-4000-8000-000000000003",
+      choreo::document::Variable{"pose", "", "Pose2d()",
                                          choreo::document::VariableType::Pose2d,
                                          std::nullopt, wpi::math::Pose2d{}});
   project.variables.emplace(
-      "translation",
+      "00000000-0000-4000-8000-000000000004",
       choreo::document::Variable{"translation", "", "Translation2d()",
                                  choreo::document::VariableType::Translation2d,
                                  std::nullopt, wpi::math::Translation2d{}});
   project.variables.emplace(
-      "polygon",
+      "00000000-0000-4000-8000-000000000005",
       choreo::document::Variable{"polygon", "", "vertices",
                                  choreo::document::VariableType::Polygon2d,
                                  std::nullopt, wpi::math::Polygon2d{triangle}});
   project.variables.emplace(
-      "rotation",
+      "00000000-0000-4000-8000-000000000006",
       choreo::document::Variable{"rotation", "", "Rotation2d()",
                                  choreo::document::VariableType::Rotation2d,
                                  std::nullopt, wpi::math::Rotation2d{}});
   project.variables.emplace(
-      "transform",
+      "00000000-0000-4000-8000-000000000007",
       choreo::document::Variable{"transform", "", "Transform2d()",
                                  choreo::document::VariableType::Transform2d,
                                  std::nullopt, wpi::math::Transform2d{}});
   project.variables.emplace(
-      "twist",
+      "00000000-0000-4000-8000-000000000008",
       choreo::document::Variable{"twist", "", "Twist2d()",
                                  choreo::document::VariableType::Twist2d,
                                  std::nullopt, wpi::math::Twist2d{}});
   project.variables.emplace(
-      "rectangle",
+      "00000000-0000-4000-8000-000000000009",
       choreo::document::Variable{
           "rectangle", "", "Rectangle2d()",
           choreo::document::VariableType::Rectangle2d, std::nullopt,
           wpi::math::Rectangle2d{wpi::math::Pose2d{}, wpi::units::meter_t{2},
                                  wpi::units::meter_t{1}}});
   project.variables.emplace(
-      "ellipse",
+      "00000000-0000-4000-8000-00000000000a",
       choreo::document::Variable{
           "ellipse", "", "Ellipse2d()",
           choreo::document::VariableType::Ellipse2d, std::nullopt,
@@ -101,8 +117,24 @@ int main(int argc, char** argv) {
   const wpi::util::json projectJson{project};
   const auto restoredProject = projectJson.get<choreo::document::Project>();
   if (wpi::util::json{restoredProject} != projectJson ||
-      std::get<double>(restoredProject.variables.at("length").value) != 2.0) {
+      std::get<double>(restoredProject.variables
+                 .at("00000000-0000-4000-8000-000000000002")
+                 .value) != 2.0) {
     return EXIT_FAILURE;
+  }
+  auto invalidProjectIdentity = projectJson;
+  invalidProjectIdentity["uuid"] = "not-a-uuid";
+  try {
+    invalidProjectIdentity.get<choreo::document::Project>();
+    return EXIT_FAILURE;
+  } catch (const std::exception&) {
+  }
+  invalidProjectIdentity = projectJson;
+  invalidProjectIdentity["variables"]["variables"]["length"] = nullptr;
+  try {
+    invalidProjectIdentity.get<choreo::document::Project>();
+    return EXIT_FAILURE;
+  } catch (const std::exception&) {
   }
   auto invalidProject = projectJson;
   invalidProject["config"]["mass"]["unexpected"] = 1;
@@ -147,15 +179,22 @@ int main(int argc, char** argv) {
       wpi::util::json::object(
           "samples", std::vector<wpi::math::HolonomicSample>{first, second}));
   auto event = wpi::util::json::object(
-      "uuid", "event", "name", "Marker", "from",
+      "uuid", "00000000-0000-4000-8000-000000000010", "name", "Marker", "from",
       wpi::util::json::object(
           "target", "first", "targetTime", 6.0, "offset",
           wpi::util::json::object("exp", "0.1 s", "val", 0.1)));
+  auto invalidEventIdentity = event;
+  invalidEventIdentity["uuid"] = "not-a-uuid";
+  try {
+    invalidEventIdentity.get<choreo::document::EventMarker>();
+    return EXIT_FAILURE;
+  } catch (const std::exception&) {
+  }
   auto unresolved = event;
-  unresolved["uuid"] = "unresolved";
+  unresolved["uuid"] = "00000000-0000-4000-8000-000000000011";
   unresolved["from"]["targetTime"] = nullptr;
   auto root = wpi::util::json::object(
-      "uuid", "path", "version", 4, "name", "Path", "config", nullptr,
+      "uuid", "00000000-0000-4000-8000-000000000012", "version", 4, "name", "Path", "config", nullptr,
       "snapshot", nullptr, "params",
       wpi::util::json::object(
           "waypoints", wpi::util::json::array(), "constraints",
@@ -164,24 +203,24 @@ int main(int argc, char** argv) {
       "output", output, "events",
       std::vector<wpi::util::json>{event, unresolved});
   auto linear = wpi::util::json::object(
-      "uuid", "linear", "from", "first", "to", "last", "enabled", true, "data",
+      "uuid", "00000000-0000-4000-8000-000000000020", "from", "first", "to", "last", "enabled", true, "data",
       wpi::util::json::object(
           "type", "MaxLinearVelocity", "max",
           wpi::util::json::object("exp", "3 m/s", "val", 3.0)));
   auto angular = wpi::util::json::object(
-      "uuid", "angular", "from", "first", "enabled", true, "data",
+      "uuid", "00000000-0000-4000-8000-000000000021", "from", "first", "enabled", true, "data",
       wpi::util::json::object(
           "type", "MaxAngularVelocity", "max",
           wpi::util::json::object("exp", "2 rad/s", "val", 2.0)));
   auto heading = wpi::util::json::object(
-      "uuid", "heading", "from", "first", "enabled", true, "data",
+      "uuid", "00000000-0000-4000-8000-000000000022", "from", "first", "enabled", true, "data",
       wpi::util::json::object(
           "type", "Heading", "heading",
           wpi::util::json::object("exp", "Rotation2d()", "val",
                                   wpi::math::Rotation2d{}),
           "tolerance", wpi::util::json::object("exp", "0.1 rad", "val", 0.1)));
   auto circle = wpi::util::json::object(
-      "uuid", "circle", "from", "first", "enabled", true, "data",
+      "uuid", "00000000-0000-4000-8000-000000000023", "from", "first", "enabled", true, "data",
       wpi::util::json::object(
           "type", "KeepInCircle", "circle",
         choreo::document::EllipseExpression{
@@ -213,6 +252,19 @@ int main(int argc, char** argv) {
       return EXIT_FAILURE;
     }
   }
+  auto invalidConstraintIdentity = linear;
+  invalidConstraintIdentity["uuid"] = "not-a-uuid";
+  try {
+    invalidConstraintIdentity.get<choreo::document::Constraint>();
+    return EXIT_FAILURE;
+  } catch (const std::exception&) {
+  }
+  try {
+    choreo::document::ReadWaypointId(
+        wpi::util::json::object("uuid", "not-a-uuid"));
+    return EXIT_FAILURE;
+  } catch (const std::exception&) {
+  }
   root["params"]["waypoints"] = std::vector<wpi::util::json>{waypoint.ToJson()};
   root["snapshot"] = root["params"];
   if (wpi::util::json{root.at("params").get<choreo::document::Parameters>()} !=
@@ -224,6 +276,13 @@ int main(int argc, char** argv) {
           event.at("from").get<choreo::document::EventMarkerData>()} !=
           event.at("from")) {
     return EXIT_FAILURE;
+  }
+  auto invalidTrajectoryIdentity = root;
+  invalidTrajectoryIdentity["uuid"] = "not-a-uuid";
+  try {
+    invalidTrajectoryIdentity.get<choreo::document::Trajectory>();
+    return EXIT_FAILURE;
+  } catch (const std::exception&) {
   }
   const auto document = root.get<choreo::document::Trajectory>();
   const wpi::util::json normalizedOutput{*document.output};

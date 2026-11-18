@@ -131,7 +131,9 @@
     },
     "UUID": {
       "type": "string",
-      "description": "A stable persisted UUID string."
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "description": "A stable persisted UUID in canonical 8-4-4-4-12 hexadecimal form."
     },
     "WaypointID": {
       "description": "Identifies a waypoint by UUID or by a first/last sentinel string.",

@@ -8,6 +8,7 @@
 namespace choreo::document {
 
 wpi::util::json Waypoint::ToJson() const {
+  detail::CheckUuid(uuid);
   wpi::util::json json;
   json.set_object();
   json["uuid"] = uuid;
@@ -30,7 +31,9 @@ Waypoint Waypoint::FromJson(const wpi::util::json& json) {
     throw std::invalid_argument(
         "waypoint intervals must be a nonnegative integer");
   }
-  return {json.at("uuid").get_string(),
+        const auto uuid = json.at("uuid").get_string();
+        detail::CheckUuid(uuid);
+        return {uuid,
           PoseExpression::FromJson(json.at("pose")),
           static_cast<std::uint32_t>(intervals.get_int()),
           json.at("split").get_bool(),

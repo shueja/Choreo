@@ -11,7 +11,7 @@
 TEST_CASE("Choreo loads v4 WPILib samples") {
   wpi::math::HolonomicSample holonomic;
   auto root = wpi::util::json::object(
-      "uuid", "path", "version", 4, "name", "Path", "config", nullptr, "snapshot", nullptr,
+      "uuid", "00000000-0000-4000-8000-000000000101", "version", 4, "name", "Path", "config", nullptr, "snapshot", nullptr,
       "params", wpi::util::json::object("waypoints", wpi::util::json::array(),
           "constraints", wpi::util::json::array(),
           "targetDt", wpi::util::json::object("exp", "0.02 s", "val", 0.02)),

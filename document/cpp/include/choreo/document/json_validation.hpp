@@ -30,6 +30,27 @@ inline void CheckNumber(const wpi::util::json& json) {
   }
 }
 
+inline void CheckUuid(std::string_view uuid) {
+  if (uuid.size() != 36) {
+    throw std::invalid_argument("UUID must use canonical string format");
+  }
+  for (std::size_t index = 0; index < uuid.size(); ++index) {
+    if (index == 8 || index == 13 || index == 18 || index == 23) {
+      if (uuid[index] != '-') {
+        throw std::invalid_argument("UUID must use canonical string format");
+      }
+    } else {
+      const auto character = uuid[index];
+      const bool isHex = (character >= '0' && character <= '9') ||
+                         (character >= 'a' && character <= 'f') ||
+                         (character >= 'A' && character <= 'F');
+      if (!isHex) {
+        throw std::invalid_argument("UUID must use canonical string format");
+      }
+    }
+  }
+}
+
 inline void CheckTranslation(const wpi::util::json& json) {
   CheckProperties(json, {"x", "y"});
   CheckNumber(json.at("x"));
