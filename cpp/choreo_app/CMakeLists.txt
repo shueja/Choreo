@@ -49,6 +49,13 @@ target_include_directories(choreo_document_app PUBLIC
 target_link_libraries(choreo_document_app PUBLIC choreo::document_core wpilib::expression)
 set_target_properties(choreo_document_app PROPERTIES EXPORT_NAME document_app)
 
+if(TARGET wpinet)
+    add_library(choreo_generation_process src/generation_process.cpp)
+    add_library(choreo::generation_process ALIAS choreo_generation_process)
+    target_compile_features(choreo_generation_process PUBLIC cxx_std_23)
+    target_link_libraries(choreo_generation_process PUBLIC choreo::document_app PRIVATE wpinet)
+endif()
+
 install(TARGETS choreo_document_app EXPORT choreo-document-app-targets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT choreo-document-app
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT choreo-document-app
@@ -57,6 +64,7 @@ install(TARGETS choreo_document_app EXPORT choreo-document-app-targets
 )
 install(DIRECTORY include/choreo/document DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/choreo
     COMPONENT choreo-document-app
+    PATTERN "generation_process.hpp" EXCLUDE
 )
 install(DIRECTORY "${immer_SOURCE_DIR}/immer" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     COMPONENT choreo-document-app
@@ -78,4 +86,13 @@ if(BUILD_TESTING)
     add_executable(choreo_document_core_test tests/document_test.cpp)
     target_link_libraries(choreo_document_core_test PRIVATE choreo::document_app)
     add_test(NAME choreo_document_core.snapshots COMMAND choreo_document_core_test "${CMAKE_CURRENT_BINARY_DIR}")
+    if(TARGET choreo_generation_process)
+        add_executable(choreo_generation_process_test tests/generation_process_test.cpp)
+        target_link_libraries(choreo_generation_process_test PRIVATE choreo::generation_process)
+        add_test(NAME choreo_generation_process.handoff COMMAND choreo_generation_process_test --handoff)
+        foreach(case differential swerve split)
+            add_test(NAME choreo_generation_process.real_${case} COMMAND choreo_generation_process_test --real-${case})
+            set_tests_properties(choreo_generation_process.real_${case} PROPERTIES SKIP_RETURN_CODE 77)
+        endforeach()
+    endif()
 endif()

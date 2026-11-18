@@ -11,6 +11,9 @@
 #include "choreo/document/document_store.hpp"
 #include "choreo/document/evaluation.hpp"
 #include "choreo/document/history.hpp"
+#include "document_test_fixture.hpp"
+
+
 
 template <typename ExpressionType>
 bool CheckDimension(wpilib::expression::EvaluationContext& context,
@@ -132,14 +135,7 @@ int main(int argc, char** argv) {
   if (CodeGenConfig::FromJson(codegen.ToJson()).ToJson() != codegen.ToJson()) {
     return EXIT_FAILURE;
   }
-  Project variablesProject;
-  variablesProject.uuid = "project";
-  variablesProject.variables.emplace(
-      "length", Variable{"length", "", "2 m", VariableType::Quantity,
-                         std::map<std::string, int>{{"meter", 1}}, 0.0});
-  variablesProject.variables.emplace(
-      "twice", Variable{"twice", "", "length * 2", VariableType::Quantity,
-                        std::map<std::string, int>{{"meter", 1}}, 0.0});
+  Project variablesProject = MakeTestProject();
   auto evaluated = evaluation::EvaluateVariables(variablesProject);
   if (std::get<double>(evaluated.variables.at("twice").value) != 4.0 ||
       std::get<double>(variablesProject.variables.at("twice").value) != 0.0) {
@@ -164,45 +160,8 @@ int main(int argc, char** argv) {
     }
   }
   variablesProject.variables.at("length").expression = "2 m";
-  auto& evaluatedConfig = variablesProject.config;
-  evaluatedConfig.mass.source = "5 kg";
-  evaluatedConfig.inertia.source = "3 kg*m^2";
-  evaluatedConfig.gearing.source = "6";
-  evaluatedConfig.radius.source = "0.05 m";
-  evaluatedConfig.cof.source = "1";
-  evaluatedConfig.wheels.differential = DifferentialWheels{};
-  evaluatedConfig.wheels.differential->trackwidth.source = "0.5 m";
-  evaluatedConfig.bumpers.source =
-      "[Translation2d(0 m, 0 m), Translation2d(1 m, 0 m), Translation2d(0 m, 1 "
-      "m)]";
-  evaluatedConfig.motor.freeSpeed.source = "60 RPM";
-  evaluatedConfig.motor.stallTorque.source = "1 N*m";
-  evaluatedConfig.motor.kT.source = "0.02 N*m/A";
-  evaluatedConfig.motor.kV.source = "0.02 V*s/rad";
-  evaluatedConfig.motor.supplyLimit.source = "40 A";
-  evaluatedConfig.motor.statorLimit.source = "60 A";
-  Document candidate;
-  candidate.project = variablesProject;
-  Trajectory candidateTrajectory;
-  candidateTrajectory.uuid = "candidate";
-  candidateTrajectory.params.targetDt.source = "0.02 s";
-  candidateTrajectory.params.waypoints.push_back(
-      Waypoint{"point",
-               {"Pose2d(length, 0 m, 0 rad)", wpi::math::Pose2d{}},
-               1,
-               false,
-               true,
-               true,
-               false});
-  candidateTrajectory.params.constraints.push_back(
-      Constraint{"circle", WaypointBoundary::First, std::nullopt,
-                 KeepInCircle{EllipseExpression{
-                     "Ellipse2d(Translation2d(), 2 m)",
-                     wpi::math::Ellipse2d{wpi::math::Translation2d{}, 1.0}}},
-                 true});
-  candidateTrajectory.snapshot = candidateTrajectory.params;
-  candidate.trajectories =
-      candidate.trajectories.set("candidate", candidateTrajectory);
+    Document candidate = MakeTestDocument(variablesProject);
+    Trajectory candidateTrajectory = candidate.trajectories.at("candidate");
   const auto evaluatedDocument = evaluation::EvaluateDocument(candidate);
   const auto& evaluatedTrajectory =
       evaluatedDocument.trajectories.at("candidate");
@@ -248,6 +207,38 @@ int main(int argc, char** argv) {
   } catch (const std::exception&) {
   }
   DocumentStore store{candidate};
+  DocumentStore generatedStore{candidate};
+  std::size_t generationNotifications = 0;
+  generatedStore.Subscribe(
+      [&](std::shared_ptr<const Document>, std::uint64_t) {
+        ++generationNotifications;
+      });
+  auto generated = generatedStore.Snapshot()->trajectories.at("candidate");
+  generated.config = generatedStore.Snapshot()->project.config;
+  generated.snapshot = generated.params;
+  generated.output = TrajectoryOutput{};
+  generated.output->trajectory = std::optional<wpi::math::HolonomicTrajectory>{
+      wpi::math::HolonomicTrajectory{
+          std::vector<wpi::math::HolonomicSample>{wpi::math::HolonomicSample{}}}};
+  generatedStore.CommitGeneratedTrajectory(generated, 0);
+  if (generatedStore.Revision() != 1 || generationNotifications != 1 ||
+      !generatedStore.Snapshot()->trajectories.at("candidate").output ||
+      !generatedStore.Undo() ||
+      generatedStore.Snapshot()->trajectories.at("candidate").output ||
+      !generatedStore.Redo()) {
+    std::cerr << "generated trajectory commit or history failed\n";
+    return EXIT_FAILURE;
+  }
+  const auto beforeStaleGeneration = generatedStore.Snapshot();
+  try {
+    generatedStore.CommitGeneratedTrajectory(generated, 0);
+    return EXIT_FAILURE;
+  } catch (const std::invalid_argument&) {
+  }
+  if (generatedStore.Snapshot() != beforeStaleGeneration) {
+    std::cerr << "stale generation changed the document\n";
+    return EXIT_FAILURE;
+  }
   DocumentStore notificationStore{candidate};
   std::vector<std::uint64_t> observedRevisions;
   std::vector<std::uint64_t> otherRevisions;

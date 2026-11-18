@@ -125,6 +125,53 @@ void DocumentStore::Commit(Document document, std::uint64_t expectedRevision) {
   Commit(std::move(document));
 }
 
+void DocumentStore::CommitGeneratedTrajectory(Trajectory trajectory,
+                                              std::uint64_t expectedRevision) {
+  if (expectedRevision != revision_) {
+    throw std::invalid_argument("document revision is stale");
+  }
+  const auto snapshot = Snapshot();
+  const auto* original = snapshot->trajectories.find(trajectory.uuid);
+  if (!original || !trajectory.config || !trajectory.snapshot ||
+      !trajectory.output ||
+      std::visit([](const auto& samples) { return !samples; },
+                 trajectory.output->trajectory)) {
+    throw std::invalid_argument("invalid generated trajectory");
+  }
+  if ((snapshot->project.type == DriveType::Swerve &&
+       !std::holds_alternative<std::optional<wpi::math::HolonomicTrajectory>>(
+           trajectory.output->trajectory)) ||
+      (snapshot->project.type == DriveType::Differential &&
+       !std::holds_alternative<std::optional<wpi::math::DifferentialTrajectory>>(
+           trajectory.output->trajectory))) {
+    throw std::invalid_argument("generated trajectory drive type does not match");
+  }
+  trajectory = wpi::util::json{trajectory}.get<Trajectory>();
+  if (wpi::util::json{*trajectory.config} !=
+          wpi::util::json{snapshot->project.config} ||
+      wpi::util::json{*trajectory.snapshot} !=
+          wpi::util::json{original->params} ||
+      trajectory.events.size() != original->events.size()) {
+    throw std::invalid_argument("generated trajectory does not match inputs");
+  }
+  auto editable = trajectory;
+  editable.config = original->config;
+  editable.snapshot = original->snapshot;
+  editable.output = original->output;
+  for (std::size_t index = 0; index < editable.events.size(); ++index) {
+    editable.events[index].from.targetTime =
+        original->events[index].from.targetTime;
+  }
+  if (wpi::util::json{editable} != wpi::util::json{*original}) {
+    throw std::invalid_argument("generated trajectory changed editable inputs");
+  }
+  auto candidate = *snapshot;
+    const auto trajectoryId = trajectory.uuid;
+  candidate.trajectories =
+      candidate.trajectories.set(trajectoryId, std::move(trajectory));
+  Commit(std::move(candidate), expectedRevision);
+}
+
 void DocumentStore::RenameVariable(const std::string& id,
                                    const std::string& newName) {
   Commit(evaluation::RenameVariable(*Snapshot(), id, newName));

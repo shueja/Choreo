@@ -355,8 +355,11 @@ browser and OWASP guidance before implementation.
   testable generation operation that returns a complete candidate result and
   structured errors without writing authoritative files. The main app starts,
   monitors, cancels, and reaps the generator child, supplies an immutable input
-  snapshot, and validates its candidate before committing. The current CLI and
-  progress messages do not yet implement this subprocess contract.
+  snapshot, and validates its candidate before committing. The in-tree
+  `choreo::generation_process` target now implements an initial temporary-file
+  handoff and revision-checked, single-update store commit when `wpinet` is
+  available. It does not yet provide durable commit, graceful cancellation,
+  progress forwarding, or the full server operation contract.
 - Progress is transient and identified by operation and trajectory, not a
   committed document revision. The existing progress schema includes packed
   incomplete samples, diagnostics, errors, and complete trajectory JSON. Bound
@@ -384,8 +387,9 @@ browser and OWASP guidance before implementation.
   neither is yet the server's durable transaction coordinator.
 - `generator` builds a C++ executable using `choreo::document_core` and
   TrajoptLib. Its progress sender has a separate schema and WebSocket client.
-  The executable is an integration starting point, not yet a reusable complete
-  server operation or proof of a server-managed process lifecycle.
+  The app-side generation process wrapper can launch it with temporary snapshot
+  files and apply a successful result as one revision-checked store update.
+  This is not yet a complete server operation or durable commit protocol.
 - `/home/runner/work/Choreo/Choreo/src-tauri/src/api.rs` exposes business
   operations through Tauri commands; the UI calls them through
   `/home/runner/work/Choreo/Choreo/src/document/tauriCommands.ts`.

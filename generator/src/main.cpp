@@ -13,6 +13,12 @@
 #include <variant>
 #include <vector>
 
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include <choreo/document/project.hpp>
 #include <choreo/document/trajectory.hpp>
 #include <generator.hpp>
@@ -164,8 +170,7 @@ choreo::document::Trajectory generate(
     const auto waypoint = choreo::ResolveWaypointId(
         event.from.target, originalTrajectory.params.waypoints);
     if (waypoint && *waypoint < waypoint_timestamps.size()) {
-      event.from.targetTime = waypoint_timestamps[*waypoint] +
-                              event.from.offset.value.value();
+      event.from.targetTime = waypoint_timestamps[*waypoint];
     } else {
       event.from.targetTime.reset();
     }
@@ -227,7 +232,7 @@ choreo::document::Trajectory read_and_generate(
   }
 }
 
-int main(int argc, char** argv) {
+int RunGenerator(int argc, char** argv) {
   std::println("Choreo Generator CLI");
 
   try {
@@ -257,6 +262,10 @@ int main(int argc, char** argv) {
     if (!args.output_path.empty()) {
       std::ofstream output_file(args.output_path);
       output_file << wpi::util::json(traj).to_string_pretty();
+      output_file.close();
+      if (!output_file) {
+        throw std::runtime_error("Cannot write output trajectory file");
+      }
     }
 
     if (progress_sender.has_value()) {
@@ -272,3 +281,34 @@ int main(int argc, char** argv) {
     return 3;
   }
 }
+
+#ifdef _WIN32
+int wmain(int argc, wchar_t** argv) {
+  std::vector<std::string> arguments;
+  arguments.reserve(argc);
+  for (int index = 0; index < argc; ++index) {
+    const int size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+                                         argv[index], -1, nullptr, 0, nullptr,
+                                         nullptr);
+    if (size == 0) {
+      std::println(stderr, "Invalid command line argument");
+      return 1;
+    }
+    std::string argument(static_cast<std::size_t>(size), '\0');
+    WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, argv[index], -1,
+                        argument.data(), size, nullptr, nullptr);
+    argument.pop_back();
+    arguments.push_back(std::move(argument));
+  }
+  std::vector<char*> pointers;
+  pointers.reserve(arguments.size());
+  for (auto& argument : arguments) {
+    pointers.push_back(argument.data());
+  }
+  return RunGenerator(argc, pointers.data());
+}
+#else
+int main(int argc, char** argv) {
+  return RunGenerator(argc, argv);
+}
+#endif

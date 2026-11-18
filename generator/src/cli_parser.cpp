@@ -40,12 +40,12 @@ CliArgs parse_arguments(int argc, char** argv) {
     // Extract values
     if (!chorArg.getValue().empty()) {
       args.chor_path =
-          std::filesystem::absolute(std::filesystem::path{chorArg.getValue()});
+          std::filesystem::absolute(std::filesystem::u8path(chorArg.getValue()));
     }
 
     if (!outputArg.getValue().empty()) {
       args.output_path = std::filesystem::absolute(
-          std::filesystem::path{outputArg.getValue()});
+          std::filesystem::u8path(outputArg.getValue()));
     }
 
     if (!progressUrlArg.getValue().empty()) {
@@ -54,7 +54,7 @@ CliArgs parse_arguments(int argc, char** argv) {
 
     if (!trajectoryArg.getValue().empty()) {
       args.traj_path = std::filesystem::absolute(
-          std::filesystem::path{trajectoryArg.getValue().front()});
+          std::filesystem::u8path(trajectoryArg.getValue().front()));
     }
 
     // Validation

@@ -56,6 +56,8 @@ class DocumentStore {
   std::vector<std::exception_ptr> TakeNotificationErrors();
   void Commit(Document document);
   void Commit(Document document, std::uint64_t expectedRevision);
+  void CommitGeneratedTrajectory(Trajectory trajectory,
+                                 std::uint64_t expectedRevision);
   void RenameVariable(const std::string& id, const std::string& newName);
   bool Undo();
   bool Redo();

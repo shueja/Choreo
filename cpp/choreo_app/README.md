@@ -33,12 +33,21 @@ UUID. Dirty state is tracked per file and returns to clean when undo restores
 the saved contents. `evaluation::EvaluationError` provides the affected
 object ID and field.
 
-The planned main app owns generation operations and launches the generator as
-a subprocess. It must prepare evaluated snapshots, manage the child, reject
-stale results, and durably commit accepted changes; solver conversion and
-execution belong to the generator. See `../../generator/README.md` for the
-process boundary. This project does not yet implement that orchestration or
-the server's durable multi-file commit contract.
+When `wpinet` is available, the in-tree `choreo::generation_process` target
+provides a subprocess handoff: it starts a generator with evaluated snapshot
+files and can commit a successful, non-stale result as one undoable store
+update. The originating store must outlive the process, and `Poll`, `Wait`, and
+`CommitResult` must run on its owning thread. Cancellation force-terminates the
+child; an optional progress URL is passed through but progress forwarding is not
+implemented. This target is not yet installed, and the store does not provide
+the server's durable multi-file commit contract. See `../../generator/README.md`
+for the process boundary.
+
+When `wpinet` is available, separate CTest cases cover the test-child handoff
+and real-generator differential, swerve, and split scenarios. Set
+`CHOREO_GENERATOR_TEST_EXECUTABLE` to the built generator's full path before
+running CTest; without it, the real-generator cases are reported as skipped.
+See [tests/README.md](tests/README.md) for the test inventory and run commands.
 
 The `choreo-document-app` install component exports the app target and its
 headers. Its consumers also need the installed shared document,

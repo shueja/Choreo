@@ -1,8 +1,9 @@
 # Generator Process Boundary
 
 `generator` is the C++ trajectory-generation executable. In the planned app
-architecture, the main application starts and owns it as a subprocess. The
-application-side launcher and subprocess protocol are not implemented yet.
+architecture, the main application starts and owns it as a subprocess. An
+initial app-side handoff is implemented in `cpp/choreo_app`; server integration
+and a complete operation protocol are still pending.
 
 ```mermaid
 flowchart LR
@@ -34,10 +35,10 @@ flowchart LR
   and publish accepted changes through the document commit lane. The app owns
   undo/redo and user-visible operation status.
 
-These responsibilities belong to the future app/server integration, not the
-shared `choreo::document_core` library. The current `cpp/choreo_app` project
-provides a document store but does not yet manage generator processes or provide
-the required durable multi-file commit.
+These responsibilities belong to the app/server integration, not the shared
+`choreo::document_core` library. `choreo::generation_process` provides an
+in-tree WPILib-based child process and snapshot handoff when `wpinet` is
+available. It does not provide the required durable multi-file commit.
 
 ## Generator Responsibilities
 
@@ -51,13 +52,16 @@ the required durable multi-file commit.
 The current code places CLI and file I/O plus result assembly in
 `src/main.cpp`, argument parsing in `src/cli_parser.cpp`, segment preparation in
 `src/split_to_segments.cpp`, and conversions and solving in `include/`. The
-progress sender is in `../progress-update-sender`. The executable reads files
-directly and can write `--output`; it does not yet implement an app-owned
-snapshot handoff, revision check, cancellation protocol, or durable commit.
-Its complete-trajectory WebSocket message is a candidate result, not an app
-commit acknowledgment. The app must not give it authoritative output paths.
+progress sender is in `../progress-update-sender`. The app writes temporary
+input snapshots and reads a temporary `--output` after a successful child exit;
+it rejects stale or mismatched results and commits the complete trajectory as
+one store update. The optional progress URL is passed through to the child;
+progress receiving and forwarding are not implemented by the handoff. Its
+complete-trajectory WebSocket message is a candidate, not an app commit
+acknowledgment. The app must not give it authoritative output paths.
 
-The transport and operation envelope remain to be designed, including snapshot
-ownership, temporary-file cleanup if files are used, progress limits, terminal
-status, and cancellation. The existing CLI and progress message formats are
-starting points, not a complete subprocess protocol.
+The handoff must be polled or waited on and committed on the store's owning
+thread. Cancellation currently force-terminates the child. Temporary files are
+removed on destruction; abrupt process exit can leave them behind. Operation
+IDs, bounded progress forwarding, graceful cancellation, crash cleanup, and a
+durable commit protocol remain to be designed.
