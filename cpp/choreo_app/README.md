@@ -33,6 +33,13 @@ UUID. Dirty state is tracked per file and returns to clean when undo restores
 the saved contents. `evaluation::EvaluationError` provides the affected
 object ID and field.
 
+The planned main app owns generation operations and launches the generator as
+a subprocess. It must prepare evaluated snapshots, manage the child, reject
+stale results, and durably commit accepted changes; solver conversion and
+execution belong to the generator. See `../../generator/README.md` for the
+process boundary. This project does not yet implement that orchestration or
+the server's durable multi-file commit contract.
+
 The `choreo-document-app` install component exports the app target and its
 headers. Its consumers also need the installed shared document,
 wpilib-expression, LLNL units, WPILib, and wpilib-extras packages.

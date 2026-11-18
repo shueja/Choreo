@@ -14,6 +14,8 @@
 #include "trajopt/constraint/linear_acceleration_max_magnitude_constraint.hpp"
 #include "trajopt/constraint/linear_velocity_direction_constraint.hpp"
 #include "trajopt/constraint/linear_velocity_max_magnitude_constraint.hpp"
+#include "trajopt/constraint/heading_angle_constraint.hpp"
+#include "trajopt/constraint/keep_in_circle_constraint.hpp"
 #include "trajopt/constraint/point_at_constraint.hpp"
 #include "trajopt/constraint/point_line_constraint.hpp"
 #include "trajopt/constraint/point_line_region_constraint.hpp"
@@ -55,7 +57,9 @@ using Constraint = std::variant<
     PointPointMaxConstraint,
     PointPointMinConstraint,
     PoseEqualityConstraint,
-    TranslationEqualityConstraint
+    TranslationEqualityConstraint,
+    HeadingAngleConstraint,
+    KeepInCircleConstraint
     // clang-format on
     >;
 

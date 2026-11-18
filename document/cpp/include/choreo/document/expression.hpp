@@ -16,6 +16,35 @@
 #include "choreo/document/json_validation.hpp"
 
 namespace choreo::document {
+namespace detail {
+
+inline wpi::util::json WriteEllipse(const wpi::math::Ellipse2d& value) {
+  return wpi::util::json::object(
+      "center", value.Center(), "xSemiAxis", value.XSemiAxis().value(),
+      "ySemiAxis", value.YSemiAxis().value());
+}
+
+inline wpi::math::Ellipse2d ReadEllipse(const wpi::util::json& json) {
+  CheckEllipse(json);
+  return {json.at("center").get<wpi::math::Pose2d>(),
+          wpi::units::meter_t{json.at("xSemiAxis").get_number()},
+          wpi::units::meter_t{json.at("ySemiAxis").get_number()}};
+}
+
+inline wpi::util::json WriteRectangle(const wpi::math::Rectangle2d& value) {
+  return wpi::util::json::object(
+      "center", value.Center(), "xWidth", value.XWidth().value(),
+      "yWidth", value.YWidth().value());
+}
+
+inline wpi::math::Rectangle2d ReadRectangle(const wpi::util::json& json) {
+  CheckRectangle(json);
+  return {json.at("center").get<wpi::math::Pose2d>(),
+          wpi::units::meter_t{json.at("xWidth").get_number()},
+          wpi::units::meter_t{json.at("yWidth").get_number()}};
+}
+
+}  // namespace detail
 
 template <typename Value>
 class Expression {
@@ -109,14 +138,37 @@ class Expression<wpi::math::Ellipse2d> {
       throw std::invalid_argument(
           "ellipse must have finite positive semi-axes and center");
     }
-    return wpi::util::json::object("exp", source, "val", value);
+    const auto serialized = detail::WriteEllipse(value);
+    detail::CheckEllipse(serialized);
+    return wpi::util::json::object("exp", source, "val", serialized);
   }
 
   static Expression FromJson(const wpi::util::json& json) {
     detail::CheckProperties(json, {"exp", "val"});
-    detail::CheckEllipse(json.at("val"));
     Expression result{json.at("exp").get_string(),
-                      json.at("val").get<wpi::math::Ellipse2d>()};
+                      detail::ReadEllipse(json.at("val"))};
+    result.ToJson();
+    return result;
+  }
+};
+
+template <>
+class Expression<wpi::math::Rectangle2d> {
+ public:
+  std::string source;
+  wpi::math::Rectangle2d value{wpi::math::Pose2d{}, wpi::units::meter_t{0},
+                               wpi::units::meter_t{0}};
+
+  wpi::util::json ToJson() const {
+    const auto serialized = detail::WriteRectangle(value);
+    detail::CheckRectangle(serialized);
+    return wpi::util::json::object("exp", source, "val", serialized);
+  }
+
+  static Expression FromJson(const wpi::util::json& json) {
+    detail::CheckProperties(json, {"exp", "val"});
+    Expression result{json.at("exp").get_string(),
+                      detail::ReadRectangle(json.at("val"))};
     result.ToJson();
     return result;
   }

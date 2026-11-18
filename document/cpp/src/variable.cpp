@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "choreo/document/expression.hpp"
 #include "choreo/document/json_validation.hpp"
 
 namespace choreo::document {
@@ -129,10 +130,10 @@ VariableValue ReadVariableValue(const json& value, VariableType type) {
           wpi::units::radian_t{value.at("dtheta").get_number()}};
     case VariableType::Rectangle2d:
       detail::CheckRectangle(value);
-      return value.get<wpi::math::Rectangle2d>();
+      return detail::ReadRectangle(value);
     case VariableType::Ellipse2d:
       detail::CheckEllipse(value);
-      return value.get<wpi::math::Ellipse2d>();
+      return detail::ReadEllipse(value);
   }
   throw std::invalid_argument("unsupported variable type");
 }
@@ -164,6 +165,10 @@ void to_json(json& serialized, const Variable& variable) {
         } else if constexpr (std::is_same_v<Value, wpi::math::Twist2d>) {
           return json::object("dx", value.dx.value(), "dy", value.dy.value(),
                               "dtheta", value.dtheta.value());
+        } else if constexpr (std::is_same_v<Value, wpi::math::Rectangle2d>) {
+          return detail::WriteRectangle(value);
+        } else if constexpr (std::is_same_v<Value, wpi::math::Ellipse2d>) {
+          return detail::WriteEllipse(value);
         } else {
           return json{value};
         }

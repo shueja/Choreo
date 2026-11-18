@@ -184,9 +184,9 @@ int main(int argc, char** argv) {
       "uuid", "circle", "from", "first", "enabled", true, "data",
       wpi::util::json::object(
           "type", "KeepInCircle", "circle",
-          wpi::util::json::object(
-              "exp", "Ellipse2d(Translation2d(), 1 m)", "val",
-              wpi::math::Ellipse2d{wpi::math::Translation2d{}, 1.0})));
+        choreo::document::EllipseExpression{
+          "Ellipse2d(Translation2d(), 1 m)",
+          wpi::math::Ellipse2d{wpi::math::Translation2d{}, 1.0}}));
   const auto circleExpression =
       circle.at("data").at("circle").get<choreo::document::EllipseExpression>();
   if (wpi::util::json{circleExpression} != circle.at("data").at("circle")) {

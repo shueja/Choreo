@@ -5,42 +5,12 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(FetchContent)
 
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
-set(WPILIB_WITH_CSCORE OFF CACHE INTERNAL "Build CSCore")
-set(WPILIB_WITH_GUI OFF CACHE INTERNAL "Build GUI")
-set(WPILIB_WITH_NTCORE ON CACHE INTERNAL "Build NTCore")
-set(WPILIB_WITH_SIMULATION_MODULES OFF CACHE INTERNAL "Build simulation modules")
-set(WPILIB_WITH_TESTS OFF CACHE INTERNAL "Build WPILib tests")
-set(WPILIB_WITH_WPIMATH ON CACHE INTERNAL "Build WPIMath")
-set(WPILIB_WITH_WPILIB OFF CACHE INTERNAL "Build WPILib")
-set(WPILIB_NO_WERROR ON CACHE INTERNAL "Disable WPILib warnings as errors")
 set(UNITS_ENABLE_TESTS OFF CACHE BOOL "Disable LLNL units tests")
 set(UNITS_INSTALL ON CACHE BOOL "Enable LLNL units install/export targets" FORCE)
 set(UNITS_BUILD_PYTHON_LIBRARY OFF CACHE BOOL "Disable LLNL units Python library")
 
-if(NOT TARGET wpimath::wpimath AND NOT TARGET wpimath)
-    set(WPILIB_USE_SYSTEM_EIGEN ON CACHE BOOL "Use fetched Eigen")
-    set(EIGEN_BUILD_CMAKE_PACKAGE TRUE)
-    FetchContent_Declare(
-        Eigen3
-        GIT_REPOSITORY https://github.com/eigen-mirror/eigen.git
-        GIT_TAG b7f6aed1b9974fd56cce651b4ff059c3bfc67782
-        SYSTEM
-        OVERRIDE_FIND_PACKAGE
-    )
-    FetchContent_MakeAvailable(Eigen3)
-
-    set(WPILIB_USE_SYSTEM_SLEIPNIR OFF CACHE INTERNAL "Use bundled Sleipnir")
-    FetchContent_Declare(
-        wpilib
-        GIT_REPOSITORY https://github.com/wpilibsuite/allwpilib.git
-        GIT_TAG f06afad7b7bd3fa2ef94a6c0c7d0174fe207750a
-        EXCLUDE_FROM_ALL
-        SYSTEM
-        UPDATE_DISCONNECTED TRUE
-    )
-    FetchContent_MakeAvailable(wpilib)
-endif()
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/FetchWPILib.cmake")
+fetch_wpilib()
 
 FetchContent_Declare(
     chaiscript
@@ -68,10 +38,6 @@ FetchContent_Declare(
     SYSTEM
 )
 FetchContent_MakeAvailable(llnl_units)
-
-if(TARGET wpimath AND NOT TARGET wpimath::wpimath)
-    add_library(wpimath::wpimath ALIAS wpimath)
-endif()
 
 if(TARGET wpiutil AND NOT TARGET wpiutil::wpiutil)
     add_library(wpiutil::wpiutil ALIAS wpiutil)

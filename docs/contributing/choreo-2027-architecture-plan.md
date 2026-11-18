@@ -1,9 +1,9 @@
 # Choreo 2027 Architecture Plan
 
-This document records the current architecture decisions and format-independent
-research for Choreo 2027. It is a planning document, not a specification of the
-new project format or an implementation plan for every component. Revisit open
-items as local project-format work becomes available.
+This document records the current architecture decisions and research for
+Choreo 2027, informed by the current C++ document schema, application store,
+and generator. It is a planning document, not the authoritative schema or a
+complete implementation specification. These components are still evolving.
 
 ## Confirmed decisions
 
@@ -14,6 +14,8 @@ items as local project-format work becomes available.
   picker.
 - The C++ server is authoritative and supports one user and one open project.
   The server owns document state, undo/redo, and autosave.
+- The main application launches and owns trajectory generation subprocesses;
+  only the application can commit their results to the active document.
 - The server listens only on localhost. The browser UI uses REST for commands
   and WebSockets for server-published state and progress. NetworkTables is not
   the document-state interface.
@@ -44,13 +46,10 @@ items as local project-format work becomes available.
 
 ## Explicitly out of scope
 
-- The new project format's fields, schema, serialization, validation rules, and
-  migration details are not defined here; related work is in a local branch.
-- The user's local C++ wrapper around TrajoptLib that configures it from Choreo
-  project parameters is not designed here. Treat it as an external component
-  to integrate when available.
-- This plan does not specify solver internals or format-dependent generation
-  policy.
+- The authoritative file shapes and validation rules remain in `document/`
+  and its C++ implementation; this plan does not duplicate their specification.
+- This plan does not specify solver internals or finalize generation policy,
+  migration details, or the subprocess communication protocol.
 
 ## Proposed component boundaries
 
@@ -68,20 +67,26 @@ one library or executable per item.
    Tauri mode, package and load a static copy of those assets; the webview
    connects to the server's loopback API. Keep document behavior out of this
    layer.
-4. **Expression service** — integrate the existing `wpilib-expression` C++
-   library as the server's expression engine. The current UI uses `mathjs`;
-   migration should make the server the source of expression evaluation and
-   validation. The library README states evaluation is not resource-limited, so
-   define appropriate expression input and execution bounds for server use.
-5. **Persistence** — keep the new format adapter separate from generic
-   persistence mechanics such as safe replacement, error reporting, and
-   serializing writes.
+4. **Document and expression services** — use `choreo::document_core` for
+  shared, robot-safe types and `choreo::document_app` for application document
+  state, evaluation, and history. The latter uses `wpilib-expression`; the
+  current UI uses `mathjs`. Make the server authoritative for expression
+  evaluation and validation, with explicit resource bounds.
+5. **Persistence** — keep document serialization separate from durable commit
+  mechanics, including recovery of changes spanning multiple files. Adapt the
+  existing store's save and publication behavior to the server's stronger
+  persistence contract.
 6. **Web UI** — React/Vite renders server-provided state and submits commands.
    Keep only presentation state (selection, hover, panel layout) in the client;
    do not preserve a second authoritative document model.
 7. **Optional webview launcher** — starts the same C++ server, waits for its
    selected API URL, and supplies that URL to the packaged static UI. It must
    not expose a privileged Tauri command API for application business logic.
+8. **Generation subprocess** — consumes immutable evaluated project and
+  trajectory inputs and returns progress and a candidate result. The application
+  owns the child lifecycle and document commit lane; only it can persist and
+  publish generated document changes. See `generator/README.md` for the code
+  ownership boundary and current implementation status.
 
 ## API and synchronization direction
 
@@ -92,8 +97,9 @@ one library or executable per item.
   and connection status.
 - Design a generic command/event envelope with request correlation, monotonic
   revisions or sequence numbers, structured errors, and a way to request a
-  current snapshot after reconnect. Do not bind these envelopes to document
-  fields until the new format work is available.
+  current snapshot after reconnect. Address persisted objects by UUID where
+  appropriate; distinguish the document revision stream from transient
+  operation progress.
 - Recommended reconnect behavior for the single-user application: events are
   live notifications, not a durable event log. On reconnect, fetch a complete
   snapshot with its revision, then resume processing events newer than that
@@ -111,9 +117,10 @@ one library or executable per item.
 
 ### Protocol research follow-ups
 
-The protocol is greenfield in this repository; no existing request IDs,
-document revisions, or event sequence numbers were found. Practical design
-constraints to carry into its specification:
+The transport protocol is greenfield. The C++ document store has an in-memory
+revision and an expected-revision commit overload, but these do not yet define
+the server protocol or durable commit semantics. Practical design constraints
+to carry into its specification:
 
 - Give every command a client request ID and echo it in its REST response.
   Distinguish a request-specific success/error acknowledgment from the
@@ -295,14 +302,90 @@ browser and OWASP guidance before implementation.
   [Windows `MoveFileExW`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw),
   [Windows `FlushFileBuffers`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers),
   and [Apple `fsync(2)` / `F_FULLFSYNC`](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fsync.2.html).
-- Do not replace the format-specific reader/writer before the new format work
-  is available.
+- The schema uses a project file and separate trajectory files. A variable
+  change or rename can affect evaluated values and expressions across several
+  files, so per-file replacement alone cannot provide an atomic document
+  commit. Specify a recoverable multi-file transaction, for example a durable
+  journal with a commit decision and startup recovery. Define its write order,
+  recovery of old or new state after every failure point, cleanup, and handling
+  of file creation, deletion, and rename. Do not acknowledge or publish until
+  the entire logical commit meets the selected durability contract. Block
+  mutations after an uncertain failure until recovery completes.
+- The existing `DocumentStore` evaluates and publishes in-memory commits before
+  `SaveFiles`; its saves replace files independently and may partially fail.
+  Adapt or extend its candidate, history, and notification APIs so edits,
+  generation, undo, and redo all persist before the store advances or notifies.
+  Its POSIX writer flushes the file but does not currently sync the parent
+  directory. Validate the existing platform-specific writer against the chosen
+  transaction and durability guarantees rather than assuming it provides them.
+
+## Document and generation integration
+
+- The current schemas describe a `.chor` project and separate `.traj` files,
+  with stable UUIDs for the project, trajectories, variables, waypoints,
+  constraints, and events. Waypoint references also support first/last
+  sentinels. Discovering and mapping trajectory paths, and defining lifecycle
+  operations for file creation, deletion, and renaming, remain server work.
+- Project variables and editable expression fields carry source and evaluated
+  values. `choreo::document_app` reevaluates editable fields on commit and
+  reload and reports evaluation errors with an object ID and field. Variable
+  rename updates editable expressions. Preserve the frozen generation `config`,
+  `snapshot`, and `output`; do not reevaluate them against current variables.
+  Schema versions are present, but current C++ readers do not migrate older
+  files. Design and test migrations before a future format upgrade requires one.
+- The trajectory schema separates editable `params` from the robot `config`
+  and parameter `snapshot` used for the last generation and the generated
+  `output`. The output contains waypoint timestamps, split indices, and WPILib
+  samples for swerve or differential drive. Define how the UI indicates stale
+  output when current inputs differ from those frozen inputs, including changes
+  to drive type and relevant event data.
+- Start generation from an immutable, evaluated project and trajectory snapshot
+  and record an operation ID and its input revision. Run solver work outside
+  the single-writer commit lane. On completion, reenter that lane, check that
+  all relevant inputs still match, and either reject the stale result or apply
+  an explicitly specified stale-result policy. An initial conservative policy
+  can reject any result whose document revision has changed. Persist and
+  publish the generated config, parameter snapshot, output, and resolved event
+  timing as one logical document change; failures or cancellation must not
+  publish a partial result. Decide whether this change is undoable and apply
+  the same durable history rules as other mutations.
+- The current generator accepts project and trajectory copies and reports
+  intermediate WPILib samples, but its reusable `generate()` returns samples;
+  result assembly and event timing live in the generator CLI. Extract a
+  testable generation operation that returns a complete candidate result and
+  structured errors without writing authoritative files. The main app starts,
+  monitors, cancels, and reaps the generator child, supplies an immutable input
+  snapshot, and validates its candidate before committing. The current CLI and
+  progress messages do not yet implement this subprocess contract.
+- Progress is transient and identified by operation and trajectory, not a
+  committed document revision. The existing progress schema includes packed
+  incomplete samples, diagnostics, errors, and complete trajectory JSON. Bound
+  or coalesce progress updates and define terminal success, failure, and
+  cancellation behavior; reconnecting clients must not rely on replaying every
+  progress frame. Completion becomes a document event only after durable commit.
+  TrajoptLib currently uses a process-global cancellation flag that generators
+  reset. Keep one solve per child or change cancellation ownership before
+  allowing concurrent solves within a child. Define a cooperative cancellation
+  path and a termination fallback, and test cancellation races and child cleanup.
+- Resolve the event timing contract before integrating generation: the schema
+  describes `targetTime` as the time at the target waypoint, while the current
+  generator stores that time plus the offset. Specify whether the stored time
+  includes the offset, when it is recomputed or invalidated after edits, and
+  how robot consumers apply it; test the complete round trip.
 
 ## Current repository observations
 
 - `/home/runner/work/Choreo/Choreo/Cargo.toml` currently defines a Rust workspace;
   no first-class C++ application server exists. TrajoptLib is currently a
   separately buildable CMake library, not the application server.
+- `document/cpp` provides shared C++ schema types and a robot trajectory
+  loader. `cpp/choreo_app` supplies an application-only, single-writer document
+  store with expression evaluation, undo/redo, revisions, and per-file saves;
+  neither is yet the server's durable transaction coordinator.
+- `generator` builds a C++ executable using `choreo::document_core` and
+  TrajoptLib. Its progress sender has a separate schema and WebSocket client.
+  The executable is an integration starting point, not yet a reusable complete
+  server operation or proof of a server-managed process lifecycle.
 - `/home/runner/work/Choreo/Choreo/src-tauri/src/api.rs` exposes business
   operations through Tauri commands; the UI calls them through
   `/home/runner/work/Choreo/Choreo/src/document/tauriCommands.ts`.
@@ -325,9 +408,9 @@ browser and OWASP guidance before implementation.
   decision. The library README says expression evaluation is not resource-limited.
 - `/home/runner/work/Choreo/Choreo/trajoptlib/CMakeLists.txt` builds and tests
   the native TrajoptLib library independently of its Rust FFI adapter. The
-  format-dependent generation pipeline is in
-  `/home/runner/work/Choreo/Choreo/src-core/src/generation/transformers/mod.rs`
-  and should not be re-designed here.
+  existing Rust generation pipeline remains in
+  `/home/runner/work/Choreo/Choreo/src-core/src/generation/transformers/mod.rs`;
+  the C++ generator is the relevant new integration candidate.
 - `/home/runner/work/Choreo/Choreo/vite.config.ts` builds the web UI, while
   `/home/runner/work/Choreo/Choreo/src-tauri/tauri.conf.json` currently embeds
   it and bundles a CLI sidecar.
@@ -348,8 +431,8 @@ browser and OWASP guidance before implementation.
   design a server shutdown protocol (for example, a private stdin control
   channel) and explicitly reap the child on app exit before falling back to
   termination. Default child termination does not clean up grandchildren;
-  avoid server-spawned helpers or deliberately manage process groups/job
-  objects.
+  account for generator subprocesses with deliberate process-group/job-object
+  ownership and shutdown behavior, including abrupt launcher or server exit.
 - The shell plugin's source inspected for this research was the rolling Tauri
   v2 branch, not a version pinned by Choreo. Its exact behavior and packaging
   paths must be checked against the plugin version selected for the launcher.
@@ -484,9 +567,9 @@ browser and OWASP guidance before implementation.
   this flow in the prototype, including startup failure and early child exit.
 - Recommended process ownership: the Tauri launcher directly owns the server
   child process (no shell wrapper), requests graceful shutdown on app exit, and
-  force-terminates only if needed. The server should not spawn helper processes
-  that complicate Windows process cleanup. This is a proposed lifecycle, not
-  yet tested in the existing Tauri app.
+  force-terminates only if needed. The server owns its generator children and
+  must cancel and reap them, with process-group/job-object handling for abrupt
+  exits. This lifecycle is not yet tested in the existing Tauri app.
 - Add explicit CMake configure/build/test/package steps to CI. The current
   Choreo workflow builds with Cargo/Tauri and packages both the GUI and CLI;
   it does not yet build a C++ application server.
@@ -523,6 +606,13 @@ browser and OWASP guidance before implementation.
 - What write-through and atomic-replacement guarantees can be provided
   consistently on supported local filesystems across Windows, macOS, and
   Linux?
+- What multi-file journal or other recovery protocol will make project and
+  trajectory edits atomic across failures, including undo/redo and file lifecycle
+  operations? How will recovery handle externally modified files?
+- How should the app send immutable inputs to a managed generator child and
+  receive bounded progress, cancellation, and terminal results? Which input
+  changes invalidate an in-flight result, and should generation results enter
+  undo history? Define event `targetTime` and offset semantics consistently.
 - Can Tauri load its packaged static UI and connect to the loopback API with a
   narrowly configured Origin/CORS policy and CSP on every supported platform?
   Verify the actual `Origin` header emitted by each WebView, including macOS
@@ -533,10 +623,9 @@ browser and OWASP guidance before implementation.
   already disabled in the separate ChoreoLib C++ workflow; build prototypes
   must establish feasibility. Also determine whether the final standalone
   packages should bundle shared WPILib/runtime libraries or link statically.
-- How should the generic API represent progress/cancellation for generation
-  operations? Existing Tauri commands launch generation and stream progress
-  independently, but the new HTTP/WebSocket operation contract is not yet
-  specified.
+- How should the API represent operation progress, terminal states, and
+  cancellation while bounding intermediate samples and coordinating the
+  subprocess lifecycle?
 
 ## Suggested research order
 
@@ -551,15 +640,16 @@ browser and OWASP guidance before implementation.
    targets, starting with the platforms supported by the C++ dependencies;
    investigate the Windows ARM64 gap, then verify the complete release matrix
    including native Linux ARM64.
-4. Specify generic request/event envelopes using the protocol findings above;
-   test acknowledgments, retry behavior, bounded snapshot-based reconnect,
-   revision gaps, and generation cancellation without document-specific
-   payloads or durable event replay. Confirm linked standards against live
-   primary sources before treating them as verified citations.
+4. Specify request/event envelopes and UUID-addressed document operations;
+  test acknowledgments, retry behavior, bounded snapshot-based reconnect,
+  revision gaps, and operation progress without durable event replay. Confirm
+  linked standards against live primary sources before treating them as
+  verified citations.
 5. Define and test expression request-size, setup-count, and complexity limits
    and diagnostics around the required `wpilib-expression` integration.
-6. Define write-through failure and safe replacement behavior once the new
-   format's storage contract is available; test same-directory replacement
-   and failure recovery on each supported operating system.
-7. Integrate the user's project-parameter TrajoptLib wrapper only after its
-   local interface is available; keep its design outside this plan.
+6. Design the document store's durable commit and multi-file recovery protocol;
+  test failures at each write and recovery step, including undo/redo and file
+  lifecycle operations on each supported operating system.
+7. Integrate the C++ generator as an app-managed subprocess, define the input,
+  progress, cancellation, stale-result, and event timing contracts, and test
+  child cleanup and durable publication with representative documents.

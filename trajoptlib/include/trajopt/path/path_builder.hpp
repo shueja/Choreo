@@ -434,6 +434,17 @@ class TRAJOPT_DLLEXPORT PathBuilder {
                                                    control_interval_counts);
   }
 
+  /// Applies a custom constraint to a waypoint.
+  void add_waypoint_constraint(size_t index, const Constraint& constraint) {
+    wpt_constraint(index, constraint);
+  }
+
+  /// Applies a custom constraint to the states between two waypoints.
+  void add_segment_constraint(size_t from_index, size_t to_index,
+                              const Constraint& constraint) {
+    sgmt_constraint(from_index, to_index, constraint);
+  }
+
  private:
   /// Represents a physical keep-out region that the robot must avoid by a
   /// certain distance. Arbitrary polygons can be expressed with this class, and
