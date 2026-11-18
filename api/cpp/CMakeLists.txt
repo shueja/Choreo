@@ -1,0 +1,18 @@
+if(NOT TARGET wpinet)
+    message(FATAL_ERROR "choreo_api_server requires the wpinet target")
+endif()
+
+add_library(choreo_api_server src/server.cpp)
+add_library(choreo::api_server ALIAS choreo_api_server)
+target_compile_features(choreo_api_server PUBLIC cxx_std_23)
+target_include_directories(choreo_api_server PUBLIC include)
+target_link_libraries(choreo_api_server PRIVATE wpinet)
+
+if(BUILD_TESTING)
+    add_executable(choreo_api_server_test tests/server_test.cpp)
+    target_link_libraries(choreo_api_server_test PRIVATE choreo::api_server)
+    if(WIN32)
+        target_link_libraries(choreo_api_server_test PRIVATE ws2_32)
+    endif()
+    add_test(NAME choreo_api_server.loopback COMMAND choreo_api_server_test)
+endif()

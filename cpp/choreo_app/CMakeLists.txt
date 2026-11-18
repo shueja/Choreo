@@ -50,6 +50,7 @@ target_link_libraries(choreo_document_app PUBLIC choreo::document_core wpilib::e
 set_target_properties(choreo_document_app PROPERTIES EXPORT_NAME document_app)
 
 if(TARGET wpinet)
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../api/cpp" choreo-api)
     add_library(choreo_generation_process src/generation_process.cpp)
     add_library(choreo::generation_process ALIAS choreo_generation_process)
     target_compile_features(choreo_generation_process PUBLIC cxx_std_23)

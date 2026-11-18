@@ -1467,6 +1467,9 @@
             "enum": [
               "SESSION_NOT_OPEN",
               "RESOURCE_NOT_FOUND",
+              "METHOD_NOT_ALLOWED",
+              "ORIGIN_NOT_ALLOWED",
+              "PAYLOAD_TOO_LARGE",
               "REVISION_CONFLICT",
               "IDEMPOTENCY_KEY_REUSE",
               "VALIDATION_ERROR",
