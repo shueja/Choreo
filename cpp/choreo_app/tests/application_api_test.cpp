@@ -810,12 +810,18 @@ std::string AcceptedOperationId(int status, std::string_view body,
 
 Json WaitForSessionOperation(Socket socket, std::string_view operationId,
                              std::string_view operation,
-                             std::string_view expectedStatus) {
+                             std::string_view expectedStatus,
+                             Json* sessionClosedEvent = nullptr) {
   for (std::size_t attempt = 0; attempt < kMaximumSessionOperationEvents;
        ++attempt) {
     const auto frame = ReadServerTextFrame(socket);
     Require(!frame.empty(), "expected a session operation event");
     const auto event = Json::parse_or_throw(frame);
+    if (sessionClosedEvent != nullptr &&
+        event.at("type").get_string() == "session.closed") {
+      *sessionClosedEvent = event;
+      continue;
+    }
     if (event.at("type").get_string() != "session.operation" ||
         event.at("operationId").get_string() != operationId ||
         event.at("operation").get_string() != operation) {
@@ -943,7 +949,12 @@ void TestCloseSessionClearsSnapshot(const std::filesystem::path& executable) {
       HttpRequest(fixture.Port(), "POST", kSessionClosePath, {});
   const auto closeOperationId =
       AcceptedOperationId(closeStatus, closeBody, "close");
-  WaitForSessionOperation(events.Get(), closeOperationId, "close", "succeeded");
+  Json closedEvent;
+  WaitForSessionOperation(events.Get(), closeOperationId, "close", "succeeded",
+                          &closedEvent);
+  Require(closedEvent.at("type").get_string() == "session.closed" &&
+              closedEvent.at("projectId").get_string() == kTestProjectUuid,
+          "closing a session should publish its project identity");
 
   const auto [snapshotStatus, snapshotBody] = fixture.Snapshot();
   Require(snapshotStatus == kHttpConflict,
