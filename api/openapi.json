@@ -971,8 +971,15 @@
           "200": {
             "$ref": "#/components/responses/MutationAck"
           },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/RevisionConflict"
+          },
+          "500": {
+            "description": "The history change could not be persisted and further edits are paused until save succeeds",
+            "$ref": "#/components/responses/ApiError"
           },
           "default": {
             "$ref": "#/components/responses/ApiError"
@@ -996,8 +1003,15 @@
           "200": {
             "$ref": "#/components/responses/MutationAck"
           },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/RevisionConflict"
+          },
+          "500": {
+            "description": "The history change could not be persisted and further edits are paused until save succeeds",
+            "$ref": "#/components/responses/ApiError"
           },
           "default": {
             "$ref": "#/components/responses/ApiError"

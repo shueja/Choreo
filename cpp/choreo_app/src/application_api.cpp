@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <deque>
 #include <fstream>
+#include <future>
 #include <iterator>
 #include <map>
 #include <mutex>
@@ -170,6 +171,11 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
     ApiResponse response;
   };
 
+  struct CachedMutation {
+    std::string requestTarget;
+    ApiResponse response;
+  };
+
   struct PublishedSnapshot {
     std::uint64_t revision;
     std::string body;
@@ -216,9 +222,23 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
                          });
     server.RegisterRoute("POST", "/api/v1/session/close",
                          [weak](const choreo::api::HttpRequest&) {
+                           return WithHttpOwner(weak,
+                                                [](std::shared_ptr<Impl> self) {
+                                                  return self->CloseSession();
+                                                });
+                         });
+    server.RegisterRoute("POST", "/api/v1/session/undo",
+                         [weak](const choreo::api::HttpRequest& request) {
                            return WithHttpOwner(
-                               weak, [](std::shared_ptr<Impl> self) {
-                                 return self->CloseSession();
+                               weak, [&request](std::shared_ptr<Impl> self) {
+                                 return self->HistoryAction(request, true);
+                               });
+                         });
+    server.RegisterRoute("POST", "/api/v1/session/redo",
+                         [weak](const choreo::api::HttpRequest& request) {
+                           return WithHttpOwner(
+                               weak, [&request](std::shared_ptr<Impl> self) {
+                                 return self->HistoryAction(request, false);
                                });
                          });
     server.RegisterRoute(
@@ -227,25 +247,22 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             return self->SnapshotResponse();
           });
         });
+    server.RegisterRoute("GET", "/api/v1/projects/{projectId}",
+                         [weak](const choreo::api::HttpRequest& request) {
+                           return WithHttpOwner(
+                               weak, [&request](std::shared_ptr<Impl> self) {
+                                 return self->ProjectResponse(request);
+                               });
+                         });
+    server.RegisterRoute("GET", "/api/v1/projects/{projectId}/trajectories",
+                         [weak](const choreo::api::HttpRequest& request) {
+                           return WithHttpOwner(
+                               weak, [&request](std::shared_ptr<Impl> self) {
+                                 return self->TrajectoriesResponse(request);
+                               });
+                         });
     server.RegisterRoute(
-        "GET",
-        "/api/v1/projects/{projectId}",
-        [weak](const choreo::api::HttpRequest& request) {
-          return WithHttpOwner(weak, [&request](std::shared_ptr<Impl> self) {
-            return self->ProjectResponse(request);
-          });
-        });
-    server.RegisterRoute(
-        "GET",
-        "/api/v1/projects/{projectId}/trajectories",
-        [weak](const choreo::api::HttpRequest& request) {
-          return WithHttpOwner(weak, [&request](std::shared_ptr<Impl> self) {
-            return self->TrajectoriesResponse(request);
-          });
-        });
-    server.RegisterRoute(
-        "GET",
-        "/api/v1/projects/{projectId}/trajectories/{trajectoryId}",
+        "GET", "/api/v1/projects/{projectId}/trajectories/{trajectoryId}",
         [weak](const choreo::api::HttpRequest& request) {
           return WithHttpOwner(weak, [&request](std::shared_ptr<Impl> self) {
             return self->TrajectoryResponse(request);
@@ -278,11 +295,11 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
           });
       server.RegisterRoute(
           "GET", collectionPath + "/{" + itemParameterName + "}",
-          [weak, fieldName, itemParameterName](
-              const choreo::api::HttpRequest& request) {
+          [weak, fieldName,
+           itemParameterName](const choreo::api::HttpRequest& request) {
             return WithHttpOwner(
-                weak, [&request, &fieldName, &itemParameterName](
-                          std::shared_ptr<Impl> self) {
+                weak, [&request, &fieldName,
+                       &itemParameterName](std::shared_ptr<Impl> self) {
                   return self->TrajectorySubresourceResponse(
                       request, fieldName,
                       request.pathParameters.at(itemParameterName));
@@ -609,6 +626,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         return *failure;
       }
       self->documentFiles = std::move(files);
+      self->PublishSnapshot();
       return JsonResponse(200, Json::object("saved", true, "revision",
                                             self->store->Revision()));
     });
@@ -629,7 +647,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       static_cast<void>(path);
       dirty = dirty || store->IsTrajectoryDirty(id);
     }
-    if (!dirty) {
+    if (!dirty && !persistenceBlocked) {
       return std::nullopt;
     }
     return PersistFiles(documentFiles);
@@ -638,22 +656,113 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
   std::optional<ApiResponse> PersistFiles(const DocumentFiles& files) {
     const auto result = store->SaveFiles(files);
     if (result.Success()) {
+      persistenceBlocked = false;
       return std::nullopt;
     }
+    persistenceBlocked = true;
     std::vector<Json> details;
     if (result.projectError) {
       details.push_back(Json::object("path", files.project.string(), "message",
                                      *result.projectError));
     }
     for (const auto& [id, error] : result.trajectoryErrors) {
-      details.push_back(
-          Json::object("path", files.trajectories.at(id).string(), "message",
-                       error));
+      details.push_back(Json::object("path", files.trajectories.at(id).string(),
+                                     "message", error));
     }
     return JsonResponse(
-        500, Json::object("code", "SAVE_FAILED",
-                          "message", "One or more files could not be saved",
-                          "details", std::move(details)));
+        500, Json::object("code", "SAVE_FAILED", "message",
+                          "One or more files could not be saved", "details",
+                          std::move(details)));
+  }
+
+  ApiResponse HistoryAction(const choreo::api::HttpRequest& request,
+                            bool undo) {
+    const auto expectedRevision = RevisionFromTag(request.Header("if-match"));
+    const auto idempotencyKey = std::string{request.Header("idempotency-key")};
+    if (!expectedRevision || idempotencyKey.empty()) {
+      return ApiError(400, "VALIDATION_ERROR",
+                      "If-Match and Idempotency-Key are required");
+    }
+
+    const auto operation = undo ? std::string{"undo"} : std::string{"redo"};
+    const auto fingerprint =
+        operation + "/" + std::to_string(*expectedRevision);
+    auto self = shared_from_this();
+    auto result = std::make_shared<std::promise<ApiResponse>>();
+    auto response = result->get_future();
+    if (!Post([self, expectedRevision = *expectedRevision, idempotencyKey,
+               fingerprint, undo, result] {
+          try {
+            const auto cached = self->idempotentMutations.find(idempotencyKey);
+            if (cached != self->idempotentMutations.end()) {
+              if (cached->second.requestTarget != fingerprint) {
+                result->set_value(
+                    ApiError(409, "IDEMPOTENCY_KEY_REUSE",
+                             "Idempotency key was reused for another request"));
+              } else {
+                result->set_value(cached->second.response);
+              }
+              return;
+            }
+
+            if (!self->store) {
+              result->set_value(
+                  ApiError(409, "SESSION_NOT_OPEN", "No project is open"));
+              return;
+            }
+            if (self->persistenceBlocked) {
+              result->set_value(ApiError(
+                  409, "SAVE_FAILED",
+                  "Save the active session before changing document history"));
+              return;
+            }
+            if (self->store->Revision() != expectedRevision) {
+              result->set_value(JsonResponse(
+                  409,
+                  Json::object("code", "REVISION_CONFLICT", "message",
+                               "Document revision is stale", "currentRevision",
+                               self->store->Revision())));
+              return;
+            }
+
+            const bool changed =
+                undo ? self->store->Undo() : self->store->Redo();
+            if (!changed) {
+              result->set_value(
+                  ApiError(409, "VALIDATION_ERROR",
+                           undo ? "No document change is available to undo"
+                                : "No document change is available to redo"));
+              return;
+            }
+
+            if (auto failure = self->PersistFiles(self->documentFiles)) {
+              result->set_value(*failure);
+              return;
+            }
+            self->PublishSnapshot();
+            ApiResponse mutation{
+                200,
+                "application/json",
+                Json::object("requestId", idempotencyKey, "revision",
+                             self->store->Revision())
+                    .to_string(),
+                {}};
+            mutation.headers.emplace(
+                "ETag",
+                "\"revision-" + std::to_string(self->store->Revision()) + "\"");
+            self->idempotentMutations.emplace(
+                idempotencyKey, CachedMutation{fingerprint, mutation});
+            result->set_value(std::move(mutation));
+          } catch (const std::exception& error) {
+            result->set_value(ApiError(500, "INTERNAL_ERROR", error.what()));
+          } catch (...) {
+            result->set_value(
+                ApiError(500, "INTERNAL_ERROR", "History operation failed"));
+          }
+        })) {
+      return ApiError(503, "INTERNAL_ERROR", "API is stopping");
+    }
+    return response.get();
   }
 
   ApiResponse StartGeneration(const choreo::api::HttpRequest& request) {
@@ -668,6 +777,10 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
     if (options.generatorExecutable.empty()) {
       return ApiError(503, "GENERATOR_UNAVAILABLE",
                       "No generator executable is configured");
+    }
+    if (persistenceBlocked) {
+      return ApiError(409, "SAVE_FAILED",
+                      "Save the active session before starting generation");
     }
 
     const auto fingerprint = projectId + "/" + trajectoryId + "/" +
@@ -793,8 +906,8 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
     }
     for (const auto& trajectory : snapshotJson.at("trajectories").get_array()) {
       if (trajectory.at("uuid").get_string() == trajectoryId) {
-        ApiResponse response{200, "application/json", trajectory.to_string(),
-                             {}};
+        ApiResponse response{
+            200, "application/json", trajectory.to_string(), {}};
         response.headers.emplace(
             "ETag", "\"revision-" + std::to_string(snapshot->revision) + "\"");
         return response;
@@ -817,8 +930,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       return ApiError(404, "RESOURCE_NOT_FOUND", "Project was not found");
     }
     const Json* trajectory = nullptr;
-    for (const auto& candidate :
-         snapshotJson.at("trajectories").get_array()) {
+    for (const auto& candidate : snapshotJson.at("trajectories").get_array()) {
       if (candidate.at("uuid").get_string() == trajectoryId) {
         trajectory = &candidate;
         break;
@@ -828,9 +940,8 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       return ApiError(404, "RESOURCE_NOT_FOUND", "Trajectory was not found");
     }
 
-    const auto& items = field == "events"
-                            ? trajectory->at("events")
-                            : trajectory->at("params").at(field);
+    const auto& items = field == "events" ? trajectory->at("events")
+                                          : trajectory->at("params").at(field);
     Json responseBody;
     int status = 200;
     if (itemId) {
@@ -847,15 +958,14 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       responseBody =
           Json::object("revision", snapshot->revision, "items", items);
     }
-    ApiResponse response{status, "application/json", responseBody.to_string(),
-                         {}};
+    ApiResponse response{
+        status, "application/json", responseBody.to_string(), {}};
     response.headers.emplace(
         "ETag", "\"revision-" + std::to_string(snapshot->revision) + "\"");
     return response;
   }
 
-  ApiResponse ProjectResponse(
-      const choreo::api::HttpRequest& request) const {
+  ApiResponse ProjectResponse(const choreo::api::HttpRequest& request) const {
     auto snapshot = publishedSnapshot.load();
     if (!snapshot) {
       return ApiError(409, "SESSION_NOT_OPEN", "No project is open");
@@ -885,7 +995,8 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
     }
     auto items = snapshotJson.at("trajectories");
     ApiResponse response{
-        200, "application/json",
+        200,
+        "application/json",
         Json::object("revision", snapshot->revision, "items", std::move(items))
             .to_string(),
         {}};
@@ -1018,6 +1129,14 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         } else {
           try {
             generation.process->CommitResult(*store);
+            if (auto failure = PersistFiles(documentFiles)) {
+              const auto error = ErrorBody(*failure).at("message").get_string();
+              EmitStatus(generation.operationId, generation.trajectoryId,
+                         "failed", "Generated result could not be saved",
+                         store->Revision(), error);
+              it = generations.erase(it);
+              continue;
+            }
             PublishSnapshot();
             EmitStatus(generation.operationId, generation.trajectoryId,
                        "succeeded", "Generation completed", store->Revision());
@@ -1099,6 +1218,8 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
   std::map<std::string, Generation, std::less<>> generations;
   std::map<choreo::api::WebSocketId, std::string> progressConnections;
   std::map<std::string, CachedGeneration, std::less<>> idempotentGenerations;
+  std::map<std::string, CachedMutation, std::less<>> idempotentMutations;
+  bool persistenceBlocked = false;
 };
 
 ApplicationApi::ApplicationApi(choreo::api::ApiServer& server, Options options)

@@ -1,6 +1,7 @@
 #include "choreo/document/application_api.hpp"
 
 #include <array>
+#include <cerrno>
 #include <charconv>
 #include <cstdint>
 #include <cstdlib>
@@ -60,6 +61,14 @@ constexpr std::string_view kIdempotencyKey =
     "00000000-0000-4000-8000-000000009001";
 constexpr std::string_view kNewSessionIdempotencyKey =
     "00000000-0000-4000-8000-000000009002";
+constexpr std::string_view kUndoIdempotencyKey =
+    "00000000-0000-4000-8000-000000009003";
+constexpr std::string_view kRedoIdempotencyKey =
+    "00000000-0000-4000-8000-000000009004";
+constexpr std::string_view kFailedUndoIdempotencyKey =
+    "00000000-0000-4000-8000-000000009005";
+constexpr std::string_view kStaleUndoIdempotencyKey =
+    "00000000-0000-4000-8000-000000009006";
 constexpr int kHttpOk = 200;
 constexpr int kHttpAccepted = 202;
 constexpr int kHttpBadRequest = 400;
@@ -175,8 +184,14 @@ bool SendAll(Socket socket, std::string_view text) {
   while (!text.empty()) {
 #ifdef _WIN32
     auto amount = send(socket, text.data(), static_cast<int>(text.size()), 0);
+    if (amount == SOCKET_ERROR && WSAGetLastError() == WSAEINTR) {
+      continue;
+    }
 #else
     auto amount = send(socket, text.data(), text.size(), 0);
+    if (amount < 0 && errno == EINTR) {
+      continue;
+    }
 #endif
     if (amount <= 0) {
       return false;
@@ -191,8 +206,14 @@ bool ReadExact(Socket socket, char* buffer, std::size_t size) {
   while (read < size) {
 #ifdef _WIN32
     auto amount = recv(socket, buffer + read, static_cast<int>(size - read), 0);
+    if (amount == SOCKET_ERROR && WSAGetLastError() == WSAEINTR) {
+      continue;
+    }
 #else
     auto amount = recv(socket, buffer + read, size - read, 0);
+    if (amount < 0 && errno == EINTR) {
+      continue;
+    }
 #endif
     if (amount <= 0) {
       return false;
@@ -212,6 +233,15 @@ std::string ReadAll(Socket socket) {
     auto amount = recv(socket, buffer, sizeof(buffer), 0);
 #endif
     if (amount <= 0) {
+#ifdef _WIN32
+      if (amount == SOCKET_ERROR && WSAGetLastError() == WSAEINTR) {
+        continue;
+      }
+#else
+      if (amount < 0 && errno == EINTR) {
+        continue;
+      }
+#endif
       break;
     }
     response.append(buffer, static_cast<std::size_t>(amount));
@@ -229,6 +259,15 @@ std::string ReadHeaders(Socket socket) {
     auto amount = recv(socket, buffer, sizeof(buffer), 0);
 #endif
     if (amount <= 0) {
+#ifdef _WIN32
+      if (amount == SOCKET_ERROR && WSAGetLastError() == WSAEINTR) {
+        continue;
+      }
+#else
+      if (amount < 0 && errno == EINTR) {
+        continue;
+      }
+#endif
       break;
     }
     response.append(buffer, static_cast<std::size_t>(amount));
@@ -237,38 +276,72 @@ std::string ReadHeaders(Socket socket) {
 }
 
 std::string ReadServerTextFrame(Socket socket) {
-  std::array<unsigned char, 2> header{};
-  if (!ReadExact(socket, reinterpret_cast<char*>(header.data()),
-                 header.size())) {
-    return {};
-  }
-  std::uint64_t size = header[1] & 0x7f;
-  if (size == 126) {
-    std::array<unsigned char, 2> extended{};
-    if (!ReadExact(socket, reinterpret_cast<char*>(extended.data()),
-                   extended.size())) {
+  while (true) {
+    std::array<unsigned char, 2> header{};
+    if (!ReadExact(socket, reinterpret_cast<char*>(header.data()),
+                   header.size())) {
       return {};
     }
-    size = (static_cast<std::uint64_t>(extended[0]) << 8) | extended[1];
-  } else if (size == 127) {
-    std::array<unsigned char, 8> extended{};
-    if (!ReadExact(socket, reinterpret_cast<char*>(extended.data()),
-                   extended.size())) {
+    std::uint64_t size = header[1] & 0x7f;
+    if (size == 126) {
+      std::array<unsigned char, 2> extended{};
+      if (!ReadExact(socket, reinterpret_cast<char*>(extended.data()),
+                     extended.size())) {
+        return {};
+      }
+      size = (static_cast<std::uint64_t>(extended[0]) << 8) | extended[1];
+    } else if (size == 127) {
+      std::array<unsigned char, 8> extended{};
+      if (!ReadExact(socket, reinterpret_cast<char*>(extended.data()),
+                     extended.size())) {
+        return {};
+      }
+      size = 0;
+      for (auto byte : extended) {
+        size = (size << 8) | byte;
+      }
+    }
+    if ((header[1] & 0x80) != 0 || size > kMaximumWebSocketPayloadBytes) {
       return {};
     }
-    size = 0;
-    for (auto byte : extended) {
-      size = (size << 8) | byte;
+    std::string payload(static_cast<std::size_t>(size), '\0');
+    if (!ReadExact(socket, payload.data(), payload.size())) {
+      return {};
+    }
+
+    switch (header[0] & 0x0f) {
+      case 0x1:
+        return payload;
+      case 0x8:
+        return {};
+      case 0x9: {
+        if (payload.size() > 125) {
+          return {};
+        }
+        constexpr std::array<unsigned char, 4> mask{0x13, 0x57, 0x9b, 0xdf};
+        std::string pong;
+        pong.reserve(payload.size() + 6);
+        pong.push_back(static_cast<char>(0x8a));
+        pong.push_back(static_cast<char>(0x80 | payload.size()));
+        for (auto byte : mask) {
+          pong.push_back(static_cast<char>(byte));
+        }
+        for (std::size_t index = 0; index < payload.size(); ++index) {
+          pong.push_back(
+              static_cast<char>(static_cast<unsigned char>(payload[index]) ^
+                                mask[index % mask.size()]));
+        }
+        if (!SendAll(socket, pong)) {
+          return {};
+        }
+        break;
+      }
+      case 0xa:
+        break;
+      default:
+        return {};
     }
   }
-  if ((header[1] & 0x80) != 0 || size > kMaximumWebSocketPayloadBytes) {
-    return {};
-  }
-  std::string payload(static_cast<std::size_t>(size), '\0');
-  if (!ReadExact(socket, payload.data(), payload.size())) {
-    return {};
-  }
-  return payload;
 }
 
 std::string ReadFileContents(const std::filesystem::path& path) {
@@ -532,8 +605,8 @@ class ApiTestFixture {
         Json::object("source", "path", "path", path.string()).to_string());
   }
 
-  std::pair<int, std::string> NewSession(
-      const std::filesystem::path& path, const Json& project) const {
+  std::pair<int, std::string> NewSession(const std::filesystem::path& path,
+                                         const Json& project) const {
     const auto body =
         Json::object("projectPath", path.string(), "project", project)
             .to_string();
@@ -546,11 +619,10 @@ class ApiTestFixture {
     return HttpRequest(Port(), "GET", kSnapshotPath, {});
   }
 
-  std::pair<int, std::string> GetTrajectory(std::string_view projectId,
-                                           std::string_view trajectoryId) const {
-    const auto path =
-        "/api/v1/projects/" + std::string{projectId} + "/trajectories/" +
-        std::string{trajectoryId};
+  std::pair<int, std::string> GetTrajectory(
+      std::string_view projectId, std::string_view trajectoryId) const {
+    const auto path = "/api/v1/projects/" + std::string{projectId} +
+                      "/trajectories/" + std::string{trajectoryId};
     return HttpRequest(Port(), "GET", path, {});
   }
 
@@ -569,24 +641,33 @@ class ApiTestFixture {
   std::pair<int, std::string> GetTrajectorySubresource(
       std::string_view projectId, std::string_view trajectoryId,
       std::string_view resource) const {
-    const auto path =
-        "/api/v1/projects/" + std::string{projectId} + "/trajectories/" +
-        std::string{trajectoryId} + "/" + std::string{resource};
+    const auto path = "/api/v1/projects/" + std::string{projectId} +
+                      "/trajectories/" + std::string{trajectoryId} + "/" +
+                      std::string{resource};
     return HttpRequest(Port(), "GET", path, {});
   }
 
   std::pair<int, std::string> GetTrajectorySubresourceItem(
       std::string_view projectId, std::string_view trajectoryId,
       std::string_view resource, std::string_view itemId) const {
-    const auto path =
-        "/api/v1/projects/" + std::string{projectId} + "/trajectories/" +
-        std::string{trajectoryId} + "/" + std::string{resource} + "/" +
-        std::string{itemId};
+    const auto path = "/api/v1/projects/" + std::string{projectId} +
+                      "/trajectories/" + std::string{trajectoryId} + "/" +
+                      std::string{resource} + "/" + std::string{itemId};
     return HttpRequest(Port(), "GET", path, {});
   }
 
   std::pair<int, std::string> Save() const {
     return HttpRequest(Port(), "POST", kSavePath, "{}");
+  }
+
+  std::pair<int, std::string> HistoryAction(
+      std::string_view action, std::uint64_t revision,
+      std::string_view idempotencyKey) const {
+    const auto path = "/api/v1/session/" + std::string{action};
+    const auto headers =
+        "If-Match: \"revision-" + std::to_string(revision) + "\"\r\n" +
+        "Idempotency-Key: " + std::string{idempotencyKey} + "\r\n";
+    return HttpRequest(Port(), "POST", path, {}, headers);
   }
 
   void CompletePicker(std::optional<std::filesystem::path> path) const {
@@ -647,7 +728,8 @@ class ApiTestFixture {
 std::string AcceptedOperationId(int status, std::string_view body,
                                 std::string_view expectedOperation) {
   Require(status == kHttpAccepted,
-          "session request should return HTTP 202 Accepted");
+          "session request should return HTTP 202 Accepted (HTTP " +
+              std::to_string(status) + "): " + std::string{body});
   const auto accepted = Json::parse_or_throw(body);
   Require(accepted.at("accepted").get_bool(),
           "accepted response should indicate the operation was queued");
@@ -757,8 +839,7 @@ void TestNewSessionCompletesAsynchronously(
           "new session should begin without trajectories");
 }
 
-void TestCloseSessionClearsSnapshot(
-    const std::filesystem::path& executable) {
+void TestCloseSessionClearsSnapshot(const std::filesystem::path& executable) {
   ApiTestFixture fixture{executable};
   auto events = fixture.ConnectEvents();
   Require(static_cast<bool>(events), "event WebSocket should connect");
@@ -806,8 +887,8 @@ void TestCloseSessionRetainsSessionWhenSaveFails(
       HttpRequest(fixture.Port(), "POST", kSessionClosePath, {});
   const auto closeOperationId =
       AcceptedOperationId(closeStatus, closeBody, "close");
-  const auto closeEvent =
-      WaitForSessionOperation(events.Get(), closeOperationId, "close", "failed");
+  const auto closeEvent = WaitForSessionOperation(
+      events.Get(), closeOperationId, "close", "failed");
   Require(closeEvent.at("error").at("code").get_string() == "SAVE_FAILED",
           "close should report the failed save");
 
@@ -847,8 +928,7 @@ void TestSessionReplacementRetainsActiveSessionWhenSaveFails(
       AcceptedOperationId(replacementStatus, replacementBody, "open");
   const auto replacementEvent = WaitForSessionOperation(
       events.Get(), replacementOperationId, "open", "failed");
-  Require(replacementEvent.at("error").at("code").get_string() ==
-              "SAVE_FAILED",
+  Require(replacementEvent.at("error").at("code").get_string() == "SAVE_FAILED",
           "open should report failure to persist the active session");
 
   const auto newProjectPath = alternateDirectory / kNewProjectFileName;
@@ -909,9 +989,9 @@ void TestProjectReadReturnsActiveDocument(
 
   const auto [status, body] = fixture.GetProject(kTestProjectUuid);
   Require(status == kHttpOk, "existing project should return HTTP 200");
-  Require(Json::parse_or_throw(body).at("uuid").get_string() ==
-              kTestProjectUuid,
-          "project response should preserve the requested UUID");
+  Require(
+      Json::parse_or_throw(body).at("uuid").get_string() == kTestProjectUuid,
+      "project response should preserve the requested UUID");
 
   const auto [missingStatus, missingBody] =
       fixture.GetProject("missing-project");
@@ -940,8 +1020,7 @@ void TestTrajectoryCollectionReturnsRevisionAndItems(
   const auto trajectories = collection.at("items").get_array();
   Require(trajectories.size() == kExpectedTrajectoryCount,
           "trajectory collection should include the active trajectories");
-  Require(trajectories.front().at("uuid").get_string() ==
-              kTestTrajectoryUuid,
+  Require(trajectories.front().at("uuid").get_string() == kTestTrajectoryUuid,
           "trajectory collection should preserve trajectory identity");
 
   const auto [missingStatus, missingBody] =
@@ -953,8 +1032,7 @@ void TestTrajectoryCollectionReturnsRevisionAndItems(
           "unknown project collection should report RESOURCE_NOT_FOUND");
 }
 
-void TestTrajectorySubresourceReads(
-    const std::filesystem::path& executable) {
+void TestTrajectorySubresourceReads(const std::filesystem::path& executable) {
   ApiTestFixture fixture{executable};
   auto events = fixture.ConnectEvents();
   Require(static_cast<bool>(events), "event WebSocket should connect");
@@ -963,9 +1041,8 @@ void TestTrajectorySubresourceReads(
       AcceptedOperationId(openStatus, openBody, "open");
   WaitForSessionOperation(events.Get(), openOperationId, "open", "succeeded");
 
-  const auto [waypointStatus, waypointBody] =
-      fixture.GetTrajectorySubresource(kTestProjectUuid, kTestTrajectoryUuid,
-                                       "waypoints");
+  const auto [waypointStatus, waypointBody] = fixture.GetTrajectorySubresource(
+      kTestProjectUuid, kTestTrajectoryUuid, "waypoints");
   Require(waypointStatus == kHttpOk,
           "waypoint collection should return HTTP 200");
   const auto waypoints =
@@ -973,9 +1050,9 @@ void TestTrajectorySubresourceReads(
   Require(waypoints.size() == kExpectedSingleItemCollectionCount,
           "waypoint collection should contain the trajectory waypoint");
   const auto [singleWaypointStatus, singleWaypointBody] =
-      fixture.GetTrajectorySubresourceItem(
-          kTestProjectUuid, kTestTrajectoryUuid, "waypoints",
-          kTestWaypointUuid);
+      fixture.GetTrajectorySubresourceItem(kTestProjectUuid,
+                                           kTestTrajectoryUuid, "waypoints",
+                                           kTestWaypointUuid);
   Require(singleWaypointStatus == kHttpOk,
           "existing waypoint should return HTTP 200");
   Require(Json::parse_or_throw(singleWaypointBody).at("uuid").get_string() ==
@@ -987,34 +1064,30 @@ void TestTrajectorySubresourceReads(
                                        "constraints");
   Require(constraintStatus == kHttpOk,
           "constraint collection should return HTTP 200");
-  Require(Json::parse_or_throw(constraintBody)
-                  .at("items")
-                  .get_array()
-                  .size() == kExpectedSingleItemCollectionCount,
+  Require(Json::parse_or_throw(constraintBody).at("items").get_array().size() ==
+              kExpectedSingleItemCollectionCount,
           "constraint collection should contain the trajectory constraint");
   const auto [singleConstraintStatus, singleConstraintBody] =
-      fixture.GetTrajectorySubresourceItem(
-          kTestProjectUuid, kTestTrajectoryUuid, "constraints",
-          kTestConstraintUuid);
+      fixture.GetTrajectorySubresourceItem(kTestProjectUuid,
+                                           kTestTrajectoryUuid, "constraints",
+                                           kTestConstraintUuid);
   Require(singleConstraintStatus == kHttpOk,
           "existing constraint should return HTTP 200");
-  Require(Json::parse_or_throw(singleConstraintBody)
-                  .at("uuid")
-                  .get_string() == kTestConstraintUuid,
+  Require(Json::parse_or_throw(singleConstraintBody).at("uuid").get_string() ==
+              kTestConstraintUuid,
           "constraint response should preserve the requested UUID");
 
-  const auto [eventStatus, eventBody] =
-      fixture.GetTrajectorySubresource(kTestProjectUuid, kTestTrajectoryUuid,
-                                       "event-markers");
+  const auto [eventStatus, eventBody] = fixture.GetTrajectorySubresource(
+      kTestProjectUuid, kTestTrajectoryUuid, "event-markers");
   Require(eventStatus == kHttpOk,
           "event-marker collection should return HTTP 200");
   Require(Json::parse_or_throw(eventBody).at("items").get_array().size() ==
               kNoEvents,
           "event-marker collection should be empty when none are configured");
   const auto [missingEventStatus, missingEventBody] =
-      fixture.GetTrajectorySubresourceItem(
-          kTestProjectUuid, kTestTrajectoryUuid, "event-markers",
-          "missing-event");
+      fixture.GetTrajectorySubresourceItem(kTestProjectUuid,
+                                           kTestTrajectoryUuid, "event-markers",
+                                           "missing-event");
   Require(missingEventStatus == kHttpNotFound,
           "unknown event marker should return HTTP 404");
   Require(Json::parse_or_throw(missingEventBody).at("code").get_string() ==
@@ -1057,11 +1130,8 @@ void TestSaveRestoresPersistedProjectFiles(
           "save should restore the trajectory document");
 }
 
-void TestGenerationPublishesStatusAndSavesOutput(
-    const std::filesystem::path& executable) {
-  ApiTestFixture fixture{executable};
-  auto events = fixture.ConnectEvents();
-  Require(static_cast<bool>(events), "event WebSocket should connect");
+std::uint64_t GenerateOutput(ApiTestFixture& fixture,
+                             const SocketHandle& events) {
   const auto [openStatus, openBody] = fixture.OpenPicker();
   const auto openOperationId =
       AcceptedOperationId(openStatus, openBody, "open");
@@ -1115,7 +1185,24 @@ void TestGenerationPublishesStatusAndSavesOutput(
   Require(receivedProgress,
           "generator diagnostic should be forwarded as a progress event");
   Require(receivedSuccess, "generation should publish its successful result");
+  Require(!Json::parse_or_throw(ReadFileContents(fixture.TrajectoryPath()))
+               .at("output")
+               .is_null(),
+          "generation should persist output before publishing success");
+  const auto [generatedSnapshotStatus, generatedSnapshotBody] =
+      fixture.Snapshot();
+  Require(generatedSnapshotStatus == kHttpOk,
+          "generated snapshot should return HTTP 200");
+  return static_cast<std::uint64_t>(
+      Json::parse_or_throw(generatedSnapshotBody).at("revision").get_number());
+}
 
+void TestGenerationPublishesStatusAndSavesOutput(
+    const std::filesystem::path& executable) {
+  ApiTestFixture fixture{executable};
+  auto events = fixture.ConnectEvents();
+  Require(static_cast<bool>(events), "event WebSocket should connect");
+  GenerateOutput(fixture, events);
   const auto [saveStatus, saveBody] = fixture.Save();
   const auto saveOperationId =
       AcceptedOperationId(saveStatus, saveBody, "save");
@@ -1126,12 +1213,114 @@ void TestGenerationPublishesStatusAndSavesOutput(
           "saved trajectory should contain generated output");
 }
 
+void TestHistoryAndPersistenceLifecycle(
+    const std::filesystem::path& executable) {
+  ApiTestFixture fixture{executable};
+  auto events = fixture.ConnectEvents();
+  Require(static_cast<bool>(events), "event WebSocket should connect");
+  const auto generatedRevision = GenerateOutput(fixture, events);
+
+  const auto [undoStatus, undoBody] =
+      fixture.HistoryAction("undo", generatedRevision, kUndoIdempotencyKey);
+  Require(undoStatus == kHttpOk, "undo should return HTTP 200");
+  const auto undoResult = Json::parse_or_throw(undoBody);
+  Require(undoResult.at("requestId").get_string() == kUndoIdempotencyKey,
+          "undo should return its idempotency key as request ID");
+  const auto undoRevision =
+      static_cast<std::uint64_t>(undoResult.at("revision").get_number());
+  const auto [undoneSnapshotStatus, undoneSnapshotBody] = fixture.Snapshot();
+  Require(undoneSnapshotStatus == kHttpOk,
+          "snapshot should be available after undo");
+  Require(Json::parse_or_throw(undoneSnapshotBody)
+              .at("trajectories")
+              .get_array()
+              .front()
+              .at("output")
+              .is_null(),
+          "undo should remove generated output");
+  Require(Json::parse_or_throw(ReadFileContents(fixture.TrajectoryPath()))
+              .at("output")
+              .is_null(),
+          "undo should persist the document before acknowledging");
+
+  const auto [retryStatus, retryBody] =
+      fixture.HistoryAction("undo", generatedRevision, kUndoIdempotencyKey);
+  Require(retryStatus == undoStatus && retryBody == undoBody,
+          "retrying undo with the same key should replay the original result");
+  const auto [staleUndoStatus, staleUndoBody] = fixture.HistoryAction(
+      "undo", generatedRevision, kStaleUndoIdempotencyKey);
+  Require(staleUndoStatus == kHttpConflict,
+          "undo with a stale revision should return HTTP 409");
+  Require(Json::parse_or_throw(staleUndoBody).at("code").get_string() ==
+              "REVISION_CONFLICT",
+          "stale undo should report REVISION_CONFLICT");
+  const auto [reusedKeyStatus, reusedKeyBody] =
+      fixture.HistoryAction("redo", undoRevision, kUndoIdempotencyKey);
+  Require(reusedKeyStatus == kHttpConflict,
+          "reusing an undo key for redo should return HTTP 409");
+  Require(Json::parse_or_throw(reusedKeyBody).at("code").get_string() ==
+              "IDEMPOTENCY_KEY_REUSE",
+          "cross-operation key reuse should be rejected");
+
+  const auto [redoStatus, redoBody] =
+      fixture.HistoryAction("redo", undoRevision, kRedoIdempotencyKey);
+  Require(redoStatus == kHttpOk, "redo should return HTTP 200");
+  const auto redoResult = Json::parse_or_throw(redoBody);
+  const auto redoRevision =
+      static_cast<std::uint64_t>(redoResult.at("revision").get_number());
+  const auto [redoneSnapshotStatus, redoneSnapshotBody] = fixture.Snapshot();
+  Require(redoneSnapshotStatus == kHttpOk,
+          "snapshot should be available after redo");
+  Require(!Json::parse_or_throw(redoneSnapshotBody)
+               .at("trajectories")
+               .get_array()
+               .front()
+               .at("output")
+               .is_null(),
+          "redo should restore generated output");
+  Require(Json::parse_or_throw(ReadFileContents(fixture.TrajectoryPath()))
+              .at("output")
+              .is_object(),
+          "redo should persist restored output before acknowledging");
+
+  std::filesystem::remove(fixture.ProjectPath());
+  std::filesystem::create_directory(fixture.ProjectPath());
+  const auto [failedUndoStatus, failedUndoBody] =
+      fixture.HistoryAction("undo", redoRevision, kFailedUndoIdempotencyKey);
+  Require(failedUndoStatus == 500,
+          "undo should fail when persistence cannot write the project file");
+  Require(Json::parse_or_throw(failedUndoBody).at("code").get_string() ==
+              "SAVE_FAILED",
+          "persistence failure should report SAVE_FAILED");
+  Require(Json::parse_or_throw(fixture.Snapshot().second)
+              .at("trajectories")
+              .get_array()
+              .front()
+              .at("output")
+              .is_object(),
+          "failed undo must not publish the unpersisted document");
+
+  std::filesystem::remove(fixture.ProjectPath());
+  const auto [recoverySaveStatus, recoverySaveBody] = fixture.Save();
+  const auto recoverySaveOperationId =
+      AcceptedOperationId(recoverySaveStatus, recoverySaveBody, "save");
+  WaitForSessionOperation(events.Get(), recoverySaveOperationId, "save",
+                          "succeeded");
+  Require(Json::parse_or_throw(fixture.Snapshot().second)
+              .at("trajectories")
+              .get_array()
+              .front()
+              .at("output")
+              .is_null(),
+          "successful save should publish the pending undo and unblock edits");
+}
+
 struct TestCase {
   std::string_view name;
   void (*run)(const std::filesystem::path&);
 };
 
-constexpr std::array<TestCase, 13> kTestCases{{
+constexpr std::array<TestCase, 14> kTestCases{{
     {"picker open loads project snapshot", TestPickerOpenLoadsProjectSnapshot},
     {"picker cancellation leaves session closed",
      TestPickerCancellationLeavesSessionClosed},
@@ -1145,7 +1334,8 @@ constexpr std::array<TestCase, 13> kTestCases{{
      TestSessionReplacementRetainsActiveSessionWhenSaveFails},
     {"trajectory read returns document and rejects unknown IDs",
      TestTrajectoryReadReturnsDocumentAndRejectsUnknownIds},
-    {"project read returns active document", TestProjectReadReturnsActiveDocument},
+    {"project read returns active document",
+     TestProjectReadReturnsActiveDocument},
     {"trajectory collection returns revision and items",
      TestTrajectoryCollectionReturnsRevisionAndItems},
     {"trajectory subresource reads", TestTrajectorySubresourceReads},
@@ -1153,6 +1343,7 @@ constexpr std::array<TestCase, 13> kTestCases{{
      TestSaveRestoresPersistedProjectFiles},
     {"generation publishes status and saves output",
      TestGenerationPublishesStatusAndSavesOutput},
+    {"history and persistence lifecycle", TestHistoryAndPersistenceLifecycle},
 }};
 
 }  // namespace
