@@ -585,6 +585,26 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
+  const std::string ellipseRotationExpression =
+      "Ellipse2d(Pose2d(0 m, 0 m, 0 rad), 2 m, 1 m)"
+      ".TransformBy(Transform2d(0 m, 0 m, 45 deg))";
+  const auto ellipseRotationAnalysis = evaluation::GetGeometryDragControls(
+      MakeTestProject(), ellipseRotationExpression,
+      evaluation::DragGeometryType::Ellipse2d);
+  const auto rotationToken = ellipseRotationExpression.find("45 deg");
+  const auto rotationControl = std::find_if(
+      ellipseRotationAnalysis.controls.begin(),
+      ellipseRotationAnalysis.controls.end(),
+      [&](const auto& control) { return control.start == rotationToken; });
+  if (rotationControl == ellipseRotationAnalysis.controls.end() ||
+      !rotationControl->rigidMotion ||
+      std::abs(rotationControl->motionDheading - std::acos(-1.0) / 180.0) >
+          1e-5 ||
+      std::abs(rotationControl->pivotX) > 1e-5 ||
+      std::abs(rotationControl->pivotY) > 1e-5) {
+    return EXIT_FAILURE;
+  }
+
   const std::string rectangleExpression =
       "Rectangle2d(Pose2d(2 m, 3 m, 0 rad), 4 m, 2 m)";
   const auto rectangleAnalysis = evaluation::GetGeometryDragControls(

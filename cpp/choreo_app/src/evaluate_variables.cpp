@@ -769,6 +769,8 @@ GeometryDragAnalysis GetGeometryDragControls(const Project& project,
                          2 * std::acos(-1.0)) *
           scale;
       std::vector<GeometryDragEffect> effects;
+      std::vector<GeometryFeaturePoint> positions;
+      std::vector<GeometryFeaturePoint> velocities;
       const auto plusPaths = evaluatePaths(replace(token.value + step));
       const auto minusPaths = evaluatePaths(replace(token.value - step));
       if (plusPaths.size() != analysis.paths.size() ||
@@ -778,6 +780,9 @@ GeometryDragAnalysis GetGeometryDragControls(const Project& project,
       bool compatiblePaths = true;
       for (std::size_t pathIndex = 0; pathIndex < analysis.paths.size();
            ++pathIndex) {
+        if (!compatiblePaths) {
+          break;
+        }
         const auto& basePath = analysis.paths[pathIndex];
         const auto& plusPath = plusPaths[pathIndex];
         const auto& minusPath = minusPaths[pathIndex];
@@ -793,8 +798,14 @@ GeometryDragAnalysis GetGeometryDragControls(const Project& project,
               (plusPath[pointIndex].x - minusPath[pointIndex].x) * scale;
           const double effectY =
               (plusPath[pointIndex].y - minusPath[pointIndex].y) * scale;
-          if (std::isfinite(effectX) && std::isfinite(effectY) &&
-              (std::abs(effectX) >= 1e-10 || std::abs(effectY) >= 1e-10)) {
+          if (!std::isfinite(effectX) || !std::isfinite(effectY)) {
+            effects.clear();
+            compatiblePaths = false;
+            break;
+          }
+          positions.push_back(basePath[pointIndex]);
+          velocities.push_back({effectX, effectY});
+          if (std::abs(effectX) >= 1e-10 || std::abs(effectY) >= 1e-10) {
             effects.push_back({pathIndex, pointIndex, effectX, effectY});
           }
         }
@@ -802,9 +813,75 @@ GeometryDragAnalysis GetGeometryDragControls(const Project& project,
       if (!compatiblePaths || effects.empty()) {
         continue;
       }
-      controls.push_back({token.start, token.end, token.value, dx, dy, dheading,
-                          segmentDx, segmentDy, segmentDheading, chainIndex,
-                          anchor.startX, anchor.startY, anchor.startHeading,
+      double meanX = 0;
+      double meanY = 0;
+      double meanDx = 0;
+      double meanDy = 0;
+      for (std::size_t index = 0; index < positions.size(); ++index) {
+        meanX += positions[index].x;
+        meanY += positions[index].y;
+        meanDx += velocities[index].x;
+        meanDy += velocities[index].y;
+      }
+      const double pointCount = static_cast<double>(positions.size());
+      meanX /= pointCount;
+      meanY /= pointCount;
+      meanDx /= pointCount;
+      meanDy /= pointCount;
+      double angularNumerator = 0;
+      double spatialVariance = 0;
+      for (std::size_t index = 0; index < positions.size(); ++index) {
+        const double offsetX = positions[index].x - meanX;
+        const double offsetY = positions[index].y - meanY;
+        const double velocityX = velocities[index].x - meanDx;
+        const double velocityY = velocities[index].y - meanDy;
+        angularNumerator += offsetX * velocityY - offsetY * velocityX;
+        spatialVariance += offsetX * offsetX + offsetY * offsetY;
+      }
+      const double motionDheading =
+          spatialVariance > 1e-12 ? angularNumerator / spatialVariance : 0;
+      double residualSquared = 0;
+      double velocitySquared = 0;
+      for (std::size_t index = 0; index < positions.size(); ++index) {
+        const double offsetX = positions[index].x - meanX;
+        const double offsetY = positions[index].y - meanY;
+        const double expectedX = meanDx - motionDheading * offsetY;
+        const double expectedY = meanDy + motionDheading * offsetX;
+        const double errorX = velocities[index].x - expectedX;
+        const double errorY = velocities[index].y - expectedY;
+        residualSquared += errorX * errorX + errorY * errorY;
+        velocitySquared += velocities[index].x * velocities[index].x +
+                           velocities[index].y * velocities[index].y;
+      }
+      const double residual = std::sqrt(residualSquared / pointCount);
+      const double averageVelocity = std::sqrt(velocitySquared / pointCount);
+      const bool rigidMotion =
+          residual <= 1e-6 + 1e-5 * std::max(1.0, averageVelocity);
+      const double pivotX = std::abs(motionDheading) > 1e-10
+                                ? meanX - meanDy / motionDheading
+                                : meanX;
+      const double pivotY = std::abs(motionDheading) > 1e-10
+                                ? meanY + meanDx / motionDheading
+                                : meanY;
+      controls.push_back({token.start,
+                          token.end,
+                          token.value,
+                          dx,
+                          dy,
+                          dheading,
+                          segmentDx,
+                          segmentDy,
+                          segmentDheading,
+                          chainIndex,
+                          anchor.startX,
+                          anchor.startY,
+                          anchor.startHeading,
+                          rigidMotion,
+                          meanDx,
+                          meanDy,
+                          motionDheading,
+                          pivotX,
+                          pivotY,
                           std::move(effects)});
     } catch (const std::exception&) {
     }

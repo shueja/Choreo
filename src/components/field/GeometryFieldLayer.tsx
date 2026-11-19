@@ -22,6 +22,7 @@ interface ActiveDrag {
   id: string;
   pointerId: number;
   expression: string;
+  type: ServerVariable["type"];
   control: GeometryDragControl;
   effect: GeometryDragEffect;
   pointerStart: { x: number; y: number };
@@ -32,8 +33,55 @@ interface ActiveDrag {
 function movedPaths(
   paths: GeometryFeaturePoint[][],
   control: GeometryDragControl,
-  delta: number
+  delta: number,
+  type: ServerVariable["type"]
 ): GeometryFeaturePoint[][] {
+  if (type === "Twist2d" && Math.abs(control.dheading) > 1e-10) {
+    const angle = control.dheading * delta;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    return paths.map((path, pathIndex) =>
+      path.map((point, pointIndex) => {
+        if (pathIndex === 1 && pointIndex === 1) {
+          return {
+            x: cosine * point.x - sine * point.y,
+            y: sine * point.x + cosine * point.y
+          };
+        }
+        const effect = control.effects.find(
+          (entry) =>
+            entry.pathIndex === pathIndex &&
+            entry.pointIndex === pointIndex
+        );
+        return effect
+          ? { x: point.x + effect.dx * delta, y: point.y + effect.dy * delta }
+          : point;
+      })
+    );
+  }
+  if (control.rigidMotion) {
+    const angle = control.motionDheading * delta;
+    if (Math.abs(angle) < 1e-10) {
+      return paths.map((path) =>
+        path.map((point) => ({
+          x: point.x + control.motionDx * delta,
+          y: point.y + control.motionDy * delta
+        }))
+      );
+    }
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    return paths.map((path) =>
+      path.map((point) => {
+        const x = point.x - control.pivotX;
+        const y = point.y - control.pivotY;
+        return {
+          x: control.pivotX + cosine * x - sine * y,
+          y: control.pivotY + sine * x + cosine * y
+        };
+      })
+    );
+  }
   return paths.map((path, pathIndex) =>
     path.map((point, pointIndex) => {
       const effect = control.effects.find(
@@ -103,7 +151,12 @@ export default function GeometryFieldLayer({
     drag.candidateExpression = candidateExpression;
     setPreview({
       id: drag.id,
-      paths: movedPaths(drag.paths, drag.control, parameterDelta)
+      paths: movedPaths(
+        drag.paths,
+        drag.control,
+        parameterDelta,
+        drag.type
+      )
     });
   }
 
@@ -232,6 +285,7 @@ export default function GeometryFieldLayer({
                         id,
                         pointerId: event.pointerId,
                         expression: variable.expression,
+                        type: variable.type,
                         control,
                         effect,
                         pointerStart: pointer,

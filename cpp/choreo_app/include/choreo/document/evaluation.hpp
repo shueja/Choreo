@@ -55,6 +55,12 @@ struct GeometryDragControl {
   double anchorX;
   double anchorY;
   double anchorHeading;
+  bool rigidMotion;
+  double motionDx;
+  double motionDy;
+  double motionDheading;
+  double pivotX;
+  double pivotY;
   std::vector<GeometryDragEffect> effects;
 };
 

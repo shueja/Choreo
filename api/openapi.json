@@ -1685,6 +1685,12 @@
                 "anchorX": { "type": "number" },
                 "anchorY": { "type": "number" },
                 "anchorHeading": { "type": "number" },
+                "rigidMotion": { "type": "boolean" },
+                "motionDx": { "type": "number" },
+                "motionDy": { "type": "number" },
+                "motionDheading": { "type": "number" },
+                "pivotX": { "type": "number" },
+                "pivotY": { "type": "number" },
                 "effects": {
                   "type": "array",
                   "items": {
@@ -1714,6 +1720,12 @@
                 "anchorX",
                 "anchorY",
                 "anchorHeading",
+                "rigidMotion",
+                "motionDx",
+                "motionDy",
+                "motionDheading",
+                "pivotX",
+                "pivotY",
                 "effects"
               ],
               "additionalProperties": false

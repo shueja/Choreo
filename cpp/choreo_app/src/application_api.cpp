@@ -1433,8 +1433,11 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             "segmentDx", control.segmentDx, "segmentDy", control.segmentDy,
             "segmentDheading", control.segmentDheading, "chainIndex",
             control.chainIndex, "anchorX", control.anchorX, "anchorY",
-            control.anchorY, "anchorHeading", control.anchorHeading, "effects",
-            std::move(effects)));
+            control.anchorY, "anchorHeading", control.anchorHeading,
+            "rigidMotion", control.rigidMotion, "motionDx", control.motionDx,
+            "motionDy", control.motionDy, "motionDheading",
+            control.motionDheading, "pivotX", control.pivotX, "pivotY",
+            control.pivotY, "effects", std::move(effects)));
       }
       std::vector<Json> serializedChain;
       serializedChain.reserve(analysis.chain.size());

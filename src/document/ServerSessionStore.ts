@@ -59,6 +59,12 @@ export interface GeometryDragControl {
   anchorX: number;
   anchorY: number;
   anchorHeading: number;
+  rigidMotion: boolean;
+  motionDx: number;
+  motionDy: number;
+  motionDheading: number;
+  pivotX: number;
+  pivotY: number;
   effects: GeometryDragEffect[];
 }
 
