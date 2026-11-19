@@ -5,7 +5,7 @@ import {
   type SwerveSample,
   Output,
   RobotConfig
-} from "../schema/DocumentTypes";
+} from "@choreo/document";
 import { Env } from "../DocumentManager";
 import { Commands } from "../tauriCommands";
 

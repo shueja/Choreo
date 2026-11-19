@@ -5,7 +5,7 @@ import {
   Project,
   RobotConfig,
   Trajectory
-} from "./schema/DocumentTypes";
+} from "@choreo/document";
 import { OpenFilePayload } from "./DocumentManager";
 export type ChoreoError = { type: string; content: string };
 export type ChoreoResult<T> = T | ChoreoError;

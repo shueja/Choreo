@@ -1,5 +1,8 @@
 import { types, getEnv, Instance } from "mobx-state-tree";
-import { DifferentialSample, type SwerveSample } from "../schema/DocumentTypes";
+import {
+  DifferentialSample,
+  type SwerveSample
+} from "@choreo/document";
 import { Env } from "../DocumentManager";
 import { SavingState } from "../UIStateStore";
 

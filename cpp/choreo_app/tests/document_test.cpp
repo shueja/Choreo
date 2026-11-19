@@ -1,10 +1,15 @@
 #include "choreo/document/document.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <string>
+#include <string_view>
 #include <type_traits>
+#include <utility>
 
 #include <wpilib-expression/expression.hpp>
 
@@ -13,17 +18,123 @@
 #include "choreo/document/history.hpp"
 #include "document_test_fixture.hpp"
 
-
-
 template <typename ExpressionType>
-bool CheckDimension(wpilib::expression::EvaluationContext& context,
-                    const char* source, double expected) {
+bool EvaluatesTo(wpilib::expression::EvaluationContext& context,
+                 std::string_view source, double expected,
+                 double tolerance = 1e-10) {
   using Dimension = typename ExpressionType::DimensionType;
   const auto measurement = context.Evaluate(
       source, choreo::document::evaluation::RuntimeDimension<Dimension>::unit);
   const auto value =
       choreo::document::evaluation::FromMeasurement<Dimension>(measurement);
-  return value && std::abs(value->value() - expected) < 1e-10;
+  if (!value || std::abs(value->value() - expected) > tolerance) {
+    std::cerr << "Expression '" << source << "' did not evaluate to "
+              << expected << '\n';
+    return false;
+  }
+  return true;
+}
+
+bool TestTransformChainDragControls() {
+  using namespace choreo::document;
+  const std::string expression =
+      "Pose2d(0 m, 0 m, 0 rad)"
+      ".TransformBy(Transform2d(1 m, 0 m, 90 deg))"
+      ".TransformBy(Transform2d(2 m, 0 m, 0 deg))";
+  wpilib::expression::EvaluationContext context;
+  if (!EvaluatesTo<decltype(RobotConfig{}.radius)>(context, expression + ".X()",
+                                                   1.0) ||
+      !EvaluatesTo<decltype(RobotConfig{}.radius)>(context, expression + ".Y()",
+                                                   2.0)) {
+    return false;
+  }
+  const auto analysis = evaluation::GetGeometryDragControls(
+      MakeTestProject(), expression, evaluation::DragGeometryType::Pose2d);
+  const auto token = expression.find("2 m, 0 m, 0 deg");
+  const auto control = std::find_if(
+      analysis.controls.begin(), analysis.controls.end(),
+      [&](const auto& candidate) { return candidate.start == token; });
+  return analysis.chain.size() == 3 &&
+         std::abs(analysis.chain[1].endX - 1.0) <= 1e-5 &&
+         std::abs(analysis.chain[1].endY) <= 1e-5 &&
+         std::abs(analysis.chain[2].endX - 1.0) <= 1e-5 &&
+         std::abs(analysis.chain[2].endY - 2.0) <= 1e-5 &&
+         control != analysis.controls.end() && control->chainIndex == 2 &&
+         std::abs(control->anchorX - 1.0) <= 1e-5 &&
+         std::abs(control->anchorY) <= 1e-5 && std::abs(control->dx) <= 1e-5 &&
+         std::abs(control->dy - 1.0) <= 1e-5 &&
+         std::abs(control->segmentDx - 1.0) <= 1e-5 &&
+         std::abs(control->segmentDy) <= 1e-5;
+}
+
+bool TestEllipseRotationRigidMotion() {
+  using namespace choreo::document;
+  const std::string expression =
+      "Ellipse2d(Pose2d(0 m, 0 m, 0 rad), 2 m, 1 m)"
+      ".TransformBy(Transform2d(0 m, 0 m, 45 deg))";
+  wpilib::expression::EvaluationContext context;
+  if (!EvaluatesTo<decltype(HeadingConstraint{}.tolerance)>(
+          context, expression + ".Rotation().Radians()",
+          std::acos(-1.0) / 4.0)) {
+    return false;
+  }
+  const auto analysis = evaluation::GetGeometryDragControls(
+      MakeTestProject(), expression, evaluation::DragGeometryType::Ellipse2d);
+  const auto token = expression.find("45 deg");
+  const auto control = std::find_if(
+      analysis.controls.begin(), analysis.controls.end(),
+      [&](const auto& candidate) { return candidate.start == token; });
+  return !analysis.paths.empty() && analysis.paths.front().size() > 2 &&
+         control != analysis.controls.end() && control->rigidMotion &&
+         std::abs(control->motionDheading - std::acos(-1.0) / 180.0) <= 1e-5 &&
+         std::abs(control->pivotX) <= 1e-5 && std::abs(control->pivotY) <= 1e-5;
+}
+
+bool TestRectangleWidthDragControl() {
+  using namespace choreo::document;
+  const std::string expression =
+      "Rectangle2d(Pose2d(2 m, 3 m, 0 rad), 4 m, 2 m)";
+  const auto analysis = evaluation::GetGeometryDragControls(
+      MakeTestProject(), expression, evaluation::DragGeometryType::Rectangle2d);
+  const auto token = expression.find("4 m");
+  const auto control = std::find_if(
+      analysis.controls.begin(), analysis.controls.end(),
+      [&](const auto& candidate) { return candidate.start == token; });
+  return analysis.paths.size() == 1 && analysis.paths.front().size() == 5 &&
+         control != analysis.controls.end() && !control->effects.empty();
+}
+
+bool TestPolygonVertexDragControls() {
+  using namespace choreo::document;
+  const std::string expression =
+      "[Translation2d(0 m, 0 m), Translation2d(2 m, 0 m), "
+      "Translation2d(0 m, 2 m)]";
+  const auto analysis = evaluation::GetGeometryDragControls(
+      MakeTestProject(), expression, evaluation::DragGeometryType::Polygon2d);
+  return analysis.paths.size() == 1 && analysis.paths.front().size() == 4 &&
+         !analysis.controls.empty();
+}
+
+bool TestAdditionalGeometryDragControls() {
+  using namespace choreo::document;
+  const std::array<std::pair<std::string, evaluation::DragGeometryType>, 3>
+      expressions{{
+          {"Rotation2d(45 deg)", evaluation::DragGeometryType::Rotation2d},
+          {"Transform2d(2 m, 1 m, 45 deg)",
+           evaluation::DragGeometryType::Transform2d},
+          {"Twist2d(2 m, 1 m, 45 deg)", evaluation::DragGeometryType::Twist2d},
+      }};
+  for (const auto& [expression, type] : expressions) {
+    const auto analysis = evaluation::GetGeometryDragControls(MakeTestProject(),
+                                                              expression, type);
+    if (analysis.paths.empty() || analysis.paths.front().size() < 2 ||
+        analysis.controls.empty()) {
+      std::cerr << "Expected drag controls for expression '" << expression
+                << "'\n";
+      return false;
+    }
+  }
+  return true;
 }
 
 int main(int argc, char** argv) {
@@ -72,28 +183,22 @@ int main(int argc, char** argv) {
           evaluation::RuntimeDimension<dimension::Length>::unit})) {
     return EXIT_FAILURE;
   }
-  if (!CheckDimension<decltype(MotorConfig{}.stallTorque)>(context, "3 N*m",
-                                                           3.0) ||
-      !CheckDimension<decltype(MotorConfig{}.kT)>(context, "0.018 N*m/A",
-                                                  0.018) ||
-      !CheckDimension<decltype(MotorConfig{}.kV)>(context, "0.02 V*s/rad",
-                                                  0.02) ||
-      !CheckDimension<decltype(MotorConfig{}.supplyLimit)>(context, "40 A",
-                                                           40.0) ||
-      !CheckDimension<decltype(RobotConfig{}.mass)>(context, "5 kg", 5.0) ||
-      !CheckDimension<decltype(RobotConfig{}.inertia)>(context, "3 kg*m^2",
-                                                       3.0) ||
-      !CheckDimension<decltype(RobotConfig{}.gearing)>(context, "6.5", 6.5) ||
-      !CheckDimension<decltype(MaxLinearVelocity{}.max)>(context, "3 m/s",
-                                                         3.0) ||
-      !CheckDimension<decltype(MaxAngularVelocity{}.max)>(context, "2 rad/s",
-                                                          2.0) ||
-      !CheckDimension<decltype(HeadingConstraint{}.tolerance)>(
+  if (!EvaluatesTo<decltype(MotorConfig{}.stallTorque)>(context, "3 N*m",
+                                                        3.0) ||
+      !EvaluatesTo<decltype(MotorConfig{}.kT)>(context, "0.018 N*m/A", 0.018) ||
+      !EvaluatesTo<decltype(MotorConfig{}.kV)>(context, "0.02 V*s/rad", 0.02) ||
+      !EvaluatesTo<decltype(MotorConfig{}.supplyLimit)>(context, "40 A",
+                                                        40.0) ||
+      !EvaluatesTo<decltype(RobotConfig{}.mass)>(context, "5 kg", 5.0) ||
+      !EvaluatesTo<decltype(RobotConfig{}.inertia)>(context, "3 kg*m^2", 3.0) ||
+      !EvaluatesTo<decltype(RobotConfig{}.gearing)>(context, "6.5", 6.5) ||
+      !EvaluatesTo<decltype(MaxLinearVelocity{}.max)>(context, "3 m/s", 3.0) ||
+      !EvaluatesTo<decltype(MaxAngularVelocity{}.max)>(context, "2 rad/s",
+                                                       2.0) ||
+      !EvaluatesTo<decltype(HeadingConstraint{}.tolerance)>(
           context, "90 deg", 1.5707963267948966) ||
-      !CheckDimension<decltype(Parameters{}.targetDt)>(context, "20 ms",
-                                                       0.02) ||
-      !CheckDimension<decltype(EventMarkerData{}.offset)>(context, "1 s",
-                                                          1.0)) {
+      !EvaluatesTo<decltype(Parameters{}.targetDt)>(context, "20 ms", 0.02) ||
+      !EvaluatesTo<decltype(EventMarkerData{}.offset)>(context, "1 s", 1.0)) {
     return EXIT_FAILURE;
   }
 
@@ -550,5 +655,12 @@ int main(int argc, char** argv) {
   if (noHistory.CanUndo() || noHistory.Undo()) {
     return EXIT_FAILURE;
   }
+
+  if (!TestTransformChainDragControls() || !TestEllipseRotationRigidMotion() ||
+      !TestRectangleWidthDragControl() || !TestPolygonVertexDragControls() ||
+      !TestAdditionalGeometryDragControls()) {
+    return EXIT_FAILURE;
+  }
+
   return EXIT_SUCCESS;
 }

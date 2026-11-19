@@ -1,10 +1,14 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
+#include <vector>
 
 #include <units/units.hpp>
 
@@ -13,6 +17,67 @@
 #include "choreo/document/store.hpp"
 
 namespace choreo::document::evaluation {
+
+enum class DragGeometryType {
+  Pose2d,
+  Translation2d,
+  Polygon2d,
+  Rotation2d,
+  Transform2d,
+  Twist2d,
+  Rectangle2d,
+  Ellipse2d
+};
+
+struct GeometryFeaturePoint {
+  double x;
+  double y;
+};
+
+struct GeometryDragEffect {
+  std::size_t pathIndex;
+  std::size_t pointIndex;
+  double dx;
+  double dy;
+};
+
+struct GeometryDragControl {
+  std::size_t start;
+  std::size_t end;
+  double value;
+  double dx;
+  double dy;
+  double dheading;
+  double segmentDx;
+  double segmentDy;
+  double segmentDheading;
+  std::size_t chainIndex;
+  double anchorX;
+  double anchorY;
+  double anchorHeading;
+  bool rigidMotion;
+  double motionDx;
+  double motionDy;
+  double motionDheading;
+  double pivotX;
+  double pivotY;
+  std::vector<GeometryDragEffect> effects;
+};
+
+struct GeometryChainLink {
+  double startX;
+  double startY;
+  double startHeading;
+  double endX;
+  double endY;
+  double endHeading;
+};
+
+struct GeometryDragAnalysis {
+  std::vector<GeometryDragControl> controls;
+  std::vector<GeometryChainLink> chain;
+  std::vector<std::vector<GeometryFeaturePoint>> paths;
+};
 
 class EvaluationError : public std::invalid_argument {
  public:
@@ -30,6 +95,9 @@ class EvaluationError : public std::invalid_argument {
 
 Project EvaluateVariables(const Project& project);
 Document EvaluateDocument(const Document& document);
+GeometryDragAnalysis GetGeometryDragControls(const Project& project,
+                                             std::string_view expression,
+                                             DragGeometryType type);
 Document RenameVariable(const Document& document, const std::string& id,
                         const std::string& newName);
 

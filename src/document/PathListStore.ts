@@ -1,5 +1,5 @@
 import { Instance, getEnv, types } from "mobx-state-tree";
-import { Trajectory } from "./schema/DocumentTypes";
+import { Trajectory } from "@choreo/document";
 import { Env } from "./DocumentManager";
 import {
   HolonomicPathStore,

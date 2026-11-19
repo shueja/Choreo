@@ -1,7 +1,13 @@
+#include <algorithm>
+#include <charconv>
+#include <cctype>
 #include <cmath>
+#include <iterator>
+#include <limits>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -362,4 +368,524 @@ Document EvaluateDocument(const Document& document) {
   return result;
 }
 
+GeometryDragAnalysis GetGeometryDragControls(const Project& project,
+                                             std::string_view expression,
+                                             DragGeometryType type) {
+  struct NumericToken {
+    std::size_t start;
+    std::size_t end;
+    double value;
+  };
+  struct GeometryValue {
+    double x;
+    double y;
+    double heading;
+  };
+  struct TransformCall {
+    std::size_t methodStart;
+    std::size_t argumentsStart;
+    std::size_t end;
+    GeometryValue start;
+    GeometryValue finish;
+  };
+
+  auto isWordCharacter = [](char character) {
+    return (character >= 'A' && character <= 'Z') ||
+           (character >= 'a' && character <= 'z') ||
+           (character >= '0' && character <= '9') || character == '_';
+  };
+  std::vector<NumericToken> tokens;
+  for (std::size_t index = 0; index < expression.size();) {
+    const char character = expression[index];
+    if ((!std::isdigit(static_cast<unsigned char>(character)) &&
+         (character != '.' || index + 1 >= expression.size() ||
+          !std::isdigit(static_cast<unsigned char>(expression[index + 1])))) ||
+        (index > 0 && (isWordCharacter(expression[index - 1]) ||
+                       expression[index - 1] == '.'))) {
+      ++index;
+      continue;
+    }
+
+    double value = 0;
+    const auto parsed =
+        std::from_chars(expression.data() + index,
+                        expression.data() + expression.size(), value);
+    if (parsed.ec != std::errc{} || parsed.ptr == expression.data() + index) {
+      ++index;
+      continue;
+    }
+    const auto end = static_cast<std::size_t>(parsed.ptr - expression.data());
+    tokens.push_back({index, end, value});
+    index = end;
+  }
+
+  GeometryDragAnalysis analysis;
+  auto evaluated = BuildVariables(project);
+  auto evaluate = [&](std::string_view source) -> GeometryValue {
+    switch (type) {
+      case DragGeometryType::Pose2d: {
+        const auto value = evaluated.context.EvaluatePose2d(source);
+        return {value.X().value(), value.Y().value(),
+                value.Rotation().Radians().value()};
+      }
+      case DragGeometryType::Translation2d: {
+        const auto value = evaluated.context.EvaluateTranslation2d(source);
+        return {value.X().value(), value.Y().value(), 0};
+      }
+      case DragGeometryType::Polygon2d: {
+        const auto value = evaluated.context.EvaluatePolygon2d(source);
+        double x = 0;
+        double y = 0;
+        for (std::size_t index = 0; index < value.Size(); ++index) {
+          x += value.At(index).X().value();
+          y += value.At(index).Y().value();
+        }
+        if (value.Size() == 0) {
+          return {0, 0, 0};
+        }
+        const double count = static_cast<double>(value.Size());
+        return {x / count, y / count, 0};
+      }
+      case DragGeometryType::Rotation2d: {
+        const auto value = evaluated.context.EvaluateRotation2d(source);
+        return {0, 0, value.Radians().value()};
+      }
+      case DragGeometryType::Transform2d: {
+        const auto value = evaluated.context.EvaluateTransform2d(source);
+        return {value.X().value(), value.Y().value(),
+                value.Rotation().Radians().value()};
+      }
+      case DragGeometryType::Twist2d: {
+        const auto value = evaluated.context.EvaluateTwist2d(source);
+        return {value.dx.value(), value.dy.value(), value.dtheta.value()};
+      }
+      case DragGeometryType::Rectangle2d: {
+        const auto value = evaluated.context.EvaluateRectangle2d(source);
+        return {value.Center().X().value(), value.Center().Y().value(),
+                value.Rotation().Radians().value()};
+      }
+      case DragGeometryType::Ellipse2d: {
+        const auto value = evaluated.context.EvaluateEllipse2d(source);
+        return {value.Center().X().value(), value.Center().Y().value(),
+                value.Rotation().Radians().value()};
+      }
+    }
+    throw std::invalid_argument("unsupported geometry type");
+  };
+  auto evaluatePaths = [&](std::string_view source) {
+    using Point = GeometryFeaturePoint;
+    constexpr double kHandleLength = 0.8;
+    std::vector<std::vector<Point>> paths;
+    auto addHeading = [&](double x, double y, double heading) {
+      paths.push_back({{x, y},
+                       {x + kHandleLength * std::cos(heading),
+                        y + kHandleLength * std::sin(heading)}});
+    };
+    switch (type) {
+      case DragGeometryType::Pose2d: {
+        const auto value = evaluated.context.EvaluatePose2d(source);
+        const double x = value.X().value();
+        const double y = value.Y().value();
+        paths.push_back({{x, y}});
+        addHeading(x, y, value.Rotation().Radians().value());
+        break;
+      }
+      case DragGeometryType::Translation2d: {
+        const auto value = evaluated.context.EvaluateTranslation2d(source);
+        paths.push_back({{value.X().value(), value.Y().value()}});
+        break;
+      }
+      case DragGeometryType::Polygon2d: {
+        const auto value = evaluated.context.EvaluatePolygon2d(source);
+        std::vector<Point> vertices;
+        vertices.reserve(value.Size() + 1);
+        for (std::size_t index = 0; index < value.Size(); ++index) {
+          vertices.push_back(
+              {value.At(index).X().value(), value.At(index).Y().value()});
+        }
+        if (!vertices.empty()) {
+          vertices.push_back(vertices.front());
+        }
+        paths.push_back(std::move(vertices));
+        break;
+      }
+      case DragGeometryType::Rotation2d: {
+        const auto value = evaluated.context.EvaluateRotation2d(source);
+        addHeading(0, 0, value.Radians().value());
+        break;
+      }
+      case DragGeometryType::Transform2d: {
+        const auto value = evaluated.context.EvaluateTransform2d(source);
+        paths.push_back({{0, 0}, {value.X().value(), value.Y().value()}});
+        addHeading(value.X().value(), value.Y().value(),
+                   value.Rotation().Radians().value());
+        break;
+      }
+      case DragGeometryType::Twist2d: {
+        const auto value = evaluated.context.EvaluateTwist2d(source);
+        paths.push_back({{0, 0}, {value.dx.value(), value.dy.value()}});
+        addHeading(0, 0, value.dtheta.value());
+        break;
+      }
+      case DragGeometryType::Rectangle2d: {
+        const auto value = evaluated.context.EvaluateRectangle2d(source);
+        const double centerX = value.Center().X().value();
+        const double centerY = value.Center().Y().value();
+        const double halfWidth = value.XWidth().value() / 2;
+        const double halfHeight = value.YWidth().value() / 2;
+        const double heading = value.Rotation().Radians().value();
+        const double cosine = std::cos(heading);
+        const double sine = std::sin(heading);
+        std::vector<Point> corners;
+        for (const auto [x, y] : {std::pair{-halfWidth, -halfHeight},
+                                  std::pair{halfWidth, -halfHeight},
+                                  std::pair{halfWidth, halfHeight},
+                                  std::pair{-halfWidth, halfHeight},
+                                  std::pair{-halfWidth, -halfHeight}}) {
+          corners.push_back({centerX + cosine * x - sine * y,
+                             centerY + sine * x + cosine * y});
+        }
+        paths.push_back(std::move(corners));
+        break;
+      }
+      case DragGeometryType::Ellipse2d: {
+        const auto value = evaluated.context.EvaluateEllipse2d(source);
+        constexpr std::size_t kEllipseSegments = 48;
+        const double centerX = value.Center().X().value();
+        const double centerY = value.Center().Y().value();
+        const double xRadius = value.XSemiAxis().value();
+        const double yRadius = value.YSemiAxis().value();
+        const double heading = value.Rotation().Radians().value();
+        const double cosine = std::cos(heading);
+        const double sine = std::sin(heading);
+        std::vector<Point> points;
+        points.reserve(kEllipseSegments + 1);
+        for (std::size_t index = 0; index <= kEllipseSegments; ++index) {
+          const double angle = 2 * std::acos(-1.0) *
+                               static_cast<double>(index) /
+                               static_cast<double>(kEllipseSegments);
+          const double x = xRadius * std::cos(angle);
+          const double y = yRadius * std::sin(angle);
+          points.push_back({centerX + cosine * x - sine * y,
+                            centerY + sine * x + cosine * y});
+        }
+        paths.push_back(std::move(points));
+        break;
+      }
+    }
+    return paths;
+  };
+  analysis.paths = evaluatePaths(expression);
+
+  auto findClosingParenthesis = [&](std::size_t open) {
+    std::size_t depth = 0;
+    char quote = '\0';
+    bool escaped = false;
+    for (std::size_t index = open; index < expression.size(); ++index) {
+      const char character = expression[index];
+      if (quote != '\0') {
+        if (escaped) {
+          escaped = false;
+        } else if (character == '\\') {
+          escaped = true;
+        } else if (character == quote) {
+          quote = '\0';
+        }
+        continue;
+      }
+      if (character == '"' || character == '\'') {
+        quote = character;
+      } else if (character == '(') {
+        ++depth;
+      } else if (character == ')' && --depth == 0) {
+        return index;
+      }
+    }
+    return std::string_view::npos;
+  };
+  auto evaluatePrefix = [&](std::size_t end) {
+    return evaluate(expression.substr(0, end));
+  };
+  std::vector<TransformCall> calls;
+  std::size_t nesting = 0;
+  char quote = '\0';
+  bool escaped = false;
+  for (std::size_t index = 0; index < expression.size(); ++index) {
+    const char character = expression[index];
+    if (quote != '\0') {
+      if (escaped) {
+        escaped = false;
+      } else if (character == '\\') {
+        escaped = true;
+      } else if (character == quote) {
+        quote = '\0';
+      }
+      continue;
+    }
+    if (character == '"' || character == '\'') {
+      quote = character;
+      continue;
+    }
+    if (character == '(' || character == '[') {
+      ++nesting;
+      continue;
+    }
+    if (character == ')' || character == ']') {
+      if (nesting > 0) {
+        --nesting;
+      }
+      continue;
+    }
+    if (nesting != 0 || character != '.') {
+      continue;
+    }
+    constexpr std::array<std::string_view, 3> kTransformMethods{
+        "TransformBy", "RotateBy", "RotateAround"};
+    for (const auto method : kTransformMethods) {
+      const auto methodStart = index;
+      const auto nameStart = index + 1;
+      const auto nameEnd = nameStart + method.size();
+      if (expression.substr(nameStart, method.size()) != method ||
+          nameEnd >= expression.size() || expression[nameEnd] != '(') {
+        continue;
+      }
+      const auto end = findClosingParenthesis(nameEnd);
+      if (end == std::string_view::npos) {
+        continue;
+      }
+      try {
+        calls.push_back({methodStart, nameEnd + 1, end,
+                         evaluatePrefix(methodStart), evaluatePrefix(end + 1)});
+      } catch (const std::exception&) {
+      }
+      break;
+    }
+  }
+
+  if (calls.empty()) {
+    const auto value = evaluate(expression);
+    analysis.chain.push_back(
+        {value.x, value.y, value.heading, value.x, value.y, value.heading});
+  } else {
+    const auto& first = calls.front();
+    const auto base = evaluatePrefix(first.methodStart);
+    analysis.chain.push_back(
+        {base.x, base.y, base.heading, base.x, base.y, base.heading});
+    for (const auto& call : calls) {
+      analysis.chain.push_back({call.start.x, call.start.y, call.start.heading,
+                                call.finish.x, call.finish.y,
+                                call.finish.heading});
+    }
+  }
+
+  auto chainIndexForToken = [&](const NumericToken& token) {
+    std::optional<std::size_t> selected;
+    std::size_t selectedSpan = std::numeric_limits<std::size_t>::max();
+    for (std::size_t callIndex = 0; callIndex < calls.size(); ++callIndex) {
+      const auto& call = calls[callIndex];
+      if (token.start >= call.argumentsStart && token.end <= call.end) {
+        const auto span = call.end - call.argumentsStart;
+        if (span < selectedSpan) {
+          selected = callIndex + 1;
+          selectedSpan = span;
+        }
+      }
+    }
+    return selected.value_or(0);
+  };
+
+  auto& controls = analysis.controls;
+  controls.reserve(tokens.size());
+  for (const auto& token : tokens) {
+    const double step = std::max(1e-5, std::abs(token.value) * 1e-5);
+    auto format = [&](double value) -> std::string {
+      char buffer[64];
+      const auto converted =
+          std::to_chars(std::begin(buffer), std::end(buffer), value,
+                        std::chars_format::general,
+                        std::numeric_limits<double>::max_digits10);
+      if (converted.ec != std::errc{}) {
+        return {};
+      }
+      return {buffer, converted.ptr};
+    };
+    auto replace = [&](double value) -> std::string {
+      std::string updated{expression};
+      const auto replacement = format(value);
+      updated.replace(token.start, token.end - token.start, replacement);
+      return updated;
+    };
+    auto evaluateChangedPrefix = [&](double value, std::size_t end) {
+      std::string updated{expression.substr(0, end)};
+      const auto replacement = format(value);
+      if (token.start < end && token.end <= end) {
+        updated.replace(token.start, token.end - token.start, replacement);
+      }
+      return evaluate(updated);
+    };
+
+    try {
+      const auto plus = evaluate(replace(token.value + step));
+      const auto minus = evaluate(replace(token.value - step));
+      const double scale = 1.0 / (2 * step);
+      double headingDelta = plus.heading - minus.heading;
+      headingDelta = std::remainder(headingDelta, 2 * std::acos(-1.0));
+      const double dx = (plus.x - minus.x) * scale;
+      const double dy = (plus.y - minus.y) * scale;
+      const double dheading = headingDelta * scale;
+      const auto chainIndex = chainIndexForToken(token);
+      const auto& anchor = analysis.chain.at(chainIndex);
+      GeometryValue segmentStart{};
+      GeometryValue segmentPlus{};
+      GeometryValue segmentMinus{};
+      if (chainIndex == 0) {
+        if (calls.empty()) {
+          segmentPlus = plus;
+          segmentMinus = minus;
+        } else {
+          segmentPlus = evaluateChangedPrefix(token.value + step,
+                                              calls.front().methodStart);
+          segmentMinus = evaluateChangedPrefix(token.value - step,
+                                               calls.front().methodStart);
+        }
+      } else {
+        const auto& call = calls.at(chainIndex - 1);
+        segmentStart = call.start;
+        segmentPlus = evaluateChangedPrefix(token.value + step, call.end + 1);
+        segmentMinus = evaluateChangedPrefix(token.value - step, call.end + 1);
+      }
+      double segmentDx = (segmentPlus.x - segmentMinus.x) * scale;
+      double segmentDy = (segmentPlus.y - segmentMinus.y) * scale;
+      if (chainIndex > 0) {
+        const double cosine = std::cos(segmentStart.heading);
+        const double sine = std::sin(segmentStart.heading);
+        const double localDx = cosine * segmentDx + sine * segmentDy;
+        const double localDy = -sine * segmentDx + cosine * segmentDy;
+        segmentDx = localDx;
+        segmentDy = localDy;
+      }
+      double segmentDheading =
+          std::remainder(segmentPlus.heading - segmentMinus.heading,
+                         2 * std::acos(-1.0)) *
+          scale;
+      std::vector<GeometryDragEffect> effects;
+      std::vector<GeometryFeaturePoint> positions;
+      std::vector<GeometryFeaturePoint> velocities;
+      const auto plusPaths = evaluatePaths(replace(token.value + step));
+      const auto minusPaths = evaluatePaths(replace(token.value - step));
+      if (plusPaths.size() != analysis.paths.size() ||
+          minusPaths.size() != analysis.paths.size()) {
+        continue;
+      }
+      bool compatiblePaths = true;
+      for (std::size_t pathIndex = 0; pathIndex < analysis.paths.size();
+           ++pathIndex) {
+        if (!compatiblePaths) {
+          break;
+        }
+        const auto& basePath = analysis.paths[pathIndex];
+        const auto& plusPath = plusPaths[pathIndex];
+        const auto& minusPath = minusPaths[pathIndex];
+        if (plusPath.size() != basePath.size() ||
+            minusPath.size() != basePath.size()) {
+          effects.clear();
+          compatiblePaths = false;
+          break;
+        }
+        for (std::size_t pointIndex = 0; pointIndex < basePath.size();
+             ++pointIndex) {
+          const double effectX =
+              (plusPath[pointIndex].x - minusPath[pointIndex].x) * scale;
+          const double effectY =
+              (plusPath[pointIndex].y - minusPath[pointIndex].y) * scale;
+          if (!std::isfinite(effectX) || !std::isfinite(effectY)) {
+            effects.clear();
+            compatiblePaths = false;
+            break;
+          }
+          positions.push_back(basePath[pointIndex]);
+          velocities.push_back({effectX, effectY});
+          if (std::abs(effectX) >= 1e-10 || std::abs(effectY) >= 1e-10) {
+            effects.push_back({pathIndex, pointIndex, effectX, effectY});
+          }
+        }
+      }
+      if (!compatiblePaths || effects.empty()) {
+        continue;
+      }
+      double meanX = 0;
+      double meanY = 0;
+      double meanDx = 0;
+      double meanDy = 0;
+      for (std::size_t index = 0; index < positions.size(); ++index) {
+        meanX += positions[index].x;
+        meanY += positions[index].y;
+        meanDx += velocities[index].x;
+        meanDy += velocities[index].y;
+      }
+      const double pointCount = static_cast<double>(positions.size());
+      meanX /= pointCount;
+      meanY /= pointCount;
+      meanDx /= pointCount;
+      meanDy /= pointCount;
+      double angularNumerator = 0;
+      double spatialVariance = 0;
+      for (std::size_t index = 0; index < positions.size(); ++index) {
+        const double offsetX = positions[index].x - meanX;
+        const double offsetY = positions[index].y - meanY;
+        const double velocityX = velocities[index].x - meanDx;
+        const double velocityY = velocities[index].y - meanDy;
+        angularNumerator += offsetX * velocityY - offsetY * velocityX;
+        spatialVariance += offsetX * offsetX + offsetY * offsetY;
+      }
+      const double motionDheading =
+          spatialVariance > 1e-12 ? angularNumerator / spatialVariance : 0;
+      double residualSquared = 0;
+      double velocitySquared = 0;
+      for (std::size_t index = 0; index < positions.size(); ++index) {
+        const double offsetX = positions[index].x - meanX;
+        const double offsetY = positions[index].y - meanY;
+        const double expectedX = meanDx - motionDheading * offsetY;
+        const double expectedY = meanDy + motionDheading * offsetX;
+        const double errorX = velocities[index].x - expectedX;
+        const double errorY = velocities[index].y - expectedY;
+        residualSquared += errorX * errorX + errorY * errorY;
+        velocitySquared += velocities[index].x * velocities[index].x +
+                           velocities[index].y * velocities[index].y;
+      }
+      const double residual = std::sqrt(residualSquared / pointCount);
+      const double averageVelocity = std::sqrt(velocitySquared / pointCount);
+      const bool rigidMotion =
+          residual <= 1e-6 + 1e-5 * std::max(1.0, averageVelocity);
+      const double pivotX = std::abs(motionDheading) > 1e-10
+                                ? meanX - meanDy / motionDheading
+                                : meanX;
+      const double pivotY = std::abs(motionDheading) > 1e-10
+                                ? meanY + meanDx / motionDheading
+                                : meanY;
+      controls.push_back({token.start,
+                          token.end,
+                          token.value,
+                          dx,
+                          dy,
+                          dheading,
+                          segmentDx,
+                          segmentDy,
+                          segmentDheading,
+                          chainIndex,
+                          anchor.startX,
+                          anchor.startY,
+                          anchor.startHeading,
+                          rigidMotion,
+                          meanDx,
+                          meanDy,
+                          motionDheading,
+                          pivotX,
+                          pivotY,
+                          std::move(effects)});
+    } catch (const std::exception&) {
+    }
+  }
+  return analysis;
 }
+}  // namespace choreo::document::evaluation

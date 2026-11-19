@@ -5,7 +5,7 @@ import { FIELD_LENGTH, FIELD_WIDTH } from "./FieldDimensions";
 import {
   CustomFieldData,
   FieldJSON
-} from "../../../../document/schema/DocumentTypes";
+} from "@choreo/document";
 
 type Props = {
   opacity: number;

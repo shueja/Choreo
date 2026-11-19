@@ -7,19 +7,30 @@ import {
   SystemUpdateAlt
 } from "@mui/icons-material";
 import { JSXElementConstructor, ReactElement } from "react";
-import { Expr } from "./schema/DocumentTypes";
+import type { Expr } from "@choreo/document";
 import { Dimension, DimensionName, Dimensions } from "./ExpressionStore";
 import KeepInLane from "../assets/KeepInLane";
+import type {
+  ConstraintData,
+  ConstraintKey,
+  DataMap,
+  DataPropsList
+} from "@choreo/document";
+export type {
+  ConstraintData,
+  ConstraintDataTypeMap,
+  ConstraintKey,
+  DataMap,
+  DataPropsList
+} from "@choreo/document";
 
 export type ConstraintPropertyType = Expr | boolean;
-
 export type ConstraintPropertyDefinition<P extends ConstraintPropertyType> = {
   name: string;
   description: string;
   defaultVal: P;
 } & (P extends Expr ? { dimension: Dimension<DimensionName> } : object);
 
-export type DataPropsList = { [key: string]: ConstraintPropertyType };
 export type PropertyDefinitionList<P extends DataPropsList> = {
   [key in keyof P]: ConstraintPropertyDefinition<P[key]>;
 };
@@ -36,53 +47,6 @@ export type ConstraintDefinition<
   sgmtScope: boolean;
   properties: PropertyDefinitionList<D["props"]>;
 };
-
-// Constraints
-interface IConstraintData<name, Props extends DataPropsList> {
-  readonly type: name;
-  props: Props;
-}
-
-export type ConstraintDataTypeMap = {
-  // Record<string,never> broke the keyof operator
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-  StopPoint: {};
-  MaxVelocity: { max: Expr };
-  MaxAcceleration: { max: Expr };
-  MaxAngularVelocity: { max: Expr };
-  PointAt: {
-    x: Expr;
-    y: Expr;
-    tolerance: Expr;
-    flip: boolean;
-  };
-  KeepInCircle: {
-    x: Expr;
-    y: Expr;
-    r: Expr;
-  };
-  KeepInRectangle: {
-    x: Expr;
-    y: Expr;
-    w: Expr;
-    h: Expr;
-  };
-  KeepInLane: {
-    tolerance: Expr;
-  };
-  KeepOutCircle: {
-    x: Expr;
-    y: Expr;
-    r: Expr;
-  };
-};
-export type DataMap = {
-  [K in keyof ConstraintDataTypeMap]: IConstraintData<
-    K,
-    ConstraintDataTypeMap[K]
-  >;
-};
-export type ConstraintData = DataMap[keyof DataMap];
 
 type defs = { [K in ConstraintKey]: ConstraintDefinition<K> };
 export const ConstraintDefinitions: defs = {
@@ -297,5 +261,4 @@ export const ConstraintDefinitions: defs = {
   } satisfies ConstraintDefinition<"KeepOutCircle">
 };
 
-export type ConstraintKey = keyof DataMap;
 export const consts = Object.values(ConstraintDefinitions);

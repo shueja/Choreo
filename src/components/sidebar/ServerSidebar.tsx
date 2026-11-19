@@ -20,10 +20,10 @@ import {
 import { IconButton, Menu, MenuItem, Tooltip } from "@mui/material";
 import { useState } from "react";
 import WaypointIcon from "../../assets/Waypoint";
-import {
+import type {
   ProjectDocument,
   TrajectoryDocument
-} from "../../document/ServerSessionStore";
+} from "@choreo/document";
 import styles from "./ServerSidebar.module.css";
 
 export type ServerConstraintType =

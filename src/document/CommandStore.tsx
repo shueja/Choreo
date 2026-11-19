@@ -13,7 +13,7 @@ import {
   GroupCommand,
   NamedCommand,
   WaitCommand
-} from "./schema/DocumentTypes";
+} from "@choreo/document";
 import { Env, EnvConstructors } from "./DocumentManager";
 import { ExpressionStore } from "./ExpressionStore";
 

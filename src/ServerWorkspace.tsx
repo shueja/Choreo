@@ -30,6 +30,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import ServerFieldCanvas from "./components/field/ServerFieldCanvas";
+import GeometryFieldCanvas from "./components/field/GeometryFieldCanvas";
 import ServerFieldControls from "./components/field/ServerFieldControls";
 import ServerPathAnimationPanel from "./components/field/ServerPathAnimationPanel";
 import ServerWaypointEditor from "./components/field/ServerWaypointEditor";
@@ -47,16 +48,19 @@ import ServerNavbar from "./components/navbar/ServerNavbar";
 import ServerSidebar, {
   ServerConstraintType
 } from "./components/sidebar/ServerSidebar";
-import {
-  ConstraintDocument,
-  EventMarkerDocument,
+import type {
   EventMarkerPatch,
+  GeometryDragAnalysis
+} from "@choreo/api";
+import type {
+  ServerConstraintDocument as ConstraintDocument,
+  ServerEventMarkerDocument as EventMarkerDocument,
   ProjectDocument,
   ServerVariable,
-  TrajectoryDocument,
-  Waypoint,
-  serverSession
-} from "./document/ServerSessionStore";
+  ServerWaypoint as Waypoint,
+  TrajectoryDocument
+} from "@choreo/document";
+import { serverSession } from "./document/ServerSessionStore";
 import styles from "./ServerWorkspace.module.css";
 
 const TRAJECTORY_SCHEMA_VERSION = 4;
@@ -352,6 +356,9 @@ function ServerWorkspace() {
   const [selectedWaypointId, setSelectedWaypointId] = useState("");
   const [selectedConstraintId, setSelectedConstraintId] = useState("");
   const [selectedEventMarkerId, setSelectedEventMarkerId] = useState("");
+  const [studioView, setStudioView] = useState<"trajectory" | "geometry">(
+    "trajectory"
+  );
   const [activeEditor, setActiveEditor] = useState<
     "waypoint" | "constraint" | "marker" | "none"
   >("waypoint");
@@ -377,6 +384,12 @@ function ServerWorkspace() {
   );
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [waypointDragAnalysis, setWaypointDragAnalysis] = useState<
+    Record<string, GeometryDragAnalysis>
+  >({});
+  const [variableDragAnalysis, setVariableDragAnalysis] = useState<
+    Record<string, GeometryDragAnalysis>
+  >({});
   const defaultProjectRequested = useRef(false);
   const snapshot = state.snapshot;
   const project = snapshot?.project;
@@ -426,6 +439,83 @@ function ServerWorkspace() {
   const selectedEventMarker = activeTrajectory?.events.find(
     (marker) => marker.uuid === selectedEventMarkerId
   );
+
+  useEffect(() => {
+    if (!project) {
+      setWaypointDragAnalysis({});
+      setVariableDragAnalysis({});
+      return;
+    }
+
+    let cancelled = false;
+    const loadAnalysis = async () => {
+      const waypoints = await Promise.all(
+        (activeTrajectory?.params.waypoints ?? []).map(async (waypoint) => {
+          try {
+            return [
+              waypoint.uuid,
+              await serverSession.getGeometryDragControls(
+                project.uuid,
+                waypoint.pose.exp,
+                "Pose2d"
+              )
+            ] as const;
+          } catch {
+            return [waypoint.uuid, null] as const;
+          }
+        })
+      );
+      const variables = await Promise.all(
+        Object.entries(project.variables.variables).map(
+          async ([id, variable]) => {
+            if (
+              variable.type === "Quantity" ||
+              (studioView === "trajectory" &&
+                variable.type !== "Pose2d" &&
+                variable.type !== "Translation2d")
+            ) {
+              return [id, null] as const;
+            }
+            try {
+              return [
+                id,
+                await serverSession.getGeometryDragControls(
+                  project.uuid,
+                  variable.expression,
+                  variable.type
+                )
+              ] as const;
+            } catch {
+              return [id, null] as const;
+            }
+          }
+        )
+      );
+      if (cancelled) {
+        return;
+      }
+      setWaypointDragAnalysis(
+        Object.fromEntries(
+          waypoints.filter(
+            (entry): entry is readonly [string, GeometryDragAnalysis] =>
+              entry[1] !== null
+          )
+        )
+      );
+      setVariableDragAnalysis(
+        Object.fromEntries(
+          variables.filter(
+            (entry): entry is readonly [string, GeometryDragAnalysis] =>
+              entry[1] !== null
+          )
+        )
+      );
+    };
+    void loadAnalysis();
+    return () => {
+      cancelled = true;
+    };
+  }, [project, activeTrajectory, studioView]);
   const bumperVertices =
     (
       project?.config as
@@ -656,6 +746,16 @@ function ServerWorkspace() {
         ),
       "Updating waypoint"
     );
+  }
+
+  async function dragWaypoint(waypointId: string, expression: string) {
+    const waypoint = activeTrajectory?.params.waypoints.find(
+      (entry) => entry.uuid === waypointId
+    );
+    if (!waypoint) {
+      return;
+    }
+    await patchWaypoint(waypoint, { ...waypoint.pose, exp: expression });
   }
 
   async function patchWaypointOptions(
@@ -1176,7 +1276,34 @@ function ServerWorkspace() {
         </div>
 
         <section className={styles.editorMain}>
-          {activeTrajectory ? (
+          {studioView === "geometry" ? (
+            <section className={styles.geometryEditor}>
+              <header className={styles.geometryHeader}>
+                <h2>Geometry field</h2>
+                <span>Drag a handle to update the geometry expression.</span>
+              </header>
+              {(actionError || state.error) && (
+                <Alert severity="error" onClose={() => setActionError(null)}>
+                  {actionError ?? state.error}
+                </Alert>
+              )}
+              <div className={styles.canvasArea}>
+                <div
+                  className={`${styles.fieldViewport} ${variablesOpen ? styles.fieldViewportWithPanel : ""}`}
+                >
+                  <GeometryFieldCanvas
+                    variables={project.variables.variables}
+                    analyses={variableDragAnalysis}
+                    visibleLayers={visibleLayers}
+                    disabled={pending || !state.connected}
+                    onDragVariable={(id, expression) =>
+                      patchVariable(id, { expression })
+                    }
+                  />
+                </div>
+              </div>
+            </section>
+          ) : activeTrajectory ? (
             <>
               <div
                 className={
@@ -1227,6 +1354,9 @@ function ServerWorkspace() {
                 >
                   <ServerFieldCanvas
                     waypoints={activeTrajectory.params.waypoints}
+                    variables={project?.variables.variables ?? {}}
+                    waypointControls={waypointDragAnalysis}
+                    variableControls={variableDragAnalysis}
                     selectedWaypointId={selectedWaypointId}
                     constraintType={constraintTool}
                     bumperVertices={bumperVertices}
@@ -1241,6 +1371,10 @@ function ServerWorkspace() {
                     }
                     visibleLayers={visibleLayers}
                     onAddWaypoint={(x, y) => void addWaypoint(x, y)}
+                    onDragWaypoint={dragWaypoint}
+                    onDragVariable={(id, expression) =>
+                      patchVariable(id, { expression })
+                    }
                     onAddConstraint={(type, startIndex, endIndex) =>
                       void addConstraint(type, startIndex, endIndex)
                     }
@@ -1410,7 +1544,7 @@ function ServerWorkspace() {
         timestamp={animationTimestamp}
         onChange={setAnimationTimestamp}
       />
-      <nav className={styles.studioBar} aria-label="Trajectory studios">
+      <nav className={styles.studioBar} aria-label="Studios">
         <Tooltip title="Generate all">
           <span>
             <IconButton
@@ -1451,11 +1585,24 @@ function ServerWorkspace() {
         <div
           className={styles.studioTabs}
           role="tablist"
-          aria-label="Trajectories"
+          aria-label="Studios"
         >
+          <div
+            className={`${styles.studioTab} ${studioView === "geometry" ? styles.activeStudioTab : ""}`}
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={studioView === "geometry"}
+              onClick={() => setStudioView("geometry")}
+            >
+              <ShapeLine fontSize="small" />
+              <span>Geometry</span>
+            </button>
+          </div>
           {trajectories.map((trajectory) => (
             <div
-              className={`${styles.studioTab} ${trajectory.uuid === selectedTrajectoryId ? styles.activeStudioTab : ""}`}
+              className={`${styles.studioTab} ${studioView === "trajectory" && trajectory.uuid === selectedTrajectoryId ? styles.activeStudioTab : ""}`}
               key={trajectory.uuid}
             >
               {renamingTrajectoryId === trajectory.uuid ? (
@@ -1481,7 +1628,10 @@ function ServerWorkspace() {
                   type="button"
                   role="tab"
                   aria-selected={trajectory.uuid === selectedTrajectoryId}
-                  onClick={() => setSelectedTrajectoryId(trajectory.uuid)}
+                  onClick={() => {
+                    setStudioView("trajectory");
+                    setSelectedTrajectoryId(trajectory.uuid);
+                  }}
                   onDoubleClick={() => {
                     if (state.connected && !pending) {
                       setRenamingTrajectoryId(trajectory.uuid);

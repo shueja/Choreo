@@ -2,7 +2,7 @@ import Pause from "@mui/icons-material/Pause";
 import PlayArrow from "@mui/icons-material/PlayArrow";
 import { IconButton, Slider, Tooltip } from "@mui/material";
 import { useEffect, useRef, useState } from "react";
-import { TrajectorySample } from "../../document/ServerSessionStore";
+import type { ServerTrajectorySample as TrajectorySample } from "@choreo/document";
 import styles from "./ServerPathAnimationPanel.module.css";
 
 interface Props {

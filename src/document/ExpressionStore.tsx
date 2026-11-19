@@ -22,6 +22,7 @@ import {
   isNull,
   isUnit
 } from "mathjs";
+import type { DimensionName as SchemaDimensionName } from "@choreo/document";
 import { IReactionDisposer, reaction, untracked } from "mobx";
 import { Instance, getEnv, types } from "mobx-state-tree";
 import Angle from "../assets/Angle";
@@ -34,7 +35,7 @@ import {
   Variables as DocVariables,
   Expr,
   isExpr
-} from "./schema/DocumentTypes";
+} from "@choreo/document";
 import { Env } from "./DocumentManager";
 import { tracing } from "./tauriTracing";
 import {
@@ -107,7 +108,7 @@ export const DimensionNames = [
   "Mass",
   "Torque",
   "MoI"
-] as const;
+] as const satisfies readonly SchemaDimensionName[];
 export type DimensionName = (typeof DimensionNames)[number];
 export type Dimension<T> = {
   type: T;

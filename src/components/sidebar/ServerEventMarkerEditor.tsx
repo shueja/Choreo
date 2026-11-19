@@ -1,10 +1,10 @@
 import { TextField, Tooltip } from "@mui/material";
 import { useRef } from "react";
-import {
-  EventMarkerDocument,
-  EventMarkerPatch,
-  Waypoint
-} from "../../document/ServerSessionStore";
+import type { EventMarkerPatch } from "@choreo/api";
+import type {
+  ServerEventMarkerDocument as EventMarkerDocument,
+  ServerWaypoint as Waypoint
+} from "@choreo/document";
 import ServerExpressionInput from "../input/ServerExpressionInput";
 import ServerScopeSlider from "../input/ServerScopeSlider";
 import InputStyles from "../input/InputList.module.css";

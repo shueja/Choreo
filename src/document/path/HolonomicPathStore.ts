@@ -15,7 +15,7 @@ import {
   WaypointUUID,
   type ChoreoPath,
   type Trajectory
-} from "../schema/DocumentTypes";
+} from "@choreo/document";
 import { Env, uiState } from "../DocumentManager";
 import { EventMarkerStore, IEventMarkerStore } from "../EventMarkerStore";
 import {

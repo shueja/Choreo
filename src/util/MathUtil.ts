@@ -1,7 +1,7 @@
 import {
   DifferentialSample,
   SwerveSample
-} from "../document/schema/DocumentTypes";
+} from "@choreo/document";
 
 /**
  * A port of WPILib's MathUtil.inputModulus

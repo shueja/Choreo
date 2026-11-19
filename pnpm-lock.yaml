@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@choreo/api':
+        specifier: workspace:*
+        version: link:api/ts
+      '@choreo/document':
+        specifier: workspace:*
+        version: link:document/ts
       '@emotion/styled':
         specifier: ^11.14.1
         version: 11.14.1(@emotion/react@11.13.3(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react@19.2.3)
@@ -126,6 +132,14 @@ importers:
       vite:
         specifier: ^7.3.0
         version: 7.3.0(@types/node@25.0.3)
+
+  api/ts:
+    dependencies:
+      '@choreo/document':
+        specifier: workspace:*
+        version: link:../../document/ts
+
+  document/ts: {}
 
 packages:
 

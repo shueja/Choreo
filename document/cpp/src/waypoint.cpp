@@ -33,7 +33,7 @@ Waypoint Waypoint::FromJson(const wpi::util::json& json) {
   }
         const auto uuid = json.at("uuid").get_string();
         detail::CheckUuid(uuid);
-        return {uuid,
+  return {uuid,
           PoseExpression::FromJson(json.at("pose")),
           static_cast<std::uint32_t>(intervals.get_int()),
           json.at("split").get_bool(),
