@@ -1496,7 +1496,8 @@ std::uint64_t GenerateOutput(ApiTestFixture& fixture,
     const auto frame = ReadServerTextFrame(events.Get());
     Require(!frame.empty(), "expected a generation event");
     const auto event = Json::parse_or_throw(frame);
-    if (event.at("operationId").get_string() != operationId) {
+    if (!event.contains("operationId") ||
+        event.at("operationId").get_string() != operationId) {
       continue;
     }
     const auto type = event.at("type").get_string();
