@@ -368,7 +368,7 @@ Document EvaluateDocument(const Document& document) {
   return result;
 }
 
-std::vector<GeometryDragControl> GetGeometryDragControls(
+GeometryDragAnalysis GetGeometryDragControls(
     const Project& project, std::string_view expression,
     DragGeometryType type) {
   struct NumericToken {
@@ -380,6 +380,13 @@ std::vector<GeometryDragControl> GetGeometryDragControls(
     double x;
     double y;
     double heading;
+  };
+  struct TransformCall {
+    std::size_t methodStart;
+    std::size_t argumentsStart;
+    std::size_t end;
+    GeometryValue start;
+    GeometryValue finish;
   };
 
   auto isWordCharacter = [](char character) {
@@ -415,10 +422,6 @@ std::vector<GeometryDragControl> GetGeometryDragControls(
     index = end;
   }
 
-  if (tokens.empty()) {
-    return {};
-  }
-
   auto evaluated = BuildVariables(project);
   auto evaluate = [&](std::string_view source) -> GeometryValue {
     if (type == DragGeometryType::Pose2d) {
@@ -430,8 +433,126 @@ std::vector<GeometryDragControl> GetGeometryDragControls(
     return {translation.X().value(), translation.Y().value(), 0};
   };
 
-  static_cast<void>(evaluate(expression));
-  std::vector<GeometryDragControl> controls;
+  auto findClosingParenthesis = [&](std::size_t open) {
+    std::size_t depth = 0;
+    char quote = '\0';
+    bool escaped = false;
+    for (std::size_t index = open; index < expression.size(); ++index) {
+      const char character = expression[index];
+      if (quote != '\0') {
+        if (escaped) {
+          escaped = false;
+        } else if (character == '\\') {
+          escaped = true;
+        } else if (character == quote) {
+          quote = '\0';
+        }
+        continue;
+      }
+      if (character == '"' || character == '\'') {
+        quote = character;
+      } else if (character == '(') {
+        ++depth;
+      } else if (character == ')' && --depth == 0) {
+        return index;
+      }
+    }
+    return std::string_view::npos;
+  };
+  auto evaluatePrefix = [&](std::size_t end) {
+    return evaluate(expression.substr(0, end));
+  };
+  std::vector<TransformCall> calls;
+  std::size_t nesting = 0;
+  char quote = '\0';
+  bool escaped = false;
+  for (std::size_t index = 0; index < expression.size(); ++index) {
+    const char character = expression[index];
+    if (quote != '\0') {
+      if (escaped) {
+        escaped = false;
+      } else if (character == '\\') {
+        escaped = true;
+      } else if (character == quote) {
+        quote = '\0';
+      }
+      continue;
+    }
+    if (character == '"' || character == '\'') {
+      quote = character;
+      continue;
+    }
+    if (character == '(' || character == '[') {
+      ++nesting;
+      continue;
+    }
+    if (character == ')' || character == ']') {
+      if (nesting > 0) {
+        --nesting;
+      }
+      continue;
+    }
+    if (nesting != 0 || character != '.') {
+      continue;
+    }
+    constexpr std::array<std::string_view, 3> kTransformMethods{
+        "TransformBy", "RotateBy", "RotateAround"};
+    for (const auto method : kTransformMethods) {
+      const auto methodStart = index;
+      const auto nameStart = index + 1;
+      const auto nameEnd = nameStart + method.size();
+      if (expression.substr(nameStart, method.size()) != method ||
+          nameEnd >= expression.size() || expression[nameEnd] != '(') {
+        continue;
+      }
+      const auto end = findClosingParenthesis(nameEnd);
+      if (end == std::string_view::npos) {
+        continue;
+      }
+      try {
+        calls.push_back({methodStart, nameEnd + 1, end,
+                         evaluatePrefix(methodStart),
+                         evaluatePrefix(end + 1)});
+      } catch (const std::exception&) {
+      }
+      break;
+    }
+  }
+
+  GeometryDragAnalysis analysis;
+  if (calls.empty()) {
+    const auto value = evaluate(expression);
+    analysis.chain.push_back(
+        {value.x, value.y, value.heading, value.x, value.y, value.heading});
+  } else {
+    const auto& first = calls.front();
+    const auto base = evaluatePrefix(first.methodStart);
+    analysis.chain.push_back(
+        {base.x, base.y, base.heading, base.x, base.y, base.heading});
+    for (const auto& call : calls) {
+      analysis.chain.push_back(
+          {call.start.x, call.start.y, call.start.heading, call.finish.x,
+           call.finish.y, call.finish.heading});
+    }
+  }
+
+  auto chainIndexForToken = [&](const NumericToken& token) {
+    std::optional<std::size_t> selected;
+    std::size_t selectedSpan = std::numeric_limits<std::size_t>::max();
+    for (std::size_t callIndex = 0; callIndex < calls.size(); ++callIndex) {
+      const auto& call = calls[callIndex];
+      if (token.start >= call.argumentsStart && token.end <= call.end) {
+        const auto span = call.end - call.argumentsStart;
+        if (span < selectedSpan) {
+          selected = callIndex + 1;
+          selectedSpan = span;
+        }
+      }
+    }
+    return selected.value_or(0);
+  };
+
+  auto& controls = analysis.controls;
   controls.reserve(tokens.size());
   for (const auto& token : tokens) {
     const double step = std::max(1e-5, std::abs(token.value) * 1e-5);
@@ -465,12 +586,15 @@ std::vector<GeometryDragControl> GetGeometryDragControls(
            std::abs(dheading) < 1e-10)) {
         continue;
       }
-      controls.push_back(
-          {token.start, token.end, token.value, dx, dy, dheading});
+      const auto chainIndex = chainIndexForToken(token);
+      const auto& anchor = analysis.chain.at(chainIndex);
+      controls.push_back({token.start, token.end, token.value, dx, dy,
+                          dheading, chainIndex, anchor.startX,
+                          anchor.startY, anchor.startHeading});
     } catch (const std::exception&) {
     }
   }
-  return controls;
+  return analysis;
 }
 
 }

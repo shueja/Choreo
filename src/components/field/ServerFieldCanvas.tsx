@@ -10,6 +10,7 @@ import FieldPathLine from "./svg/FieldPathLine";
 import FieldSampleLayer from "./svg/FieldSampleLayer";
 import { ServerConstraintType, ServerViewLayers } from "./ServerViewLayers";
 import {
+  GeometryDragAnalysis,
   GeometryDragControl,
   ServerVariable,
   Waypoint
@@ -23,8 +24,8 @@ import styles from "./ServerFieldCanvas.module.css";
 interface Props {
   waypoints: Waypoint[];
   variables: Record<string, ServerVariable>;
-  waypointControls: Record<string, GeometryDragControl[]>;
-  variableControls: Record<string, GeometryDragControl[]>;
+  waypointControls: Record<string, GeometryDragAnalysis>;
+  variableControls: Record<string, GeometryDragAnalysis>;
   selectedWaypointId: string;
   bumperVertices: { x: number; y: number }[];
   robotPose?: { x: number; y: number; heading: number };
@@ -179,55 +180,61 @@ export default function ServerFieldCanvas({
     if (!pointer) {
       return;
     }
-    const candidate =
-      drag.mode === "position"
-        ? (() => {
-            const dx = pointer.x - drag.pointerStart.x;
-            const dy = pointer.y - drag.pointerStart.y;
-            const normSquared =
-              drag.control.dx * drag.control.dx +
-              drag.control.dy * drag.control.dy;
-            const parameterDelta =
-              (dx * drag.control.dx + dy * drag.control.dy) / normSquared;
-            return {
-              ...drag.pose,
-              x: Math.max(
-                0,
-                Math.min(
-                  FIELD_LENGTH,
-                  drag.pose.x + drag.control.dx * parameterDelta
-                )
-              ),
-              y: Math.max(
-                0,
-                Math.min(
-                  FIELD_WIDTH,
-                  drag.pose.y + drag.control.dy * parameterDelta
-                )
-              ),
-              parameterDelta
-            };
-          })()
-        : (() => {
-            const startAngle = Math.atan2(
-              drag.pointerStart.y - drag.pose.y,
-              drag.pointerStart.x - drag.pose.x
-            );
-            const currentAngle = Math.atan2(
-              pointer.y - drag.pose.y,
-              pointer.x - drag.pose.x
-            );
-            const angleDelta = Math.atan2(
-              Math.sin(currentAngle - startAngle),
-              Math.cos(currentAngle - startAngle)
-            );
-            const parameterDelta = angleDelta / drag.control.dheading;
-            return {
-              ...drag.pose,
-              heading: drag.pose.heading + drag.control.dheading * parameterDelta,
-              parameterDelta
-            };
-          })();
+    let parameterDelta = 0;
+    if (drag.mode === "position") {
+      const dx = pointer.x - drag.pointerStart.x;
+      const dy = pointer.y - drag.pointerStart.y;
+      const normSquared =
+        drag.control.dx * drag.control.dx +
+        drag.control.dy * drag.control.dy;
+      parameterDelta =
+        (dx * drag.control.dx + dy * drag.control.dy) / normSquared;
+    } else {
+      const startAngle = Math.atan2(
+        drag.pointerStart.y - drag.control.anchorY,
+        drag.pointerStart.x - drag.control.anchorX
+      );
+      const currentAngle = Math.atan2(
+        pointer.y - drag.control.anchorY,
+        pointer.x - drag.control.anchorX
+      );
+      const angleDelta = Math.atan2(
+        Math.sin(currentAngle - startAngle),
+        Math.cos(currentAngle - startAngle)
+      );
+      parameterDelta = angleDelta / drag.control.dheading;
+    }
+
+    let minimumDelta = Number.NEGATIVE_INFINITY;
+    let maximumDelta = Number.POSITIVE_INFINITY;
+    for (const [position, derivative, maximum] of [
+      [drag.pose.x, drag.control.dx, FIELD_LENGTH],
+      [drag.pose.y, drag.control.dy, FIELD_WIDTH]
+    ]) {
+      if (derivative > 0) {
+        minimumDelta = Math.max(minimumDelta, -position / derivative);
+        maximumDelta = Math.min(
+          maximumDelta,
+          (maximum - position) / derivative
+        );
+      } else if (derivative < 0) {
+        minimumDelta = Math.max(
+          minimumDelta,
+          (maximum - position) / derivative
+        );
+        maximumDelta = Math.min(maximumDelta, -position / derivative);
+      }
+    }
+    parameterDelta = Math.max(
+      minimumDelta,
+      Math.min(maximumDelta, parameterDelta)
+    );
+    const candidate = {
+      ...drag.pose,
+      x: drag.pose.x + drag.control.dx * parameterDelta,
+      y: drag.pose.y + drag.control.dy * parameterDelta,
+      heading: drag.pose.heading + drag.control.dheading * parameterDelta
+    };
     const expression = updateGeometryExpressionForDrag(
       drag.expression,
       drag.control,
@@ -339,6 +346,9 @@ export default function ServerFieldCanvas({
                     ? dragPreview.pose
                     : waypointPose;
                 const { x, y, heading } = pose;
+                const waypointAnalysis = waypointControls[waypoint.uuid];
+                const previewOffsetX = x - waypointPose.x;
+                const previewOffsetY = y - waypointPose.y;
                 const xCoordinates = bumperVertices.map((point) => point.x);
                 const yCoordinates = bumperVertices.map((point) => point.y);
                 const bumperLength =
@@ -406,7 +416,30 @@ export default function ServerFieldCanvas({
                         strokeWidth={0.03}
                       />
                     </g>
-                    {(waypointControls[waypoint.uuid] ?? []).map(
+                    {(waypointAnalysis?.chain.length ?? 0) > 1 &&
+                      waypointAnalysis!.chain.slice(1).map((link, index) => (
+                        <g key={`chain-link-${index}`}>
+                          <line
+                            x1={link.startX + previewOffsetX}
+                            y1={link.startY + previewOffsetY}
+                            x2={link.endX + previewOffsetX}
+                            y2={link.endY + previewOffsetY}
+                            stroke="var(--select-yellow)"
+                            strokeWidth={0.035}
+                            pointerEvents="none"
+                          />
+                          <circle
+                            cx={link.endX + previewOffsetX}
+                            cy={link.endY + previewOffsetY}
+                            r={markerSize * 0.07 || 0.06}
+                            fill="var(--select-yellow)"
+                            stroke="black"
+                            strokeWidth={0.02}
+                            pointerEvents="none"
+                          />
+                        </g>
+                      ))}
+                    {(waypointAnalysis?.controls ?? []).map(
                       (control, controlIndex) => {
                         const positionMagnitude = Math.hypot(
                           control.dx,
@@ -414,26 +447,34 @@ export default function ServerFieldCanvas({
                         );
                         const handleDistance = markerSize * 0.8;
                         const handleX =
-                          x +
+                          control.anchorX +
+                          previewOffsetX +
                           (positionMagnitude > 0
                             ? (control.dx / positionMagnitude) * handleDistance
                             : 0);
                         const handleY =
-                          y +
+                          control.anchorY +
+                          previewOffsetY +
                           (positionMagnitude > 0
                             ? (control.dy / positionMagnitude) * handleDistance
                             : 0);
                         const rotationX =
-                          x + Math.cos(heading + Math.PI / 2) * handleDistance;
+                          control.anchorX +
+                          previewOffsetX +
+                          Math.cos(control.anchorHeading + Math.PI / 2) *
+                            handleDistance;
                         const rotationY =
-                          y + Math.sin(heading + Math.PI / 2) * handleDistance;
+                          control.anchorY +
+                          previewOffsetY +
+                          Math.sin(control.anchorHeading + Math.PI / 2) *
+                            handleDistance;
                         return (
                           <g key={`control-${controlIndex}`}>
                             {positionMagnitude > 1e-10 && (
                               <>
                                 <line
-                                  x1={x}
-                                  y1={y}
+                                  x1={control.anchorX + previewOffsetX}
+                                  y1={control.anchorY + previewOffsetY}
                                   x2={handleX}
                                   y2={handleY}
                                   stroke="var(--select-yellow)"
@@ -508,14 +549,19 @@ export default function ServerFieldCanvas({
                 if (!pose) {
                   return null;
                 }
-                const controls = variableControls[id] ?? [];
-                if (controls.length === 0) {
+                const controls = variableControls[id] ?? {
+                  controls: [],
+                  chain: []
+                };
+                if (controls.controls.length === 0) {
                   return null;
                 }
                 const displayedPose =
                   dragPreview?.id === id && dragPreview.kind === "variable"
                     ? dragPreview.pose
                     : pose;
+                const previewOffsetX = displayedPose.x - pose.x;
+                const previewOffsetY = displayedPose.y - pose.y;
                 const color = "var(--select-yellow)";
                 return (
                   <g
@@ -530,6 +576,30 @@ export default function ServerFieldCanvas({
                       stroke={color}
                       strokeWidth={0.045}
                     />
+                    {controls.chain.length > 1 &&
+                      controls.chain.slice(1).map((link, linkIndex) => (
+                        <g key={`chain-${linkIndex}`}>
+                          <line
+                            x1={link.startX + previewOffsetX}
+                            y1={link.startY + previewOffsetY}
+                            x2={link.endX + previewOffsetX}
+                            y2={link.endY + previewOffsetY}
+                            stroke={color}
+                            strokeWidth={0.035}
+                            strokeDasharray={linkIndex === 0 ? "0" : "0.08 0.05"}
+                            pointerEvents="none"
+                          />
+                          <circle
+                            cx={link.endX + previewOffsetX}
+                            cy={link.endY + previewOffsetY}
+                            r={fieldMarkerSize * 0.07 || 0.06}
+                            fill={color}
+                            stroke="black"
+                            strokeWidth={0.02}
+                            pointerEvents="none"
+                          />
+                        </g>
+                      ))}
                     <text
                       x={displayedPose.x + fieldMarkerSize * 0.15}
                       y={displayedPose.y - fieldMarkerSize * 0.2}
@@ -540,34 +610,38 @@ export default function ServerFieldCanvas({
                     >
                       {variable.name}
                     </text>
-                    {controls.map((control, controlIndex) => {
+                    {controls.controls.map((control, controlIndex) => {
                       const magnitude = Math.hypot(control.dx, control.dy);
                       const handleDistance = fieldMarkerSize * 0.8;
                       const handleX =
-                        displayedPose.x +
+                        control.anchorX +
+                        previewOffsetX +
                         (magnitude > 0
                           ? (control.dx / magnitude) * handleDistance
                           : 0);
                       const handleY =
-                        displayedPose.y +
+                        control.anchorY +
+                        previewOffsetY +
                         (magnitude > 0
                           ? (control.dy / magnitude) * handleDistance
                           : 0);
                       const rotationX =
-                        displayedPose.x +
-                        Math.cos(displayedPose.heading + Math.PI / 2) *
+                        control.anchorX +
+                        previewOffsetX +
+                        Math.cos(control.anchorHeading + Math.PI / 2) *
                           handleDistance;
                       const rotationY =
-                        displayedPose.y +
-                        Math.sin(displayedPose.heading + Math.PI / 2) *
+                        control.anchorY +
+                        previewOffsetY +
+                        Math.sin(control.anchorHeading + Math.PI / 2) *
                           handleDistance;
                       return (
                         <g key={`control-${controlIndex}`}>
                           {magnitude > 1e-10 && (
                             <>
                               <line
-                                x1={displayedPose.x}
-                                y1={displayedPose.y}
+                                x1={control.anchorX + previewOffsetX}
+                                y1={control.anchorY + previewOffsetY}
                                 x2={handleX}
                                 y2={handleY}
                                 stroke={color}

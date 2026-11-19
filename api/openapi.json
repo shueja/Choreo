@@ -1675,7 +1675,11 @@
                     "value": { "type": "number" },
                     "dx": { "type": "number" },
                     "dy": { "type": "number" },
-                    "dheading": { "type": "number" }
+                    "dheading": { "type": "number" },
+                    "chainIndex": { "type": "integer", "minimum": 0 },
+                    "anchorX": { "type": "number" },
+                    "anchorY": { "type": "number" },
+                    "anchorHeading": { "type": "number" }
                   },
                   "required": [
                     "start",
@@ -1683,13 +1687,40 @@
                     "value",
                     "dx",
                     "dy",
-                    "dheading"
+                    "dheading",
+                    "chainIndex",
+                    "anchorX",
+                    "anchorY",
+                    "anchorHeading"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "chain": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "startX": { "type": "number" },
+                    "startY": { "type": "number" },
+                    "startHeading": { "type": "number" },
+                    "endX": { "type": "number" },
+                    "endY": { "type": "number" },
+                    "endHeading": { "type": "number" }
+                  },
+                  "required": [
+                    "startX",
+                    "startY",
+                    "startHeading",
+                    "endX",
+                    "endY",
+                    "endHeading"
                   ],
                   "additionalProperties": false
                 }
               }
             },
-            "required": ["controls"],
+            "required": ["controls", "chain"],
             "additionalProperties": false
           },
           "expression": {

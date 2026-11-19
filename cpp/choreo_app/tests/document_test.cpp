@@ -550,5 +550,36 @@ int main(int argc, char** argv) {
   if (noHistory.CanUndo() || noHistory.Undo()) {
     return EXIT_FAILURE;
   }
+
+  const std::string transformChainExpression =
+      "Pose2d(0 m, 0 m, 0 rad)"
+      ".TransformBy(Transform2d(1 m, 0 m, 90 deg))"
+      ".TransformBy(Transform2d(2 m, 0 m, 0 deg))";
+  const auto dragAnalysis = evaluation::GetGeometryDragControls(
+      MakeTestProject(), transformChainExpression,
+      evaluation::DragGeometryType::Pose2d);
+  const auto secondTransformX =
+      transformChainExpression.find("2 m, 0 m, 0 deg");
+  const evaluation::GeometryDragControl* secondTransformControl = nullptr;
+  for (const auto& control : dragAnalysis.controls) {
+    if (control.start == secondTransformX) {
+      secondTransformControl = &control;
+      break;
+    }
+  }
+  if (dragAnalysis.chain.size() != 3 ||
+      std::abs(dragAnalysis.chain[1].endX - 1.0) > 1e-5 ||
+      std::abs(dragAnalysis.chain[1].endY) > 1e-5 ||
+      std::abs(dragAnalysis.chain[2].endX - 1.0) > 1e-5 ||
+      std::abs(dragAnalysis.chain[2].endY - 2.0) > 1e-5 ||
+      secondTransformControl == nullptr ||
+      secondTransformControl->chainIndex != 2 ||
+      std::abs(secondTransformControl->anchorX - 1.0) > 1e-5 ||
+      std::abs(secondTransformControl->anchorY) > 1e-5 ||
+      std::abs(secondTransformControl->dx) > 1e-5 ||
+      std::abs(secondTransformControl->dy - 1.0) > 1e-5) {
+    return EXIT_FAILURE;
+  }
+
   return EXIT_SUCCESS;
 }

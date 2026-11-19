@@ -51,6 +51,7 @@ import {
   ConstraintDocument,
   EventMarkerDocument,
   EventMarkerPatch,
+  GeometryDragAnalysis,
   ProjectDocument,
   ServerVariable,
   TrajectoryDocument,
@@ -377,6 +378,12 @@ function ServerWorkspace() {
   );
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [waypointDragAnalysis, setWaypointDragAnalysis] = useState<
+    Record<string, GeometryDragAnalysis>
+  >({});
+  const [variableDragAnalysis, setVariableDragAnalysis] = useState<
+    Record<string, GeometryDragAnalysis>
+  >({});
   const defaultProjectRequested = useRef(false);
   const snapshot = state.snapshot;
   const project = snapshot?.project;
@@ -426,6 +433,81 @@ function ServerWorkspace() {
   const selectedEventMarker = activeTrajectory?.events.find(
     (marker) => marker.uuid === selectedEventMarkerId
   );
+
+  useEffect(() => {
+    if (!project || !activeTrajectory) {
+      setWaypointDragAnalysis({});
+      setVariableDragAnalysis({});
+      return;
+    }
+
+    let cancelled = false;
+    const loadAnalysis = async () => {
+      const waypoints = await Promise.all(
+        activeTrajectory.params.waypoints.map(async (waypoint) => {
+          try {
+            return [
+              waypoint.uuid,
+              await serverSession.getGeometryDragControls(
+                project.uuid,
+                waypoint.pose.exp,
+                "Pose2d"
+              )
+            ] as const;
+          } catch {
+            return [waypoint.uuid, null] as const;
+          }
+        })
+      );
+      const variables = await Promise.all(
+        Object.entries(project.variables.variables).map(
+          async ([id, variable]) => {
+            if (
+              variable.type !== "Pose2d" &&
+              variable.type !== "Translation2d"
+            ) {
+              return [id, null] as const;
+            }
+            try {
+              return [
+                id,
+                await serverSession.getGeometryDragControls(
+                  project.uuid,
+                  variable.expression,
+                  variable.type
+                )
+              ] as const;
+            } catch {
+              return [id, null] as const;
+            }
+          }
+        )
+      );
+      if (cancelled) {
+        return;
+      }
+      setWaypointDragAnalysis(
+        Object.fromEntries(
+          waypoints.filter(
+            (entry): entry is readonly [string, GeometryDragAnalysis] =>
+              entry[1] !== null
+          )
+        )
+      );
+      setVariableDragAnalysis(
+        Object.fromEntries(
+          variables.filter(
+            (entry): entry is readonly [string, GeometryDragAnalysis] =>
+              entry[1] !== null
+          )
+        )
+      );
+    };
+    void loadAnalysis();
+    return () => {
+      cancelled = true;
+    };
+  }, [project, activeTrajectory]);
   const bumperVertices =
     (
       project?.config as
@@ -1238,6 +1320,8 @@ function ServerWorkspace() {
                   <ServerFieldCanvas
                     waypoints={activeTrajectory.params.waypoints}
                     variables={project?.variables.variables ?? {}}
+                    waypointControls={waypointDragAnalysis}
+                    variableControls={variableDragAnalysis}
                     selectedWaypointId={selectedWaypointId}
                     constraintType={constraintTool}
                     bumperVertices={bumperVertices}

@@ -8,6 +8,7 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <vector>
 
 #include <units/units.hpp>
 
@@ -26,6 +27,24 @@ struct GeometryDragControl {
   double dx;
   double dy;
   double dheading;
+  std::size_t chainIndex;
+  double anchorX;
+  double anchorY;
+  double anchorHeading;
+};
+
+struct GeometryChainLink {
+  double startX;
+  double startY;
+  double startHeading;
+  double endX;
+  double endY;
+  double endHeading;
+};
+
+struct GeometryDragAnalysis {
+  std::vector<GeometryDragControl> controls;
+  std::vector<GeometryChainLink> chain;
 };
 
 class EvaluationError : public std::invalid_argument {
@@ -44,7 +63,7 @@ class EvaluationError : public std::invalid_argument {
 
 Project EvaluateVariables(const Project& project);
 Document EvaluateDocument(const Document& document);
-std::vector<GeometryDragControl> GetGeometryDragControls(
+GeometryDragAnalysis GetGeometryDragControls(
     const Project& project, std::string_view expression,
     DragGeometryType type);
 Document RenameVariable(const Document& document, const std::string& id,

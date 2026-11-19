@@ -1403,18 +1403,29 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
 
       const auto document = Json::parse_or_throw(published->body);
       const auto project = document.at("project").get<Project>();
-      const auto controls =
+      const auto analysis =
           evaluation::GetGeometryDragControls(project, expression, type);
       std::vector<Json> serializedControls;
-      serializedControls.reserve(controls.size());
-      for (const auto& control : controls) {
+      serializedControls.reserve(analysis.controls.size());
+      for (const auto& control : analysis.controls) {
         serializedControls.push_back(Json::object(
             "start", control.start, "end", control.end, "value",
             control.value, "dx", control.dx, "dy", control.dy, "dheading",
-            control.dheading));
+            control.dheading, "chainIndex", control.chainIndex, "anchorX",
+            control.anchorX, "anchorY", control.anchorY, "anchorHeading",
+            control.anchorHeading));
       }
-      return JsonResponse(200, Json::object("controls",
-                                             std::move(serializedControls)));
+      std::vector<Json> serializedChain;
+      serializedChain.reserve(analysis.chain.size());
+      for (const auto& link : analysis.chain) {
+        serializedChain.push_back(Json::object(
+            "startX", link.startX, "startY", link.startY, "startHeading",
+            link.startHeading, "endX", link.endX, "endY", link.endY,
+            "endHeading", link.endHeading));
+      }
+      return JsonResponse(
+          200, Json::object("controls", std::move(serializedControls),
+                            "chain", std::move(serializedChain)));
     } catch (const std::exception& error) {
       return ApiError(422, "VALIDATION_ERROR", error.what());
     }
