@@ -836,6 +836,24 @@ Json WaitForSessionOperation(Socket socket, std::string_view operationId,
   throw std::runtime_error("expected terminal session operation event");
 }
 
+Json WaitForDocumentChanged(Socket socket, std::uint64_t revision) {
+  for (std::size_t attempt = 0; attempt < kMaximumSessionOperationEvents;
+       ++attempt) {
+    const auto frame = ReadServerTextFrame(socket);
+    Require(!frame.empty(), "expected a committed document event");
+    const auto event = Json::parse_or_throw(frame);
+    if (event.at("type").get_string() != "document.changed" ||
+        static_cast<std::uint64_t>(event.at("revision").get_number()) !=
+            revision) {
+      continue;
+    }
+    Require(event.at("projectId").get_string() == kTestProjectUuid,
+            "document event should identify the active project");
+    return event;
+  }
+  throw std::runtime_error("expected document revision event");
+}
+
 void TestPickerOpenLoadsProjectSnapshot(
     const std::filesystem::path& executable) {
   ApiTestFixture fixture{executable, PickerMode::Deferred};
@@ -1225,6 +1243,7 @@ void TestProjectAndTrajectoryPatches(const std::filesystem::path& executable) {
       projectPatchResult.at("revision").get_number());
   Require(projectRevision == initialRevision + 1,
           "project patch should advance the document revision");
+  WaitForDocumentChanged(events.Get(), projectRevision);
   const auto [projectRetryStatus, projectRetryBody] =
       fixture.PatchProject(kTestProjectUuid, projectPatch, initialRevision,
                            kProjectPatchIdempotencyKey);
@@ -1262,6 +1281,7 @@ void TestProjectAndTrajectoryPatches(const std::filesystem::path& executable) {
           "trajectory patch should return HTTP 200");
   const auto trajectoryRevision = static_cast<std::uint64_t>(
       Json::parse_or_throw(trajectoryPatchBody).at("revision").get_number());
+  WaitForDocumentChanged(events.Get(), trajectoryRevision);
   const auto [trajectoryStatus, trajectoryBody] =
       fixture.GetTrajectory(kTestProjectUuid, kTestTrajectoryUuid);
   Require(trajectoryStatus == kHttpOk &&

@@ -60,6 +60,14 @@ project and trajectory files; if saving fails, the current session remains
 open. Stop the process with Ctrl+C or SIGTERM. The existing UI still uses
 Tauri commands, so static hosting is not yet a usable browser app.
 
+The `/api/v1/events` WebSocket publishes transient `document.changed` events
+with the active `projectId` and committed `revision`, and a `session.closed`
+event when the active document closes. Events are not replayed after a
+disconnect. A client should connect to the WebSocket before fetching
+`/api/v1/snapshot`, apply that snapshot, then refresh it when it receives a
+newer revision or a session event; after reconnecting, fetch a fresh snapshot
+because revisions and missed events are not retained as a transport log.
+
 When `wpinet` is available, separate CTest cases cover the test-child handoff
 and real-generator differential, swerve, and split scenarios. Set
 `CHOREO_GENERATOR_TEST_EXECUTABLE` to the built generator's full path before

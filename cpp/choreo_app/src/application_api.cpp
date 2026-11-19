@@ -208,6 +208,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
 
   struct PublishedSnapshot {
     std::uint64_t revision;
+    std::string projectId;
     std::string body;
   };
 
@@ -653,7 +654,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       self->StopGenerations();
       self->store.reset();
       self->documentFiles = {};
-      self->publishedSnapshot.store({});
+      self->PublishSnapshot();
       return JsonResponse(200, Json::object("closed", true));
     });
     return OperationAccepted(operationId, "close");
@@ -1452,12 +1453,33 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
 
   void PublishSnapshot() {
     if (!store) {
-      publishedSnapshot.store({});
+      auto previous = publishedSnapshot.exchange({});
+      if (previous) {
+        server.BroadcastText(
+            "/api/v1/events",
+            Json::object("type", "session.closed", "projectId",
+                         previous->projectId, "revision", previous->revision)
+                .to_string());
+      }
       return;
     }
+    auto document = SnapshotJson();
+    const auto revision = store->Revision();
+    const auto projectId =
+        document.at("project").at("uuid").get_string();
+    auto body = document.to_string();
+    const auto previous = publishedSnapshot.load();
+    const bool changed = !previous || previous->body != body;
     auto snapshot = std::make_shared<const PublishedSnapshot>(
-        PublishedSnapshot{store->Revision(), SnapshotJson().to_string()});
+        PublishedSnapshot{revision, projectId, std::move(body)});
     publishedSnapshot.store(std::move(snapshot));
+    if (changed) {
+      server.BroadcastText(
+          "/api/v1/events",
+          Json::object("type", "document.changed", "projectId", projectId,
+                       "revision", revision)
+              .to_string());
+    }
   }
 
   DocumentFiles DiscoverFiles(const std::filesystem::path& projectPath) const {
