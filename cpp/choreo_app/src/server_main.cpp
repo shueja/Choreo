@@ -1,3 +1,4 @@
+#include <array>
 #include <charconv>
 #include <chrono>
 #include <csignal>
@@ -11,11 +12,70 @@
 #include <utility>
 #include <vector>
 
+#ifdef _WIN32
+#include <shellapi.h>
+#include <windows.h>
+#else
+#include <cerrno>
+#include <fcntl.h>
+#include <spawn.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+extern char** environ;
+#endif
+
 #include "choreo/document/application_api.hpp"
 
 namespace {
 
 volatile std::sig_atomic_t g_shutdownRequested = 0;
+
+#ifndef _WIN32
+bool OpenBrowser(std::string_view url) {
+#ifdef __APPLE__
+  constexpr std::string_view executable = "open";
+#else
+  constexpr std::string_view executable = "xdg-open";
+#endif
+  posix_spawn_file_actions_t actions;
+  if (posix_spawn_file_actions_init(&actions) != 0) {
+    return false;
+  }
+  const int redirectResult =
+      posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null",
+                                       O_WRONLY, 0) |
+      posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null",
+                                       O_WRONLY, 0);
+  if (redirectResult != 0) {
+    posix_spawn_file_actions_destroy(&actions);
+    return false;
+  }
+  std::string program{executable};
+  std::string target{url};
+  std::array<char*, 3> arguments{program.data(), target.data(), nullptr};
+  pid_t process = 0;
+  const int spawnResult = posix_spawnp(
+      &process, program.c_str(), &actions, nullptr, arguments.data(), environ);
+  posix_spawn_file_actions_destroy(&actions);
+  if (spawnResult != 0) {
+    return false;
+  }
+  std::thread([process] {
+    while (waitpid(process, nullptr, 0) == -1 && errno == EINTR) {
+    }
+  }).detach();
+  return true;
+}
+#else
+bool OpenBrowser(std::string_view url) {
+  const std::wstring wideUrl{url.begin(), url.end()};
+  const auto result = ShellExecuteW(nullptr, L"open", wideUrl.c_str(), nullptr,
+                                    nullptr, SW_SHOWNORMAL);
+  return reinterpret_cast<std::intptr_t>(result) > 32;
+}
+#endif
 
 void RequestShutdown(int) {
   g_shutdownRequested = 1;
@@ -27,6 +87,7 @@ struct Arguments {
   std::filesystem::path webRoot;
   std::string generator;
   std::vector<std::string> allowedOrigins;
+  bool openBrowser = true;
   bool showHelp = false;
 };
 
@@ -48,6 +109,10 @@ bool ParseArguments(int argc, char** argv, Arguments& arguments,
     const std::string_view argument{argv[index]};
     if (argument == "--help" || argument == "-h") {
       arguments.showHelp = true;
+      continue;
+    }
+    if (argument == "--no-browser") {
+      arguments.openBrowser = false;
       continue;
     }
     if (argument != "--port" && argument != "--project" &&
@@ -86,7 +151,7 @@ bool ParseArguments(int argc, char** argv, Arguments& arguments,
 void PrintUsage(std::ostream& output) {
   output << "Usage: choreo-server [--port PORT] [--project PATH] "
             "[--generator PATH] "
-            "[--web-root PATH] [--allowed-origin ORIGIN...]\n"
+            "[--web-root PATH] [--allowed-origin ORIGIN...] [--no-browser]\n"
             "Starts the localhost Choreo application API. Port 0 selects "
             "an available port.\n";
 }
@@ -126,9 +191,13 @@ int main(int argc, char** argv) {
         server, std::move(applicationOptions)};
 
     server.Start();
-    std::cout << "{\"type\":\"ready\",\"url\":\"http://127.0.0.1:"
-              << server.Port() << "\"}\n"
+    const auto url =
+        "http://127.0.0.1:" + std::to_string(server.Port());
+    std::cout << "{\"type\":\"ready\",\"url\":\"" << url << "\"}\n"
               << std::flush;
+    if (arguments.openBrowser && !OpenBrowser(url)) {
+      std::cerr << "choreo-server: could not open browser for " << url << '\n';
+    }
     while (g_shutdownRequested == 0) {
       std::this_thread::sleep_for(std::chrono::milliseconds{100});
     }

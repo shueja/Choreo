@@ -65,6 +65,9 @@ if(TARGET wpinet)
     add_executable(choreo_server src/server_main.cpp)
     target_compile_features(choreo_server PRIVATE cxx_std_23)
     target_link_libraries(choreo_server PRIVATE choreo::document_api)
+    if(WIN32)
+        target_link_libraries(choreo_server PRIVATE shell32)
+    endif()
     install(TARGETS choreo_server
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT choreo-server
     )
@@ -102,6 +105,7 @@ if(BUILD_TESTING)
     add_test(NAME choreo_document_core.snapshots COMMAND choreo_document_core_test "${CMAKE_CURRENT_BINARY_DIR}")
     if(TARGET choreo_generation_process)
         add_test(NAME choreo_server.help COMMAND choreo_server --help)
+        add_test(NAME choreo_server.no_browser_help COMMAND choreo_server --no-browser --help)
         add_test(NAME choreo_server.invalid_argument COMMAND choreo_server --unknown)
         set_tests_properties(choreo_server.invalid_argument PROPERTIES WILL_FAIL TRUE)
         add_test(NAME choreo_server.invalid_project

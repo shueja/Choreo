@@ -53,10 +53,11 @@ ephemeral port, and prints one JSON readiness record to stdout:
 Pass the Vite output directory with `--web-root PATH` to serve its static
 assets, load a project before the server reports readiness with
 `--project PATH`, and configure an optional generator path with
-`--generator PATH`.
+`--generator PATH`. The server opens its localhost URL in the default browser
+after printing the readiness record; pass `--no-browser` for headless use.
 Repeat `--allowed-origin ORIGIN` to permit cross-origin UI clients. The default
-Vite output directory is `dist`. The current host does not yet open a browser
-or provide a native project picker. Open projects using the API's path-based
+Vite output directory is `dist`. The current host does not provide a native
+project picker. Open projects using `--project PATH` or the API's path-based
 session operation. Closing or replacing a session first saves any modified
 project and trajectory files; if saving fails, the current session remains
 open. Stop the process with Ctrl+C or SIGTERM. The existing UI still uses
