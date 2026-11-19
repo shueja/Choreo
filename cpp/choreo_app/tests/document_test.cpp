@@ -1,11 +1,14 @@
 #include "choreo/document/document.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <string>
 #include <type_traits>
+#include <utility>
 
 #include <wpilib-expression/expression.hpp>
 
@@ -13,8 +16,6 @@
 #include "choreo/document/evaluation.hpp"
 #include "choreo/document/history.hpp"
 #include "document_test_fixture.hpp"
-
-
 
 template <typename ExpressionType>
 bool CheckDimension(wpilib::expression::EvaluationContext& context,
@@ -610,6 +611,24 @@ int main(int argc, char** argv) {
       polygonAnalysis.paths.front().size() != 4 ||
       polygonAnalysis.controls.empty()) {
     return EXIT_FAILURE;
+  }
+
+  const std::array<std::pair<std::string, evaluation::DragGeometryType>, 4>
+      additionalGeometryExpressions{{
+          {"Rotation2d(45 deg)", evaluation::DragGeometryType::Rotation2d},
+          {"Transform2d(2 m, 1 m, 45 deg)",
+           evaluation::DragGeometryType::Transform2d},
+          {"Twist2d(2 m, 1 m, 45 deg)", evaluation::DragGeometryType::Twist2d},
+          {"Ellipse2d(Pose2d(2 m, 3 m, 45 deg), 1 m, 2 m)",
+           evaluation::DragGeometryType::Ellipse2d},
+      }};
+  for (const auto& [expression, type] : additionalGeometryExpressions) {
+    const auto analysis = evaluation::GetGeometryDragControls(MakeTestProject(),
+                                                              expression, type);
+    if (analysis.paths.empty() || analysis.paths.front().size() < 2 ||
+        analysis.controls.empty()) {
+      return EXIT_FAILURE;
+    }
   }
 
   return EXIT_SUCCESS;

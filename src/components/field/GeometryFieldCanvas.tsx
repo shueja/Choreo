@@ -1,12 +1,15 @@
 import * as d3 from "d3";
 import { useEffect, useRef, useState } from "react";
-import { GeometryDragAnalysis, ServerVariable } from "../../document/ServerSessionStore";
+import type {
+  GeometryDragAnalysis,
+  ServerVariable
+} from "../../document/ServerSessionStore";
 import { FIELD_LENGTH, FIELD_WIDTH } from "./svg/fields/FieldDimensions";
 import Field2026Url from "./svg/fields/FieldImage2026.svg?url";
 import { attachFieldZoom } from "./svg/FieldZoom";
 import FieldAxisLayer from "./svg/FieldAxisLayer";
 import FieldGridLayer from "./svg/FieldGridLayer";
-import { ServerViewLayers } from "./ServerViewLayers";
+import type { ServerViewLayers } from "./ServerViewLayers";
 import GeometryFieldLayer from "./GeometryFieldLayer";
 import styles from "./ServerFieldCanvas.module.css";
 
@@ -14,6 +17,7 @@ interface Props {
   variables: Record<string, ServerVariable>;
   analyses: Record<string, GeometryDragAnalysis>;
   visibleLayers: ServerViewLayers;
+  disabled: boolean;
   onDragVariable: (id: string, expression: string) => Promise<void>;
 }
 
@@ -21,6 +25,7 @@ export default function GeometryFieldCanvas({
   variables,
   analyses,
   visibleLayers,
+  disabled,
   onDragVariable
 }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -75,6 +80,7 @@ export default function GeometryFieldCanvas({
           <GeometryFieldLayer
             variables={variables}
             analyses={analyses}
+            disabled={disabled}
             pointerCoordinates={pointerCoordinates}
             onDragVariable={onDragVariable}
           />

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import {
+import type {
   GeometryDragAnalysis,
   GeometryDragControl,
   GeometryDragEffect,
@@ -11,6 +11,7 @@ import { updateGeometryExpressionForDrag } from "../../util/GeometryExpressionDr
 interface Props {
   variables: Record<string, ServerVariable>;
   analyses: Record<string, GeometryDragAnalysis>;
+  disabled: boolean;
   pointerCoordinates: (
     event: React.PointerEvent<SVGElement>
   ) => { x: number; y: number } | null;
@@ -33,7 +34,7 @@ function movedPaths(
   control: GeometryDragControl,
   delta: number
 ): GeometryFeaturePoint[][] {
-  return paths.map((path) => path.map((point) => ({ ...point }))).map((path, pathIndex) =>
+  return paths.map((path, pathIndex) =>
     path.map((point, pointIndex) => {
       const effect = control.effects.find(
         (entry) =>
@@ -63,6 +64,7 @@ function maxEffect(control: GeometryDragControl): GeometryDragEffect | null {
 export default function GeometryFieldLayer({
   variables,
   analyses,
+  disabled,
   pointerCoordinates,
   onDragVariable
 }: Props) {
@@ -111,6 +113,10 @@ export default function GeometryFieldLayer({
       return;
     }
     activeDrag.current = null;
+    if (drag.candidateExpression === drag.expression) {
+      setPreview(null);
+      return;
+    }
     void onDragVariable(drag.id, drag.candidateExpression).finally(() =>
       setPreview(null)
     );
@@ -156,7 +162,8 @@ export default function GeometryFieldLayer({
               <g key={`path-${pathIndex}`}>
                 <polyline
                   points={path.map(({ x, y }) => `${x},${y}`).join(" ")}
-                  fill={fill ? `${color}22` : "none"}
+                  fill={fill ? color : "none"}
+                  fillOpacity={fill ? 0.15 : undefined}
                   stroke={color}
                   strokeWidth={0.04}
                   pointerEvents="none"
@@ -212,10 +219,10 @@ export default function GeometryFieldLayer({
                     fill={color}
                     stroke="black"
                     strokeWidth={0.025}
-                    style={{ cursor: "move" }}
+                    style={{ cursor: disabled ? "default" : "move" }}
                     onPointerDown={(event) => {
                       const pointer = pointerCoordinates(event);
-                      if (!pointer || event.button !== 0) {
+                      if (disabled || !pointer || event.button !== 0) {
                         return;
                       }
                       event.stopPropagation();

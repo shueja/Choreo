@@ -466,7 +466,12 @@ function ServerWorkspace() {
       const variables = await Promise.all(
         Object.entries(project.variables.variables).map(
           async ([id, variable]) => {
-            if (variable.type === "Quantity") {
+            if (
+              variable.type === "Quantity" ||
+              (studioView === "trajectory" &&
+                variable.type !== "Pose2d" &&
+                variable.type !== "Translation2d")
+            ) {
               return [id, null] as const;
             }
             try {
@@ -508,7 +513,7 @@ function ServerWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, [project, activeTrajectory]);
+  }, [project, activeTrajectory, studioView]);
   const bumperVertices =
     (
       project?.config as
@@ -1275,6 +1280,11 @@ function ServerWorkspace() {
                 <h2>Geometry field</h2>
                 <span>Drag a handle to update the geometry expression.</span>
               </header>
+              {(actionError || state.error) && (
+                <Alert severity="error" onClose={() => setActionError(null)}>
+                  {actionError ?? state.error}
+                </Alert>
+              )}
               <div className={styles.canvasArea}>
                 <div
                   className={`${styles.fieldViewport} ${variablesOpen ? styles.fieldViewportWithPanel : ""}`}
@@ -1283,6 +1293,7 @@ function ServerWorkspace() {
                     variables={project.variables.variables}
                     analyses={variableDragAnalysis}
                     visibleLayers={visibleLayers}
+                    disabled={pending || !state.connected}
                     onDragVariable={(id, expression) =>
                       patchVariable(id, { expression })
                     }

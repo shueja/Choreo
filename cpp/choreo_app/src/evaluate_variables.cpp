@@ -368,9 +368,9 @@ Document EvaluateDocument(const Document& document) {
   return result;
 }
 
-GeometryDragAnalysis GetGeometryDragControls(
-    const Project& project, std::string_view expression,
-    DragGeometryType type) {
+GeometryDragAnalysis GetGeometryDragControls(const Project& project,
+                                             std::string_view expression,
+                                             DragGeometryType type) {
   struct NumericToken {
     std::size_t start;
     std::size_t end;
@@ -399,25 +399,22 @@ GeometryDragAnalysis GetGeometryDragControls(
     const char character = expression[index];
     if ((!std::isdigit(static_cast<unsigned char>(character)) &&
          (character != '.' || index + 1 >= expression.size() ||
-          !std::isdigit(
-              static_cast<unsigned char>(expression[index + 1])))) ||
-        (index > 0 &&
-         (isWordCharacter(expression[index - 1]) ||
-          expression[index - 1] == '.'))) {
+          !std::isdigit(static_cast<unsigned char>(expression[index + 1])))) ||
+        (index > 0 && (isWordCharacter(expression[index - 1]) ||
+                       expression[index - 1] == '.'))) {
       ++index;
       continue;
     }
 
     double value = 0;
-    const auto parsed = std::from_chars(
-        expression.data() + index, expression.data() + expression.size(),
-        value);
+    const auto parsed =
+        std::from_chars(expression.data() + index,
+                        expression.data() + expression.size(), value);
     if (parsed.ec != std::errc{} || parsed.ptr == expression.data() + index) {
       ++index;
       continue;
     }
-    const auto end =
-        static_cast<std::size_t>(parsed.ptr - expression.data());
+    const auto end = static_cast<std::size_t>(parsed.ptr - expression.data());
     tokens.push_back({index, end, value});
     index = end;
   }
@@ -480,10 +477,9 @@ GeometryDragAnalysis GetGeometryDragControls(
     constexpr double kHandleLength = 0.8;
     std::vector<std::vector<Point>> paths;
     auto addHeading = [&](double x, double y, double heading) {
-      paths.push_back(
-          {{x, y},
-           {x + kHandleLength * std::cos(heading),
-            y + kHandleLength * std::sin(heading)}});
+      paths.push_back({{x, y},
+                       {x + kHandleLength * std::cos(heading),
+                        y + kHandleLength * std::sin(heading)}});
     };
     switch (type) {
       case DragGeometryType::Pose2d: {
@@ -541,12 +537,11 @@ GeometryDragAnalysis GetGeometryDragControls(
         const double cosine = std::cos(heading);
         const double sine = std::sin(heading);
         std::vector<Point> corners;
-        for (const auto [x, y] :
-             {std::pair{-halfWidth, -halfHeight},
-              std::pair{halfWidth, -halfHeight},
-              std::pair{halfWidth, halfHeight},
-              std::pair{-halfWidth, halfHeight},
-              std::pair{-halfWidth, -halfHeight}}) {
+        for (const auto [x, y] : {std::pair{-halfWidth, -halfHeight},
+                                  std::pair{halfWidth, -halfHeight},
+                                  std::pair{halfWidth, halfHeight},
+                                  std::pair{-halfWidth, halfHeight},
+                                  std::pair{-halfWidth, -halfHeight}}) {
           corners.push_back({centerX + cosine * x - sine * y,
                              centerY + sine * x + cosine * y});
         }
@@ -660,8 +655,7 @@ GeometryDragAnalysis GetGeometryDragControls(
       }
       try {
         calls.push_back({methodStart, nameEnd + 1, end,
-                         evaluatePrefix(methodStart),
-                         evaluatePrefix(end + 1)});
+                         evaluatePrefix(methodStart), evaluatePrefix(end + 1)});
       } catch (const std::exception&) {
       }
       break;
@@ -678,9 +672,9 @@ GeometryDragAnalysis GetGeometryDragControls(
     analysis.chain.push_back(
         {base.x, base.y, base.heading, base.x, base.y, base.heading});
     for (const auto& call : calls) {
-      analysis.chain.push_back(
-          {call.start.x, call.start.y, call.start.heading, call.finish.x,
-           call.finish.y, call.finish.heading});
+      analysis.chain.push_back({call.start.x, call.start.y, call.start.heading,
+                                call.finish.x, call.finish.y,
+                                call.finish.heading});
     }
   }
 
@@ -706,10 +700,10 @@ GeometryDragAnalysis GetGeometryDragControls(
     const double step = std::max(1e-5, std::abs(token.value) * 1e-5);
     auto format = [&](double value) -> std::string {
       char buffer[64];
-      const auto converted = std::to_chars(
-          std::begin(buffer), std::end(buffer), value,
-          std::chars_format::general,
-          std::numeric_limits<double>::max_digits10);
+      const auto converted =
+          std::to_chars(std::begin(buffer), std::end(buffer), value,
+                        std::chars_format::general,
+                        std::numeric_limits<double>::max_digits10);
       if (converted.ec != std::errc{}) {
         return {};
       }
@@ -718,8 +712,7 @@ GeometryDragAnalysis GetGeometryDragControls(
     auto replace = [&](double value) -> std::string {
       std::string updated{expression};
       const auto replacement = format(value);
-      updated.replace(token.start, token.end - token.start,
-                      replacement);
+      updated.replace(token.start, token.end - token.start, replacement);
       return updated;
     };
     auto evaluateChangedPrefix = [&](double value, std::size_t end) {
@@ -782,6 +775,7 @@ GeometryDragAnalysis GetGeometryDragControls(
           minusPaths.size() != analysis.paths.size()) {
         continue;
       }
+      bool compatiblePaths = true;
       for (std::size_t pathIndex = 0; pathIndex < analysis.paths.size();
            ++pathIndex) {
         const auto& basePath = analysis.paths[pathIndex];
@@ -790,6 +784,7 @@ GeometryDragAnalysis GetGeometryDragControls(
         if (plusPath.size() != basePath.size() ||
             minusPath.size() != basePath.size()) {
           effects.clear();
+          compatiblePaths = false;
           break;
         }
         for (std::size_t pointIndex = 0; pointIndex < basePath.size();
@@ -799,14 +794,12 @@ GeometryDragAnalysis GetGeometryDragControls(
           const double effectY =
               (plusPath[pointIndex].y - minusPath[pointIndex].y) * scale;
           if (std::isfinite(effectX) && std::isfinite(effectY) &&
-              (std::abs(effectX) >= 1e-10 ||
-               std::abs(effectY) >= 1e-10)) {
-            effects.push_back(
-                {pathIndex, pointIndex, effectX, effectY});
+              (std::abs(effectX) >= 1e-10 || std::abs(effectY) >= 1e-10)) {
+            effects.push_back({pathIndex, pointIndex, effectX, effectY});
           }
         }
       }
-      if (effects.empty()) {
+      if (!compatiblePaths || effects.empty()) {
         continue;
       }
       controls.push_back({token.start, token.end, token.value, dx, dy, dheading,
@@ -818,5 +811,4 @@ GeometryDragAnalysis GetGeometryDragControls(
   }
   return analysis;
 }
-
-}
+}  // namespace choreo::document::evaluation

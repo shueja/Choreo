@@ -1423,26 +1423,26 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         std::vector<Json> effects;
         effects.reserve(control.effects.size());
         for (const auto& effect : control.effects) {
-          effects.push_back(Json::object(
-              "pathIndex", effect.pathIndex, "pointIndex", effect.pointIndex,
-              "dx", effect.dx, "dy", effect.dy));
+          effects.push_back(Json::object("pathIndex", effect.pathIndex,
+                                         "pointIndex", effect.pointIndex, "dx",
+                                         effect.dx, "dy", effect.dy));
         }
         serializedControls.push_back(Json::object(
-            "start", control.start, "end", control.end, "value",
-            control.value, "dx", control.dx, "dy", control.dy, "dheading",
-            control.dheading, "segmentDx", control.segmentDx, "segmentDy",
-            control.segmentDy, "segmentDheading", control.segmentDheading,
-            "chainIndex", control.chainIndex, "anchorX",
-            control.anchorX, "anchorY", control.anchorY, "anchorHeading",
-            control.anchorHeading, "effects", std::move(effects)));
+            "start", control.start, "end", control.end, "value", control.value,
+            "dx", control.dx, "dy", control.dy, "dheading", control.dheading,
+            "segmentDx", control.segmentDx, "segmentDy", control.segmentDy,
+            "segmentDheading", control.segmentDheading, "chainIndex",
+            control.chainIndex, "anchorX", control.anchorX, "anchorY",
+            control.anchorY, "anchorHeading", control.anchorHeading, "effects",
+            std::move(effects)));
       }
       std::vector<Json> serializedChain;
       serializedChain.reserve(analysis.chain.size());
       for (const auto& link : analysis.chain) {
-        serializedChain.push_back(Json::object(
-            "startX", link.startX, "startY", link.startY, "startHeading",
-            link.startHeading, "endX", link.endX, "endY", link.endY,
-            "endHeading", link.endHeading));
+        serializedChain.push_back(
+            Json::object("startX", link.startX, "startY", link.startY,
+                         "startHeading", link.startHeading, "endX", link.endX,
+                         "endY", link.endY, "endHeading", link.endHeading));
       }
       std::vector<Json> serializedPaths;
       serializedPaths.reserve(analysis.paths.size());
@@ -1455,8 +1455,8 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         serializedPaths.push_back(std::move(points));
       }
       return JsonResponse(
-          200, Json::object("controls", std::move(serializedControls),
-                            "chain", std::move(serializedChain), "paths",
+          200, Json::object("controls", std::move(serializedControls), "chain",
+                            std::move(serializedChain), "paths",
                             std::move(serializedPaths)));
     } catch (const std::exception& error) {
       return ApiError(422, "VALIDATION_ERROR", error.what());
