@@ -30,7 +30,7 @@ macro(fetch_wpilib)
         set(EIGEN_BUILD_CMAKE_PACKAGE TRUE)
         FetchContent_Declare(
             Eigen3
-            GIT_REPOSITORY https://github.com/ac-frg/eigen-git-mirror.git
+            GIT_REPOSITORY https://github.com/libeigen/eigen.git
             GIT_TAG b7f6aed1b9974fd56cce651b4ff059c3bfc67782
             SYSTEM
             OVERRIDE_FIND_PACKAGE
