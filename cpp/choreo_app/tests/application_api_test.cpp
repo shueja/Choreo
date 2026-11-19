@@ -75,6 +75,30 @@ constexpr std::string_view kTrajectoryPatchIdempotencyKey =
     "00000000-0000-4000-8000-000000009008";
 constexpr std::string_view kFailedPatchIdempotencyKey =
     "00000000-0000-4000-8000-000000009009";
+constexpr std::string_view kCreateWaypointIdempotencyKey =
+    "00000000-0000-4000-8000-000000009010";
+constexpr std::string_view kPatchWaypointIdempotencyKey =
+    "00000000-0000-4000-8000-000000009011";
+constexpr std::string_view kDeleteWaypointIdempotencyKey =
+    "00000000-0000-4000-8000-000000009012";
+constexpr std::string_view kCreateConstraintIdempotencyKey =
+    "00000000-0000-4000-8000-000000009013";
+constexpr std::string_view kPatchConstraintIdempotencyKey =
+    "00000000-0000-4000-8000-000000009014";
+constexpr std::string_view kDeleteConstraintIdempotencyKey =
+    "00000000-0000-4000-8000-000000009015";
+constexpr std::string_view kCreateEventIdempotencyKey =
+    "00000000-0000-4000-8000-000000009016";
+constexpr std::string_view kPatchEventIdempotencyKey =
+    "00000000-0000-4000-8000-000000009017";
+constexpr std::string_view kDeleteEventIdempotencyKey =
+    "00000000-0000-4000-8000-000000009018";
+constexpr std::string_view kCreatedWaypointUuid =
+    "00000000-0000-4000-8000-000000009101";
+constexpr std::string_view kCreatedConstraintUuid =
+    "00000000-0000-4000-8000-000000009102";
+constexpr std::string_view kCreatedEventUuid =
+    "00000000-0000-4000-8000-000000009103";
 constexpr int kHttpOk = 200;
 constexpr int kHttpAccepted = 202;
 constexpr int kHttpBadRequest = 400;
@@ -689,6 +713,23 @@ class ApiTestFixture {
                        "application/merge-patch+json");
   }
 
+  std::pair<int, std::string> MutateSubresource(
+      std::string_view method, std::string_view resource,
+      std::optional<std::string_view> itemId, std::string_view body,
+      std::string_view contentType, std::uint64_t revision,
+      std::string_view idempotencyKey) const {
+    auto path = "/api/v1/projects/" + std::string{kTestProjectUuid} +
+                "/trajectories/" + std::string{kTestTrajectoryUuid} + "/" +
+                std::string{resource};
+    if (itemId) {
+      path += "/" + std::string{*itemId};
+    }
+    const auto headers =
+        "If-Match: \"revision-" + std::to_string(revision) + "\"\r\n" +
+        "Idempotency-Key: " + std::string{idempotencyKey} + "\r\n";
+    return HttpRequest(Port(), method, path, body, headers, contentType);
+  }
+
   std::pair<int, std::string> HistoryAction(
       std::string_view action, std::uint64_t revision,
       std::string_view idempotencyKey) const {
@@ -1260,6 +1301,147 @@ void TestProjectAndTrajectoryPatches(const std::filesystem::path& executable) {
           "successful save should publish the persisted pending patch");
 }
 
+void TestWaypointConstraintAndEventMarkerMutations(
+    const std::filesystem::path& executable) {
+  ApiTestFixture fixture{executable};
+  auto events = fixture.ConnectEvents();
+  Require(static_cast<bool>(events), "event WebSocket should connect");
+  const auto [openStatus, openBody] = fixture.OpenPath(fixture.ProjectPath());
+  const auto openOperationId =
+      AcceptedOperationId(openStatus, openBody, "open");
+  WaitForSessionOperation(events.Get(), openOperationId, "open", "succeeded");
+
+  const auto revisionFromSnapshot = [&fixture] {
+    const auto [status, body] = fixture.Snapshot();
+    Require(status == kHttpOk, "snapshot should be available");
+    return static_cast<std::uint64_t>(
+        Json::parse_or_throw(body).at("revision").get_number());
+  };
+  const auto revisionFromMutation = [](const std::string& body) {
+    return static_cast<std::uint64_t>(
+        Json::parse_or_throw(body).at("revision").get_number());
+  };
+
+  auto snapshot = Json::parse_or_throw(fixture.Snapshot().second);
+  auto waypoint = snapshot.at("trajectories")
+                      .get_array()
+                      .front()
+                      .at("params")
+                      .at("waypoints")
+                      .get_array()
+                      .front();
+  waypoint["uuid"] = kCreatedWaypointUuid;
+  const auto createWaypointBaseRevision = revisionFromSnapshot();
+  auto [status, body] = fixture.MutateSubresource(
+      "POST", "waypoints", std::nullopt, waypoint.to_string(),
+      "application/json", createWaypointBaseRevision,
+      kCreateWaypointIdempotencyKey);
+  Require(status == 201, "waypoint creation should return HTTP 201");
+  const auto createdWaypointRevision = revisionFromMutation(body);
+  const auto [waypointRetryStatus, waypointRetryBody] =
+      fixture.MutateSubresource("POST", "waypoints", std::nullopt,
+                                waypoint.to_string(), "application/json",
+                                createWaypointBaseRevision,
+                                kCreateWaypointIdempotencyKey);
+  Require(waypointRetryStatus == status && waypointRetryBody == body,
+          "retrying waypoint creation should replay its original response");
+  auto [waypointPatchStatus, waypointPatchBody] = fixture.MutateSubresource(
+      "PATCH", "waypoints", kCreatedWaypointUuid,
+      Json::object("intervals", 7).to_string(), "application/merge-patch+json",
+      createdWaypointRevision, kPatchWaypointIdempotencyKey);
+  Require(waypointPatchStatus == kHttpOk,
+          "waypoint update should return HTTP 200");
+  auto waypointRevision = revisionFromMutation(waypointPatchBody);
+  auto [staleWaypointStatus, staleWaypointBody] = fixture.MutateSubresource(
+      "PATCH", "waypoints", kCreatedWaypointUuid,
+      Json::object("intervals", 8).to_string(), "application/merge-patch+json",
+      createdWaypointRevision, kFailedPatchIdempotencyKey);
+  Require(staleWaypointStatus == kHttpConflict &&
+              Json::parse_or_throw(staleWaypointBody).at("code").get_string() ==
+                  "REVISION_CONFLICT",
+          "stale waypoint updates should be rejected");
+  auto [waypointDeleteStatus, waypointDeleteBody] = fixture.MutateSubresource(
+      "DELETE", "waypoints", kCreatedWaypointUuid, {}, {}, waypointRevision,
+      kDeleteWaypointIdempotencyKey);
+  Require(waypointDeleteStatus == kHttpOk,
+          "waypoint deletion should return HTTP 200");
+  waypointRevision = revisionFromMutation(waypointDeleteBody);
+  auto waypointCollection = Json::parse_or_throw(
+      fixture
+          .GetTrajectorySubresource(kTestProjectUuid, kTestTrajectoryUuid,
+                                    "waypoints")
+          .second);
+  Require(waypointCollection.at("items").get_array().size() ==
+              kExpectedSingleItemCollectionCount,
+          "waypoint deletion should remove only the selected waypoint");
+
+  snapshot = Json::parse_or_throw(fixture.Snapshot().second);
+  auto constraint = snapshot.at("trajectories")
+                        .get_array()
+                        .front()
+                        .at("params")
+                        .at("constraints")
+                        .get_array()
+                        .front();
+  constraint["uuid"] = kCreatedConstraintUuid;
+  auto [constraintCreateStatus, constraintCreateBody] =
+      fixture.MutateSubresource("POST", "constraints", std::nullopt,
+                                constraint.to_string(), "application/json",
+                                waypointRevision,
+                                kCreateConstraintIdempotencyKey);
+  Require(constraintCreateStatus == 201,
+          "constraint creation should return HTTP 201");
+  const auto constraintRevision = revisionFromMutation(constraintCreateBody);
+  auto [constraintPatchStatus, constraintPatchBody] = fixture.MutateSubresource(
+      "PATCH", "constraints", kCreatedConstraintUuid,
+      Json::object("enabled", false).to_string(),
+      "application/merge-patch+json", constraintRevision,
+      kPatchConstraintIdempotencyKey);
+  Require(constraintPatchStatus == kHttpOk,
+          "constraint update should return HTTP 200");
+  auto [constraintDeleteStatus, constraintDeleteBody] =
+      fixture.MutateSubresource("DELETE", "constraints", kCreatedConstraintUuid,
+                                {}, {},
+                                revisionFromMutation(constraintPatchBody),
+                                kDeleteConstraintIdempotencyKey);
+  Require(constraintDeleteStatus == kHttpOk,
+          "constraint deletion should return HTTP 200");
+
+  const auto event = Json::object(
+      "uuid", kCreatedEventUuid, "name", "Added event", "from",
+      Json::object("target", "first", "targetTime", nullptr, "offset",
+                   Json::object("exp", "0 s", "val", 0.0)));
+  auto [eventCreateStatus, eventCreateBody] = fixture.MutateSubresource(
+      "POST", "event-markers", std::nullopt, event.to_string(),
+      "application/json", revisionFromMutation(constraintDeleteBody),
+      kCreateEventIdempotencyKey);
+  Require(eventCreateStatus == 201,
+          "event-marker creation should return HTTP 201");
+  auto [eventPatchStatus, eventPatchBody] = fixture.MutateSubresource(
+      "PATCH", "event-markers", kCreatedEventUuid,
+      Json::object("name", "Renamed event").to_string(),
+      "application/merge-patch+json", revisionFromMutation(eventCreateBody),
+      kPatchEventIdempotencyKey);
+  Require(eventPatchStatus == kHttpOk,
+          "event-marker update should return HTTP 200");
+  const auto [eventGetStatus, eventGetBody] =
+      fixture.GetTrajectorySubresourceItem(kTestProjectUuid,
+                                           kTestTrajectoryUuid, "event-markers",
+                                           kCreatedEventUuid);
+  Require(eventGetStatus == kHttpOk &&
+              Json::parse_or_throw(eventGetBody).at("name").get_string() ==
+                  "Renamed event",
+          "event-marker update should be visible in the document snapshot");
+  const auto [eventDeleteStatus, eventDeleteBody] = fixture.MutateSubresource(
+      "DELETE", "event-markers", kCreatedEventUuid, {}, {},
+      revisionFromMutation(eventPatchBody), kDeleteEventIdempotencyKey);
+  Require(eventDeleteStatus == kHttpOk,
+          "event-marker deletion should return HTTP 200");
+  Require(Json::parse_or_throw(eventDeleteBody).at("revision").get_number() >
+              revisionFromMutation(eventPatchBody),
+          "successful resource mutations should advance the document revision");
+}
+
 std::uint64_t GenerateOutput(ApiTestFixture& fixture,
                              const SocketHandle& events) {
   const auto [openStatus, openBody] = fixture.OpenPicker();
@@ -1450,7 +1632,7 @@ struct TestCase {
   void (*run)(const std::filesystem::path&);
 };
 
-constexpr std::array<TestCase, 15> kTestCases{{
+constexpr std::array<TestCase, 16> kTestCases{{
     {"picker open loads project snapshot", TestPickerOpenLoadsProjectSnapshot},
     {"picker cancellation leaves session closed",
      TestPickerCancellationLeavesSessionClosed},
@@ -1473,6 +1655,8 @@ constexpr std::array<TestCase, 15> kTestCases{{
      TestSaveRestoresPersistedProjectFiles},
     {"project and trajectory patches persist before publication",
      TestProjectAndTrajectoryPatches},
+    {"waypoint, constraint, and event-marker mutations",
+     TestWaypointConstraintAndEventMarkerMutations},
     {"generation publishes status and saves output",
      TestGenerationPublishesStatusAndSavesOutput},
     {"history and persistence lifecycle", TestHistoryAndPersistenceLifecycle},

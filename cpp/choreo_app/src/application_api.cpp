@@ -338,7 +338,17 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
                 });
           });
       server.RegisterRoute(
-          "GET", collectionPath + "/{" + itemParameterName + "}",
+          "POST", collectionPath,
+          [weak, fieldName](const choreo::api::HttpRequest& request) {
+            return WithHttpOwner(
+                weak, [&request, &fieldName](std::shared_ptr<Impl> self) {
+                  return self->MutateTrajectorySubresource(request, fieldName,
+                                                           {}, "create");
+                });
+          });
+      const auto itemPath = collectionPath + "/{" + itemParameterName + "}";
+      server.RegisterRoute(
+          "GET", itemPath,
           [weak, fieldName,
            itemParameterName](const choreo::api::HttpRequest& request) {
             return WithHttpOwner(
@@ -349,6 +359,21 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
                       request.pathParameters.at(itemParameterName));
                 });
           });
+      for (const auto* action : {"patch", "delete"}) {
+        const auto method =
+            std::string_view{action} == "patch" ? "PATCH" : "DELETE";
+        server.RegisterRoute(
+            method, itemPath,
+            [weak, fieldName, itemParameterName, action = std::string{action}](
+                const choreo::api::HttpRequest& request) {
+              return WithHttpOwner(
+                  weak, [&request, &fieldName, &itemParameterName,
+                         &action](std::shared_ptr<Impl> self) {
+                    return self->MutateTrajectorySubresource(
+                        request, fieldName, itemParameterName, action);
+                  });
+            });
+      }
     }
     server.RegisterRoute("POST", "/api/v1/session/save",
                          [weak](const choreo::api::HttpRequest& request) {
@@ -864,6 +889,219 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
           } catch (...) {
             result->set_value(
                 ApiError(500, "INTERNAL_ERROR", "Document update failed"));
+          }
+        })) {
+      return ApiError(503, "INTERNAL_ERROR", "API is stopping");
+    }
+    return response.get();
+  }
+
+  ApiResponse MutateTrajectorySubresource(
+      const choreo::api::HttpRequest& request, std::string_view field,
+      std::string_view itemParameter, std::string_view action) {
+    const auto expectedRevision = RevisionFromTag(request.Header("if-match"));
+    const auto idempotencyKey = std::string{request.Header("idempotency-key")};
+    const auto contentType = Lower(std::string{request.Header("content-type")});
+    constexpr std::string_view mergePatchContentType =
+        "application/merge-patch+json";
+    if (!expectedRevision || idempotencyKey.empty() ||
+        (action == "patch" &&
+         !(contentType == mergePatchContentType ||
+           contentType.starts_with(std::string{mergePatchContentType} +
+                                   ";"))) ||
+        (action == "create" && contentType != "application/json" &&
+         !contentType.starts_with("application/json;"))) {
+      return ApiError(400, "VALIDATION_ERROR",
+                      "If-Match, Idempotency-Key, and the expected JSON "
+                      "content type are required");
+    }
+
+    const auto projectId = request.pathParameters.at("projectId");
+    const auto trajectoryId = request.pathParameters.at("trajectoryId");
+    const auto itemId =
+        itemParameter.empty()
+            ? std::string{}
+            : request.pathParameters.at(std::string{itemParameter});
+    const auto fingerprint = std::string{action} + "/" + request.path + "/" +
+                             std::to_string(*expectedRevision) + "/" +
+                             request.body;
+    const auto body = request.body;
+    auto self = shared_from_this();
+    auto result = std::make_shared<std::promise<ApiResponse>>();
+    auto response = result->get_future();
+    if (!Post([self, expectedRevision = *expectedRevision, idempotencyKey,
+               fingerprint, projectId, trajectoryId, itemId,
+               field = std::string{field}, action = std::string{action}, body,
+               result] {
+          try {
+            const auto cached = self->idempotentMutations.find(idempotencyKey);
+            if (cached != self->idempotentMutations.end()) {
+              if (cached->second.requestTarget != fingerprint) {
+                result->set_value(
+                    ApiError(409, "IDEMPOTENCY_KEY_REUSE",
+                             "Idempotency key was reused for another request"));
+              } else {
+                result->set_value(cached->second.response);
+              }
+              return;
+            }
+            if (!self->store) {
+              result->set_value(
+                  ApiError(409, "SESSION_NOT_OPEN", "No project is open"));
+              return;
+            }
+            if (self->persistenceBlocked) {
+              result->set_value(ApiError(
+                  409, "SAVE_FAILED",
+                  "Save the active session before changing the document"));
+              return;
+            }
+            const auto snapshot = self->store->Snapshot();
+            if (snapshot->project.uuid != projectId) {
+              result->set_value(
+                  ApiError(404, "RESOURCE_NOT_FOUND", "Project was not found"));
+              return;
+            }
+            if (self->store->Revision() != expectedRevision) {
+              result->set_value(JsonResponse(
+                  409,
+                  Json::object("code", "REVISION_CONFLICT", "message",
+                               "Document revision is stale", "currentRevision",
+                               self->store->Revision())));
+              return;
+            }
+            const auto* original = snapshot->trajectories.find(trajectoryId);
+            if (!original) {
+              result->set_value(ApiError(404, "RESOURCE_NOT_FOUND",
+                                         "Trajectory was not found"));
+              return;
+            }
+
+            Json item;
+            Json patch;
+            if (action == "create" || action == "patch") {
+              try {
+                item = Json::parse_or_throw(body);
+              } catch (const std::exception& error) {
+                result->set_value(
+                    ApiError(400, "VALIDATION_ERROR", error.what()));
+                return;
+              }
+            }
+            if (action == "patch") {
+              if (field == "waypoints" &&
+                  !HasOnlyKeys(item,
+                               {"pose", "intervals", "split", "fixTranslation",
+                                "fixHeading", "overrideIntervals"})) {
+                result->set_value(ApiError(400, "VALIDATION_ERROR",
+                                           "Invalid waypoint patch fields"));
+                return;
+              }
+              if (field == "constraints" &&
+                  !HasOnlyKeys(item, {"from", "to", "data", "enabled"})) {
+                result->set_value(ApiError(400, "VALIDATION_ERROR",
+                                           "Invalid constraint patch fields"));
+                return;
+              }
+              if (field == "events" && !HasOnlyKeys(item, {"name", "from"})) {
+                result->set_value(
+                    ApiError(400, "VALIDATION_ERROR",
+                             "Invalid event-marker patch fields"));
+                return;
+              }
+              patch = std::move(item);
+            } else if (action == "create" && !item.is_object()) {
+              result->set_value(
+                  ApiError(400, "VALIDATION_ERROR",
+                           "Created resource must be a JSON object"));
+              return;
+            }
+
+            Json updated = *original;
+            Json items = field == "events" ? updated.at("events")
+                                           : updated.at("params").at(field);
+            auto& itemList = items.get_array();
+            if (action == "create") {
+              std::string newId;
+              try {
+                newId = item.at("uuid").get_string();
+              } catch (const std::exception& error) {
+                result->set_value(
+                    ApiError(400, "VALIDATION_ERROR", error.what()));
+                return;
+              }
+              const auto duplicate = std::find_if(
+                  itemList.begin(), itemList.end(),
+                  [&newId](const Json& existing) {
+                    return existing.at("uuid").get_string() == newId;
+                  });
+              if (duplicate != itemList.end()) {
+                result->set_value(
+                    ApiError(409, "RESOURCE_EXISTS",
+                             "A resource with that UUID already exists"));
+                return;
+              }
+              itemList.emplace_back(std::move(item));
+            } else {
+              const auto existing =
+                  std::find_if(itemList.begin(), itemList.end(),
+                               [&itemId](const Json& value) {
+                                 return value.at("uuid").get_string() == itemId;
+                               });
+              if (existing == itemList.end()) {
+                result->set_value(
+                    ApiError(404, "RESOURCE_NOT_FOUND", "Item was not found"));
+                return;
+              }
+              if (action == "patch") {
+                ApplyMergePatch(*existing, patch);
+                if (existing->at("uuid").get_string() != itemId) {
+                  result->set_value(ApiError(400, "VALIDATION_ERROR",
+                                             "Resource UUID cannot change"));
+                  return;
+                }
+              } else {
+                itemList.erase(existing);
+              }
+            }
+            if (field == "events") {
+              updated["events"] = std::move(items);
+            } else {
+              updated["params"][field] = std::move(items);
+            }
+            auto trajectory = updated.get<Trajectory>();
+            auto candidate = *snapshot;
+            candidate.trajectories =
+                candidate.trajectories.set(trajectoryId, std::move(trajectory));
+            const auto previousRevision = self->store->Revision();
+            self->store->Commit(std::move(candidate), expectedRevision);
+            if (self->store->Revision() != previousRevision) {
+              if (auto failure = self->PersistFiles(self->documentFiles)) {
+                result->set_value(*failure);
+                return;
+              }
+              self->PublishSnapshot();
+            }
+
+            const int status = action == "create" ? 201 : 200;
+            ApiResponse mutation{
+                status,
+                "application/json",
+                Json::object("requestId", idempotencyKey, "revision",
+                             self->store->Revision())
+                    .to_string(),
+                {}};
+            mutation.headers.emplace(
+                "ETag",
+                "\"revision-" + std::to_string(self->store->Revision()) + "\"");
+            self->idempotentMutations.emplace(
+                idempotencyKey, CachedMutation{fingerprint, mutation});
+            result->set_value(std::move(mutation));
+          } catch (const std::exception& error) {
+            result->set_value(ApiError(422, "VALIDATION_ERROR", error.what()));
+          } catch (...) {
+            result->set_value(
+                ApiError(500, "INTERNAL_ERROR", "Resource update failed"));
           }
         })) {
       return ApiError(503, "INTERNAL_ERROR", "API is stopping");
