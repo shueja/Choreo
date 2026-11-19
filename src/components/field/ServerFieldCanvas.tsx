@@ -10,13 +10,12 @@ import FieldPathLine from "./svg/FieldPathLine";
 import FieldSampleLayer from "./svg/FieldSampleLayer";
 import { ServerConstraintType, ServerViewLayers } from "./ServerViewLayers";
 import {
+  GeometryDragControl,
   ServerVariable,
   Waypoint
 } from "../../document/ServerSessionStore";
 import {
-  EditableGeometryAxes,
   GeometryDragValues,
-  getEditableGeometryAxes,
   updateGeometryExpressionForDrag
 } from "../../util/GeometryExpressionDrag";
 import styles from "./ServerFieldCanvas.module.css";
@@ -24,6 +23,8 @@ import styles from "./ServerFieldCanvas.module.css";
 interface Props {
   waypoints: Waypoint[];
   variables: Record<string, ServerVariable>;
+  waypointControls: Record<string, GeometryDragControl[]>;
+  variableControls: Record<string, GeometryDragControl[]>;
   selectedWaypointId: string;
   bumperVertices: { x: number; y: number }[];
   robotPose?: { x: number; y: number; heading: number };
@@ -47,12 +48,13 @@ interface FieldPose extends GeometryDragValues {
 interface ActiveDrag {
   id: string;
   kind: "waypoint" | "variable";
-  type: "Pose2d" | "Translation2d";
   expression: string;
-  axes: EditableGeometryAxes;
   mode: "position" | "heading";
   pointerId: number;
+  control: GeometryDragControl;
   pose: FieldPose;
+  pointerStart: { x: number; y: number };
+  candidateExpression: string;
   candidate: FieldPose;
 }
 
@@ -85,6 +87,8 @@ function variablePose(variable: ServerVariable): FieldPose | null {
 export default function ServerFieldCanvas({
   waypoints,
   variables,
+  waypointControls,
+  variableControls,
   selectedWaypointId,
   bumperVertices,
   robotPose,
@@ -109,6 +113,16 @@ export default function ServerFieldCanvas({
     number | null
   >(null);
   const points = waypoints.map((waypoint) => waypoint.pose.val.translation);
+  const fieldMarkerSize = Math.min(
+    bumperVertices.length > 0
+      ? Math.max(...bumperVertices.map((point) => point.x)) -
+          Math.min(...bumperVertices.map((point) => point.x))
+      : 0,
+    bumperVertices.length > 0
+      ? Math.max(...bumperVertices.map((point) => point.y)) -
+          Math.min(...bumperVertices.map((point) => point.y))
+      : 0
+  ) || 0.9;
 
   function pointerCoordinates(
     event: React.PointerEvent<SVGElement>
@@ -126,14 +140,21 @@ export default function ServerFieldCanvas({
 
   function beginDrag(
     event: React.PointerEvent<SVGCircleElement>,
-    drag: Omit<ActiveDrag, "pointerId" | "candidate">
+    drag: Omit<
+      ActiveDrag,
+      "pointerId" | "pointerStart" | "candidate" | "candidateExpression"
+    >
   ) {
     if (
       constraintType !== null ||
       (drag.mode === "position"
-        ? !drag.axes.x && !drag.axes.y
-        : !drag.axes.heading)
+        ? drag.control.dx === 0 && drag.control.dy === 0
+        : drag.control.dheading === 0)
     ) {
+      return;
+    }
+    const pointer = pointerCoordinates(event);
+    if (!pointer) {
       return;
     }
     event.stopPropagation();
@@ -142,6 +163,8 @@ export default function ServerFieldCanvas({
     activeDrag.current = {
       ...drag,
       pointerId: event.pointerId,
+      pointerStart: pointer,
+      candidateExpression: drag.expression,
       candidate: drag.pose
     };
     setDragPreview({ id: drag.id, kind: drag.kind, pose: drag.pose });
@@ -158,19 +181,63 @@ export default function ServerFieldCanvas({
     }
     const candidate =
       drag.mode === "position"
-        ? {
-            ...drag.pose,
-            x: Math.max(0, Math.min(FIELD_LENGTH, pointer.x)),
-            y: Math.max(0, Math.min(FIELD_WIDTH, pointer.y))
-          }
-        : {
-            ...drag.pose,
-            heading: Math.atan2(
+        ? (() => {
+            const dx = pointer.x - drag.pointerStart.x;
+            const dy = pointer.y - drag.pointerStart.y;
+            const normSquared =
+              drag.control.dx * drag.control.dx +
+              drag.control.dy * drag.control.dy;
+            const parameterDelta =
+              (dx * drag.control.dx + dy * drag.control.dy) / normSquared;
+            return {
+              ...drag.pose,
+              x: Math.max(
+                0,
+                Math.min(
+                  FIELD_LENGTH,
+                  drag.pose.x + drag.control.dx * parameterDelta
+                )
+              ),
+              y: Math.max(
+                0,
+                Math.min(
+                  FIELD_WIDTH,
+                  drag.pose.y + drag.control.dy * parameterDelta
+                )
+              ),
+              parameterDelta
+            };
+          })()
+        : (() => {
+            const startAngle = Math.atan2(
+              drag.pointerStart.y - drag.pose.y,
+              drag.pointerStart.x - drag.pose.x
+            );
+            const currentAngle = Math.atan2(
               pointer.y - drag.pose.y,
               pointer.x - drag.pose.x
-            )
-          };
+            );
+            const angleDelta = Math.atan2(
+              Math.sin(currentAngle - startAngle),
+              Math.cos(currentAngle - startAngle)
+            );
+            const parameterDelta = angleDelta / drag.control.dheading;
+            return {
+              ...drag.pose,
+              heading: drag.pose.heading + drag.control.dheading * parameterDelta,
+              parameterDelta
+            };
+          })();
+    const expression = updateGeometryExpressionForDrag(
+      drag.expression,
+      drag.control,
+      candidate.parameterDelta
+    );
+    if (expression === null) {
+      return;
+    }
     drag.candidate = candidate;
+    drag.candidateExpression = expression;
     setDragPreview({ id: drag.id, kind: drag.kind, pose: candidate });
   }
 
@@ -180,20 +247,10 @@ export default function ServerFieldCanvas({
       return;
     }
     activeDrag.current = null;
-    const expression = updateGeometryExpressionForDrag(
-      drag.expression,
-      drag.type,
-      drag.candidate,
-      drag.axes
-    );
-    if (expression === null) {
-      setDragPreview(null);
-      return;
-    }
     const update =
       drag.kind === "waypoint"
-        ? onDragWaypoint(drag.id, expression)
-        : onDragVariable(drag.id, expression);
+        ? onDragWaypoint(drag.id, drag.candidateExpression)
+        : onDragVariable(drag.id, drag.candidateExpression);
     void update.finally(() => setDragPreview(null));
   }
 
@@ -282,10 +339,6 @@ export default function ServerFieldCanvas({
                     ? dragPreview.pose
                     : waypointPose;
                 const { x, y, heading } = pose;
-                const axes = getEditableGeometryAxes(
-                  waypoint.pose.exp,
-                  "Pose2d"
-                );
                 const xCoordinates = bumperVertices.map((point) => point.x);
                 const yCoordinates = bumperVertices.map((point) => point.y);
                 const bumperLength =
@@ -296,7 +349,8 @@ export default function ServerFieldCanvas({
                   yCoordinates.length > 0
                     ? Math.max(...yCoordinates) - Math.min(...yCoordinates)
                     : 0;
-                const markerSize = Math.min(bumperLength, bumperWidth) || 0.9;
+                const markerSize =
+                  Math.min(bumperLength, bumperWidth) || fieldMarkerSize;
                 const headingSideLength =
                   yCoordinates.length > 0
                     ? 2 * 0.1 * Math.sqrt(Math.PI / Math.sqrt(3)) * markerSize
@@ -320,94 +374,125 @@ export default function ServerFieldCanvas({
                     ? "var(--select-yellow)"
                     : "var(--accent-purple)";
                 return (
-                  <g
-                    key={waypoint.uuid}
-                    transform={`translate(${x} ${y}) rotate(${(heading * 180) / Math.PI})`}
-                    onDoubleClick={(event) => event.stopPropagation()}
-                  >
-                    {bumperVertices.length > 2 && (
-                      <FieldBumperOutline
-                        points={bumperVertices}
-                        strokeColor={outlineColor}
-                        strokeWidth={2}
-                      />
-                    )}
-                    {bumperVertices.length > 2 && (
-                      <polygon
-                        transform={`translate(${frontX}, 0)`}
-                        fill={outlineColor}
-                        stroke="black"
-                        strokeWidth={0.03}
-                        points={
-                          `${-headingHeight / 2},${headingSideLength / 2} ` +
-                          `${-headingHeight / 2},${-headingSideLength / 2} ` +
-                          `${headingHeight / 2},0`
-                        }
-                      />
-                    )}
-                    <circle
-                      r={markerSize * 0.15 || 0.14}
-                      fill={markerColor}
-                      stroke="black"
-                      strokeWidth={0.03}
-                      style={{
-                        cursor:
-                          constraintType === null && (axes.x || axes.y)
-                            ? "move"
-                            : "default",
-                        pointerEvents:
-                          constraintType === null && (axes.x || axes.y)
-                            ? "auto"
-                            : "none"
-                      }}
-                      onPointerDown={(event) =>
-                        beginDrag(event, {
-                          id: waypoint.uuid,
-                          kind: "waypoint",
-                          type: "Pose2d",
-                          expression: waypoint.pose.exp,
-                          axes,
-                          mode: "position",
-                          pose: waypointPose
-                        })
-                      }
-                    />
-                    {axes.heading && (
-                      <>
-                        <line
-                          x1={0}
-                          y1={0}
-                          x2={markerSize * 1.15}
-                          y2={0}
-                          stroke={outlineColor}
-                          strokeWidth={0.035}
+                  <g key={waypoint.uuid}>
+                    <g
+                      transform={`translate(${x} ${y}) rotate(${(heading * 180) / Math.PI})`}
+                      onDoubleClick={(event) => event.stopPropagation()}
+                    >
+                      {bumperVertices.length > 2 && (
+                        <FieldBumperOutline
+                          points={bumperVertices}
+                          strokeColor={outlineColor}
+                          strokeWidth={2}
                         />
-                        <circle
-                          cx={markerSize * 1.15}
-                          cy={0}
-                          r={markerSize * 0.1 || 0.09}
+                      )}
+                      {bumperVertices.length > 2 && (
+                        <polygon
+                          transform={`translate(${frontX}, 0)`}
                           fill={outlineColor}
                           stroke="black"
-                          strokeWidth={0.025}
-                          style={{
-                            cursor:
-                              constraintType === null ? "crosshair" : "default",
-                            pointerEvents:
-                              constraintType === null ? "auto" : "none"
-                          }}
-                          onPointerDown={(event) =>
-                            beginDrag(event, {
-                              id: waypoint.uuid,
-                              kind: "waypoint",
-                              type: "Pose2d",
-                              expression: waypoint.pose.exp,
-                              axes,
-                              mode: "heading",
-                              pose: waypointPose
-                            })
+                          strokeWidth={0.03}
+                          points={
+                            `${-headingHeight / 2},${headingSideLength / 2} ` +
+                            `${-headingHeight / 2},${-headingSideLength / 2} ` +
+                            `${headingHeight / 2},0`
                           }
                         />
-                      </>
+                      )}
+                      <circle
+                        r={markerSize * 0.15 || 0.14}
+                        fill={markerColor}
+                        stroke="black"
+                        strokeWidth={0.03}
+                      />
+                    </g>
+                    {(waypointControls[waypoint.uuid] ?? []).map(
+                      (control, controlIndex) => {
+                        const positionMagnitude = Math.hypot(
+                          control.dx,
+                          control.dy
+                        );
+                        const handleDistance = markerSize * 0.8;
+                        const handleX =
+                          x +
+                          (positionMagnitude > 0
+                            ? (control.dx / positionMagnitude) * handleDistance
+                            : 0);
+                        const handleY =
+                          y +
+                          (positionMagnitude > 0
+                            ? (control.dy / positionMagnitude) * handleDistance
+                            : 0);
+                        const rotationX =
+                          x + Math.cos(heading + Math.PI / 2) * handleDistance;
+                        const rotationY =
+                          y + Math.sin(heading + Math.PI / 2) * handleDistance;
+                        return (
+                          <g key={`control-${controlIndex}`}>
+                            {positionMagnitude > 1e-10 && (
+                              <>
+                                <line
+                                  x1={x}
+                                  y1={y}
+                                  x2={handleX}
+                                  y2={handleY}
+                                  stroke="var(--select-yellow)"
+                                  strokeWidth={0.035}
+                                  pointerEvents="none"
+                                />
+                                <circle
+                                  cx={handleX}
+                                  cy={handleY}
+                                  r={markerSize * 0.1 || 0.09}
+                                  fill="var(--select-yellow)"
+                                  stroke="black"
+                                  strokeWidth={0.025}
+                                  style={{
+                                    cursor: constraintType === null ? "move" : "default",
+                                    pointerEvents: constraintType === null ? "auto" : "none"
+                                  }}
+                                  onPointerDown={(event) =>
+                                    beginDrag(event, {
+                                      id: waypoint.uuid,
+                                      kind: "waypoint",
+                                      expression: waypoint.pose.exp,
+                                      mode: "position",
+                                      control,
+                                      pose: waypointPose
+                                    })
+                                  }
+                                />
+                              </>
+                            )}
+                            {Math.abs(control.dheading) > 1e-10 && (
+                              <circle
+                                cx={rotationX}
+                                cy={rotationY}
+                                r={markerSize * 0.09 || 0.08}
+                                fill="var(--accent-purple)"
+                                stroke="black"
+                                strokeWidth={0.025}
+                                style={{
+                                  cursor:
+                                    constraintType === null ? "crosshair" : "default",
+                                  pointerEvents:
+                                    constraintType === null ? "auto" : "none"
+                                }}
+                                onPointerDown={(event) =>
+                                  beginDrag(event, {
+                                    id: waypoint.uuid,
+                                    kind: "waypoint",
+                                    expression: waypoint.pose.exp,
+                                    mode: "heading",
+                                    control,
+                                    pose: waypointPose
+                                  })
+                                }
+                              />
+                            )}
+                          </g>
+                        );
+                      }
                     )}
                   </g>
                 );
@@ -423,12 +508,8 @@ export default function ServerFieldCanvas({
                 if (!pose) {
                   return null;
                 }
-                const geometryType = variable.type;
-                const axes = getEditableGeometryAxes(
-                  variable.expression,
-                  geometryType
-                );
-                if (!axes.x && !axes.y && !axes.heading) {
+                const controls = variableControls[id] ?? [];
+                if (controls.length === 0) {
                   return null;
                 }
                 const displayedPose =
@@ -439,73 +520,113 @@ export default function ServerFieldCanvas({
                 return (
                   <g
                     key={`variable-${id}`}
-                    transform={`translate(${displayedPose.x} ${displayedPose.y}) rotate(${(displayedPose.heading * 180) / Math.PI})`}
                     onDoubleClick={(event) => event.stopPropagation()}
                   >
                     <circle
-                      r={markerSize * 0.12 || 0.11}
+                      cx={displayedPose.x}
+                      cy={displayedPose.y}
+                      r={fieldMarkerSize * 0.12 || 0.11}
                       fill="transparent"
                       stroke={color}
                       strokeWidth={0.045}
-                      style={{
-                        cursor:
-                          constraintType === null && (axes.x || axes.y)
-                            ? "move"
-                            : "default",
-                        pointerEvents:
-                          constraintType === null && (axes.x || axes.y)
-                            ? "auto"
-                            : "none"
-                      }}
-                      onPointerDown={(event) =>
-                        beginDrag(event, {
-                          id,
-                          kind: "variable",
-                          type: geometryType,
-                          expression: variable.expression,
-                          axes,
-                          mode: "position",
-                          pose
-                        })
-                      }
                     />
                     <text
-                      x={markerSize * 0.15}
-                      y={-markerSize * 0.2}
+                      x={displayedPose.x + fieldMarkerSize * 0.15}
+                      y={displayedPose.y - fieldMarkerSize * 0.2}
                       transform="scale(1, -1)"
                       fill={color}
-                      fontSize={markerSize * 0.2 || 0.18}
+                      fontSize={fieldMarkerSize * 0.2 || 0.18}
                       pointerEvents="none"
                     >
                       {variable.name}
                     </text>
-                    {geometryType === "Pose2d" && axes.heading && (
-                      <circle
-                        cx={markerSize * 1.1}
-                        cy={0}
-                        r={markerSize * 0.09 || 0.08}
-                        fill={color}
-                        stroke="black"
-                        strokeWidth={0.025}
-                        style={{
-                          cursor:
-                            constraintType === null ? "crosshair" : "default",
-                          pointerEvents:
-                            constraintType === null ? "auto" : "none"
-                        }}
-                        onPointerDown={(event) =>
-                          beginDrag(event, {
-                            id,
-                            kind: "variable",
-                            type: "Pose2d",
-                            expression: variable.expression,
-                            axes,
-                            mode: "heading",
-                            pose
-                          })
-                        }
-                      />
-                    )}
+                    {controls.map((control, controlIndex) => {
+                      const magnitude = Math.hypot(control.dx, control.dy);
+                      const handleDistance = fieldMarkerSize * 0.8;
+                      const handleX =
+                        displayedPose.x +
+                        (magnitude > 0
+                          ? (control.dx / magnitude) * handleDistance
+                          : 0);
+                      const handleY =
+                        displayedPose.y +
+                        (magnitude > 0
+                          ? (control.dy / magnitude) * handleDistance
+                          : 0);
+                      const rotationX =
+                        displayedPose.x +
+                        Math.cos(displayedPose.heading + Math.PI / 2) *
+                          handleDistance;
+                      const rotationY =
+                        displayedPose.y +
+                        Math.sin(displayedPose.heading + Math.PI / 2) *
+                          handleDistance;
+                      return (
+                        <g key={`control-${controlIndex}`}>
+                          {magnitude > 1e-10 && (
+                            <>
+                              <line
+                                x1={displayedPose.x}
+                                y1={displayedPose.y}
+                                x2={handleX}
+                                y2={handleY}
+                                stroke={color}
+                                strokeWidth={0.035}
+                                pointerEvents="none"
+                              />
+                              <circle
+                                cx={handleX}
+                                cy={handleY}
+                                r={fieldMarkerSize * 0.1 || 0.09}
+                                fill={color}
+                                stroke="black"
+                                strokeWidth={0.025}
+                                style={{
+                                  cursor: constraintType === null ? "move" : "default",
+                                  pointerEvents: constraintType === null ? "auto" : "none"
+                                }}
+                                onPointerDown={(event) =>
+                                  beginDrag(event, {
+                                    id,
+                                    kind: "variable",
+                                    expression: variable.expression,
+                                    mode: "position",
+                                    control,
+                                    pose
+                                  })
+                                }
+                              />
+                            </>
+                          )}
+                          {Math.abs(control.dheading) > 1e-10 && (
+                            <circle
+                              cx={rotationX}
+                              cy={rotationY}
+                              r={fieldMarkerSize * 0.09 || 0.08}
+                              fill="var(--accent-purple)"
+                              stroke="black"
+                              strokeWidth={0.025}
+                              style={{
+                                cursor:
+                                  constraintType === null ? "crosshair" : "default",
+                                pointerEvents:
+                                  constraintType === null ? "auto" : "none"
+                              }}
+                              onPointerDown={(event) =>
+                                beginDrag(event, {
+                                  id,
+                                  kind: "variable",
+                                  expression: variable.expression,
+                                  mode: "heading",
+                                  control,
+                                  pose
+                                })
+                              }
+                            />
+                          )}
+                        </g>
+                      );
+                    })}
                   </g>
                 );
               })}

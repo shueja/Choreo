@@ -1,7 +1,13 @@
+#include <algorithm>
+#include <charconv>
+#include <cctype>
 #include <cmath>
+#include <iterator>
+#include <limits>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -360,6 +366,111 @@ Document EvaluateDocument(const Document& document) {
     result.trajectories = result.trajectories.set(id, std::move(trajectory));
   }
   return result;
+}
+
+std::vector<GeometryDragControl> GetGeometryDragControls(
+    const Project& project, std::string_view expression,
+    DragGeometryType type) {
+  struct NumericToken {
+    std::size_t start;
+    std::size_t end;
+    double value;
+  };
+  struct GeometryValue {
+    double x;
+    double y;
+    double heading;
+  };
+
+  auto isWordCharacter = [](char character) {
+    return (character >= 'A' && character <= 'Z') ||
+           (character >= 'a' && character <= 'z') ||
+           (character >= '0' && character <= '9') || character == '_';
+  };
+  std::vector<NumericToken> tokens;
+  for (std::size_t index = 0; index < expression.size();) {
+    const char character = expression[index];
+    if ((!std::isdigit(static_cast<unsigned char>(character)) &&
+         (character != '.' || index + 1 >= expression.size() ||
+          !std::isdigit(
+              static_cast<unsigned char>(expression[index + 1])))) ||
+        (index > 0 &&
+         (isWordCharacter(expression[index - 1]) ||
+          expression[index - 1] == '.'))) {
+      ++index;
+      continue;
+    }
+
+    double value = 0;
+    const auto parsed = std::from_chars(
+        expression.data() + index, expression.data() + expression.size(),
+        value);
+    if (parsed.ec != std::errc{} || parsed.ptr == expression.data() + index) {
+      ++index;
+      continue;
+    }
+    const auto end =
+        static_cast<std::size_t>(parsed.ptr - expression.data());
+    tokens.push_back({index, end, value});
+    index = end;
+  }
+
+  if (tokens.empty()) {
+    return {};
+  }
+
+  auto evaluated = BuildVariables(project);
+  auto evaluate = [&](std::string_view source) -> GeometryValue {
+    if (type == DragGeometryType::Pose2d) {
+      const auto pose = evaluated.context.EvaluatePose2d(source);
+      return {pose.X().value(), pose.Y().value(),
+              pose.Rotation().Radians().value()};
+    }
+    const auto translation = evaluated.context.EvaluateTranslation2d(source);
+    return {translation.X().value(), translation.Y().value(), 0};
+  };
+
+  static_cast<void>(evaluate(expression));
+  std::vector<GeometryDragControl> controls;
+  controls.reserve(tokens.size());
+  for (const auto& token : tokens) {
+    const double step = std::max(1e-5, std::abs(token.value) * 1e-5);
+    auto replace = [&](double value) -> std::string {
+      char buffer[64];
+      const auto converted = std::to_chars(
+          std::begin(buffer), std::end(buffer), value,
+          std::chars_format::general,
+          std::numeric_limits<double>::max_digits10);
+      if (converted.ec != std::errc{}) {
+        return {};
+      }
+      std::string updated{expression};
+      updated.replace(token.start, token.end - token.start,
+                      buffer, converted.ptr - buffer);
+      return updated;
+    };
+
+    try {
+      const auto plus = evaluate(replace(token.value + step));
+      const auto minus = evaluate(replace(token.value - step));
+      const double scale = 1.0 / (2 * step);
+      double headingDelta = plus.heading - minus.heading;
+      headingDelta = std::remainder(headingDelta, 2 * std::acos(-1.0));
+      const double dx = (plus.x - minus.x) * scale;
+      const double dy = (plus.y - minus.y) * scale;
+      const double dheading = headingDelta * scale;
+      if (!std::isfinite(dx) || !std::isfinite(dy) ||
+          !std::isfinite(dheading) ||
+          (std::abs(dx) < 1e-10 && std::abs(dy) < 1e-10 &&
+           std::abs(dheading) < 1e-10)) {
+        continue;
+      }
+      controls.push_back(
+          {token.start, token.end, token.value, dx, dy, dheading});
+    } catch (const std::exception&) {
+    }
+  }
+  return controls;
 }
 
 }

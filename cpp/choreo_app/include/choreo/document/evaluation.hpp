@@ -1,10 +1,13 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include <units/units.hpp>
 
@@ -13,6 +16,17 @@
 #include "choreo/document/store.hpp"
 
 namespace choreo::document::evaluation {
+
+enum class DragGeometryType { Pose2d, Translation2d };
+
+struct GeometryDragControl {
+  std::size_t start;
+  std::size_t end;
+  double value;
+  double dx;
+  double dy;
+  double dheading;
+};
 
 class EvaluationError : public std::invalid_argument {
  public:
@@ -30,6 +44,9 @@ class EvaluationError : public std::invalid_argument {
 
 Project EvaluateVariables(const Project& project);
 Document EvaluateDocument(const Document& document);
+std::vector<GeometryDragControl> GetGeometryDragControls(
+    const Project& project, std::string_view expression,
+    DragGeometryType type);
 Document RenameVariable(const Document& document, const std::string& id,
                         const std::string& newName);
 

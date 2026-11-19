@@ -29,6 +29,7 @@
 
 #include "choreo/document/document.hpp"
 #include "choreo/document/document_store.hpp"
+#include "choreo/document/evaluation.hpp"
 #include "choreo/document/generation_process.hpp"
 
 namespace choreo::document {
@@ -334,6 +335,13 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         [weak](const choreo::api::HttpRequest& request) {
           return WithHttpOwner(weak, [&request](std::shared_ptr<Impl> self) {
             return self->PatchVariable(request);
+          });
+        });
+    server.RegisterRoute(
+        "POST", "/api/v1/projects/{projectId}/geometry-controls",
+        [weak](const choreo::api::HttpRequest& request) {
+          return WithHttpOwner(weak, [&request](std::shared_ptr<Impl> self) {
+            return self->GeometryControls(request);
           });
         });
     server.RegisterRoute("GET", "/api/v1/projects/{projectId}/trajectories",
@@ -1364,6 +1372,52 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       return ApiError(503, "INTERNAL_ERROR", "API is stopping");
     }
     return response.get();
+  }
+
+  ApiResponse GeometryControls(const choreo::api::HttpRequest& request) const {
+    try {
+      const auto published = publishedSnapshot.load();
+      if (!published) {
+        return ApiError(409, "SESSION_NOT_OPEN", "No project is open");
+      }
+      if (published->projectId != request.pathParameters.at("projectId")) {
+        return ApiError(404, "RESOURCE_NOT_FOUND", "Project was not found");
+      }
+      const auto body = Json::parse_or_throw(request.body);
+      if (!HasOnlyKeys(body, {"expression", "type"}) ||
+          body.at("expression").get_string().empty()) {
+        return ApiError(400, "VALIDATION_ERROR",
+                        "A geometry expression and type are required");
+      }
+      const auto expression = body.at("expression").get_string();
+      const auto typeName = body.at("type").get_string();
+      evaluation::DragGeometryType type;
+      if (typeName == "Pose2d") {
+        type = evaluation::DragGeometryType::Pose2d;
+      } else if (typeName == "Translation2d") {
+        type = evaluation::DragGeometryType::Translation2d;
+      } else {
+        return ApiError(400, "VALIDATION_ERROR",
+                        "Unsupported geometry type for field handles");
+      }
+
+      const auto document = Json::parse_or_throw(published->body);
+      const auto project = document.at("project").get<Project>();
+      const auto controls =
+          evaluation::GetGeometryDragControls(project, expression, type);
+      std::vector<Json> serializedControls;
+      serializedControls.reserve(controls.size());
+      for (const auto& control : controls) {
+        serializedControls.push_back(Json::object(
+            "start", control.start, "end", control.end, "value",
+            control.value, "dx", control.dx, "dy", control.dy, "dheading",
+            control.dheading));
+      }
+      return JsonResponse(200, Json::object("controls",
+                                             std::move(serializedControls)));
+    } catch (const std::exception& error) {
+      return ApiError(422, "VALIDATION_ERROR", error.what());
+    }
   }
 
   ApiResponse MutateTrajectorySubresource(

@@ -45,6 +45,15 @@ export interface ServerVariable {
   value: unknown;
 }
 
+export interface GeometryDragControl {
+  start: number;
+  end: number;
+  value: number;
+  dx: number;
+  dy: number;
+  dheading: number;
+}
+
 export type ServerVariableType =
   | "Quantity"
   | "Pose2d"
@@ -288,6 +297,22 @@ export class ServerSessionStore {
       { method: "POST" }
     );
     return accepted.operationId;
+  }
+
+  async getGeometryDragControls(
+    projectId: string,
+    expression: string,
+    type: "Pose2d" | "Translation2d"
+  ): Promise<GeometryDragControl[]> {
+    const result = await requestJson<{ controls: GeometryDragControl[] }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/geometry-controls`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expression, type })
+      }
+    );
+    return result.controls;
   }
 
   async undo(): Promise<void> {
