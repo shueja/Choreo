@@ -901,7 +901,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
                 result->set_value(*failure);
                 return;
               }
-              self->PublishSnapshot();
+              self->PublishSnapshot(true, idempotencyKey);
             }
 
             ApiResponse mutation{
@@ -1113,7 +1113,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
                 result->set_value(*failure);
                 return;
               }
-              self->PublishSnapshot();
+              self->PublishSnapshot(true, idempotencyKey);
             }
 
             const int status = action == "create" ? 201 : 200;
@@ -1206,7 +1206,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
               result->set_value(*failure);
               return;
             }
-            self->PublishSnapshot();
+            self->PublishSnapshot(true, idempotencyKey);
             ApiResponse mutation{
                 200,
                 "application/json",
@@ -1515,7 +1515,10 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
                         std::move(trajectories));
   }
 
-  void PublishSnapshot(bool notify = true) {
+  void PublishSnapshot(bool notify = true,
+                       std::optional<std::string_view> requestId = std::nullopt,
+                       std::optional<std::string_view> operationId =
+                           std::nullopt) {
     if (!store) {
       auto previous = publishedSnapshot.exchange({});
       if (previous && notify) {
@@ -1538,11 +1541,16 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         PublishedSnapshot{revision, projectId, std::move(body)});
     publishedSnapshot.store(std::move(snapshot));
     if (changed && notify) {
-      server.BroadcastText(
-          "/api/v1/events",
+      Json event =
           Json::object("type", "document.changed", "projectId", projectId,
-                       "revision", revision)
-              .to_string());
+                       "revision", revision);
+      if (requestId) {
+        event["requestId"] = *requestId;
+      }
+      if (operationId) {
+        event["operationId"] = *operationId;
+      }
+      server.BroadcastText("/api/v1/events", event.to_string());
     }
   }
 
@@ -1657,7 +1665,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
               it = generations.erase(it);
               continue;
             }
-            PublishSnapshot();
+            PublishSnapshot(true, std::nullopt, generation.operationId);
             EmitStatus(generation.operationId, generation.trajectoryId,
                        "succeeded", "Generation completed", store->Revision());
           } catch (const std::exception& error) {

@@ -851,7 +851,8 @@ Json WaitForSessionOperation(Socket socket, std::string_view operationId,
   throw std::runtime_error("expected terminal session operation event");
 }
 
-Json WaitForDocumentChanged(Socket socket, std::uint64_t revision) {
+Json WaitForDocumentChanged(Socket socket, std::uint64_t revision,
+                            std::string_view requestId) {
   for (std::size_t attempt = 0; attempt < kMaximumSessionOperationEvents;
        ++attempt) {
     const auto frame = ReadServerTextFrame(socket);
@@ -864,6 +865,8 @@ Json WaitForDocumentChanged(Socket socket, std::uint64_t revision) {
     }
     Require(event.at("projectId").get_string() == kTestProjectUuid,
             "document event should identify the active project");
+    Require(event.at("requestId").get_string() == requestId,
+            "document event should correlate the originating request");
     return event;
   }
   throw std::runtime_error("expected document revision event");
@@ -1347,7 +1350,8 @@ void TestProjectAndTrajectoryPatches(const std::filesystem::path& executable) {
       projectPatchResult.at("revision").get_number());
   Require(projectRevision == initialRevision + 1,
           "project patch should advance the document revision");
-  WaitForDocumentChanged(events.Get(), projectRevision);
+  WaitForDocumentChanged(events.Get(), projectRevision,
+                         kProjectPatchIdempotencyKey);
   const auto [projectRetryStatus, projectRetryBody] =
       fixture.PatchProject(kTestProjectUuid, projectPatch, initialRevision,
                            kProjectPatchIdempotencyKey);
@@ -1385,7 +1389,8 @@ void TestProjectAndTrajectoryPatches(const std::filesystem::path& executable) {
           "trajectory patch should return HTTP 200");
   const auto trajectoryRevision = static_cast<std::uint64_t>(
       Json::parse_or_throw(trajectoryPatchBody).at("revision").get_number());
-  WaitForDocumentChanged(events.Get(), trajectoryRevision);
+  WaitForDocumentChanged(events.Get(), trajectoryRevision,
+                         kTrajectoryPatchIdempotencyKey);
   const auto [trajectoryStatus, trajectoryBody] =
       fixture.GetTrajectory(kTestProjectUuid, kTestTrajectoryUuid);
   Require(trajectoryStatus == kHttpOk &&

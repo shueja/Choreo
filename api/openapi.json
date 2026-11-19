@@ -1738,6 +1738,14 @@
           "revision": {
             "type": "integer",
             "minimum": 0
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/UUID",
+            "description": "Idempotency key of the mutation that committed this revision."
+          },
+          "operationId": {
+            "$ref": "#/components/schemas/UUID",
+            "description": "Generation operation that committed this revision."
           }
         },
         "required": ["type", "projectId", "revision"],
