@@ -47,9 +47,7 @@ if (meters) {
 }
 ```
 
-Contexts register scalar and native WPILib geometry values with `SetVariable`. Translation arrays can be registered as `std::vector<wpi::math::Translation2d>` and indexed with `[index]`; they also work with `Nearest`. A variable's first value establishes its declared type: quantities are fixed to their base dimension, and geometry values to their concrete geometry type. Replacing a value through `SetVariable` or a later `SetSetupScript` call must preserve that type; a rejected update leaves the prior context value intact. Namespace members follow the same rule by their qualified name. `Evaluate` returns an LLNL `units::precise_measurement` and can check an expected LLNL base unit; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
-
-`SetSetupScript` atomically replaces context variables using initialized top-level `var`, `auto`, `const`, or `global` declarations. Initializers may use read-only expressions and refer to other top-level variables regardless of declaration order; dependency cycles are rejected. Values must be quantities, numbers, supported geometry objects, or arrays containing only `Translation2d` values; numbers become dimensionless quantities. A failed setup leaves the previous variables unchanged. Other statements, user-defined functions, external scripts, module loading, and I/O are not permitted. Evaluation is not resource-limited.
+Contexts register scalar and native WPILib geometry values with `SetVariable`. Translation arrays can be registered as `std::vector<wpi::math::Translation2d>` and indexed with `[index]`; they also work with `Nearest`. A variable's first value establishes its declared type: quantities are fixed to their base dimension, and geometry values to their concrete geometry type. Replacing a value through `SetVariable`, `SetSetupVariables`, or `SetVariables` must preserve that type; a rejected update leaves the prior context value intact. Namespace members follow the same rule by their qualified name. `Evaluate` returns an LLNL `units::precise_measurement` and can check an expected LLNL base unit; `EvaluateBoolean` evaluates comparisons. Typed evaluation methods return WPILib poses, translations, rotations, transforms, twists, rectangles, and ellipses.
 
 For setup variables stored without an ordering, `SetSetupVariables` accepts a
 span of `{id, name, initializer}` records. IDs must be unique non-empty strings;
@@ -138,6 +136,14 @@ The conversion checks the full WPILib base-dimension signature. Non-linear WPI s
 `In` returns `std::expected<double, Error>`; an incompatible dimension returns `IncompatibleDimensionError`. Use `ErrorMessage` to format an error.
 
 ## Expression Support
+
+Implicit multiplication works with variables, units, and grouped expressions:
+`2width`, `width height`, `(width + 1) m`, and `2(width + 1)` are products.
+`width(...)` is still parsed as a function call. Powers bind more tightly than
+implicit multiplication, which in turn binds more tightly than explicit
+multiplication and division. As in math.js, a numeric fraction before a symbol
+or opening parenthesis is the exception: `2/3 m` means `(2 / 3) * m`, while
+`width/3 m` means `width / (3 * m)`.
 
 Bare unit suffixes include `2 m`, `90 deg`, `6000 RPM`, `2 m/s^2`, and `0.018 N*m/A`. Parentheses, scientific notation, explicit multiplication, division, and integer powers are supported. Addition, subtraction, comparisons, and powers validate dimensions. The ChaiScript math extra supplies scalar math functions. Quantity overloads preserve dimensions for absolute value, rounding, same-dimension remainders and extrema, and `hypot`; `sqrt` and `cbrt` require exponents divisible by their root degree. Transcendental functions require dimensionless quantities, except trigonometric functions, which also accept angles, and `atan2`, which accepts matching dimensions and returns an angle. `min` and `max` are available through dimension-checking Quantity overloads.
 

@@ -85,10 +85,16 @@ For a normal build, use `pnpm build:web` and launch with `--web-root dist`.
 
 ### API Events
 
-The `/api/v1/events` WebSocket publishes transient `document.changed` events
-with the active `projectId` and committed `revision`, and a `session.closed`
 event when the active document closes. Events are not replayed after a
 disconnect. A client should connect to the WebSocket before fetching
+The `/api/v1/events` WebSocket publishes transient `document.changed` events
+with the active `projectId` and committed `revision`, `session.persistence`
+events when asynchronous writes finish, and a `session.closed` event when the
+active document closes. Document mutations publish their in-memory revision
+before writing named project files; persistence failures are reported in a
+`session.persistence` event and reflected by `persistenceBlocked` in session
+status. Events are not replayed after a disconnect. A client should connect to
+the WebSocket before fetching
 `/api/v1/snapshot`, apply that snapshot, then refresh it when it receives a
 newer revision or a session event; after reconnecting, fetch a fresh snapshot
 because revisions and missed events are not retained as a transport log.

@@ -101,16 +101,50 @@ if(WPILIB_EXPRESSION_BUILD_TESTS)
     add_executable(wpilib_expression_test tests/expression_test.cpp)
     target_link_libraries(wpilib_expression_test PRIVATE wpilib::expression)
     foreach(test_case IN ITEMS
-        namespaces
-        setup
+        namespace_values_evaluate
+        namespace_mutations_rejected
+        namespace_definitions_reject_invalid_paths
+        namespace_snapshots_are_isolated
+        namespace_geometry_type_is_stable
+        variable_definition_dependency_order
+        setup_variable_expression_kinds
+        namespaced_geometry_definitions
+        variable_definition_replacement_is_atomic
+        quantity_dimension_is_preserved
+        variable_dependency_cycles_are_rejected
+        unsupported_variable_values_are_rejected
+        variable_initializers_are_read_only
+        reserved_variable_names_are_rejected
+        geometry_method_names_cannot_be_variables
+        variable_set_replacement_removes_old_variables
         unordered_setup
+        variable_reference_rename_preserves_source
+        variable_reference_rename_rejects_invalid_names
+        setup_variable_dependency_graph_tracks_updates
+        setup_variable_rename_preserves_dependents
+        setup_variable_rename_rejects_collisions
+        setup_variables_reject_cycles
+        setup_variables_reject_unknown_references
+        setup_variables_reject_reserved_names
+        setup_variables_reject_unsupported_values
+        setup_variables_reject_duplicate_ids
+        setup_variables_reject_duplicate_names
+        setup_variable_dimension_error_identifies_expression
+        empty_setup_clears_context_copy
         variable_references_and_rename
+        variable_dependency_graph_refreshes
+        quantity_dimension_persists
+        geometry_variable_type_persists
         setup_replacement_many_expressions
         arithmetic_and_variables
         read_only_expressions
         error_messages
         context_copies
         unit_expressions
+        implicit_multiplication
+        implicit_multiplication_precedence
+        implicit_multiplication_units
+        implicit_multiplication_rename
         identifiers
         measurement_math
         geometry_constructors

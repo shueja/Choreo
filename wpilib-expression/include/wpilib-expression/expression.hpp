@@ -98,7 +98,6 @@ class EvaluationContext {
   EvaluationContext& operator=(const EvaluationContext&) = default;
   EvaluationContext(EvaluationContext&& other) noexcept;
   EvaluationContext& operator=(EvaluationContext&& other) noexcept;
-  void SetSetupScript(std::string_view source);
   void SetSetupVariables(std::span<const SetupVariable> variables);
   void SetVariables(std::vector<VariableDefinition> variables);
   std::vector<VariableInfo> GetVariables() const;
@@ -130,7 +129,7 @@ class EvaluationContext {
   struct Impl;
   struct EngineCache;
   Impl& MutableImpl();
-  void SetSetupScriptImpl(std::string_view source, std::span<const SetupVariable> ordered);
+  void SetSetupVariablesImpl(std::span<const SetupVariable> ordered);
   std::shared_ptr<Impl> impl_;
   std::shared_ptr<EngineCache> engineCache_;
 };

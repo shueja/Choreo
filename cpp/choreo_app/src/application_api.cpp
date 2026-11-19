@@ -214,6 +214,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
 
   Impl(choreo::api::ApiServer& serverIn, Options optionsIn)
       : server{serverIn}, options{std::move(optionsIn)} {
+    persistenceWorker = std::thread([this] { RunPersistenceWorker(); });
     worker = std::thread([this] { RunWorker(); });
     if (!options.initialProjectPath.empty()) {
       const auto path = options.initialProjectPath;
@@ -227,6 +228,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             }
           })) {
         StopWorker();
+            StopPersistenceWorker();
         throw std::runtime_error("application worker is stopping");
       }
       try {
@@ -236,12 +238,16 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         }
       } catch (...) {
         StopWorker();
+        StopPersistenceWorker();
         throw;
       }
     }
   }
 
-  ~Impl() { StopWorker(); }
+  ~Impl() {
+    StopPersistenceWorker();
+    StopWorker();
+  }
 
   template <typename Callback>
   static void WithOwner(const std::weak_ptr<Impl>& weak, Callback&& callback) {
@@ -493,6 +499,60 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
     return true;
   }
 
+  bool PostPersistence(Task task) {
+    {
+      std::scoped_lock lock{persistenceQueueMutex};
+      if (persistenceStopping) {
+        return false;
+      }
+      persistenceTasks.emplace_back(std::move(task));
+    }
+    persistenceQueueCondition.notify_one();
+    return true;
+  }
+
+  void StopPersistenceWorker() {
+    {
+      std::scoped_lock lock{persistenceQueueMutex};
+      persistenceStopping = true;
+    }
+    persistenceQueueCondition.notify_all();
+    if (persistenceWorker.joinable()) {
+      persistenceWorker.join();
+    }
+  }
+
+  void FlushPersistence() {
+    auto flushed = std::make_shared<std::promise<void>>();
+    auto completion = flushed->get_future();
+    if (PostPersistence([flushed] { flushed->set_value(); })) {
+      completion.wait();
+    }
+  }
+
+  void RunPersistenceWorker() {
+    while (true) {
+      Task task;
+      {
+        std::unique_lock lock{persistenceQueueMutex};
+        persistenceQueueCondition.wait(
+            lock, [&] { return persistenceStopping || !persistenceTasks.empty(); });
+        if (!persistenceTasks.empty()) {
+          task = std::move(persistenceTasks.front());
+          persistenceTasks.pop_front();
+        } else if (persistenceStopping) {
+          break;
+        }
+      }
+      if (task) {
+        try {
+          task();
+        } catch (...) {
+        }
+      }
+    }
+  }
+
   void StopWorker() {
     {
       std::scoped_lock lock{queueMutex};
@@ -644,6 +704,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
 
   ApiResponse OpenProject(const std::filesystem::path& projectPath,
                           bool notify = true) {
+    FlushPersistence();
     auto files = DiscoverFiles(projectPath);
     auto document = ReadDocument(files);
     if (auto failure = PersistActiveSession()) {
@@ -653,6 +714,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
     auto replacement = std::make_unique<DocumentStore>(std::move(document));
     replacement->ReloadFiles(files);
     store = std::move(replacement);
+    ++sessionGeneration;
     documentFiles = std::move(files);
     hasProjectPath.store(true, std::memory_order_release);
     PublishSnapshot(notify);
@@ -686,6 +748,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       DocumentFiles files;
       files.project = path.value_or(std::filesystem::path{});
       self->store = std::move(replacement);
+      ++self->sessionGeneration;
       self->documentFiles = std::move(files);
       self->hasProjectPath.store(path.has_value(), std::memory_order_release);
       self->PublishSnapshot();
@@ -704,6 +767,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       }
       self->StopGenerations();
       self->store.reset();
+      ++self->sessionGeneration;
       self->documentFiles = {};
       self->hasProjectPath.store(false, std::memory_order_release);
       self->PublishSnapshot();
@@ -771,6 +835,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
 
   ApiResponse SaveSessionFiles(
       const std::optional<std::filesystem::path>& saveAs) {
+    FlushPersistence();
     if (!store) {
       return ApiError(409, "SESSION_NOT_OPEN", "No project is open");
     }
@@ -803,6 +868,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
   }
 
   std::optional<ApiResponse> PersistActiveSession() {
+    FlushPersistence();
     if (!store) {
       return std::nullopt;
     }
@@ -827,6 +893,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
 
   std::optional<ApiResponse> PersistFiles(const DocumentFiles& files) {
     const auto result = store->SaveFiles(files);
+    lastAppliedPersistenceSequence = ++persistenceSequence;
     if (result.Success()) {
       persistenceBlocked = false;
       return std::nullopt;
@@ -847,11 +914,65 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
                           std::move(details)));
   }
 
-  std::optional<ApiResponse> PersistFilesIfNamed() {
-    if (!hasProjectPath.load(std::memory_order_acquire)) {
-      return std::nullopt;
+  void PersistFilesIfNamedAsync() {
+    if (!store || !hasProjectPath.load(std::memory_order_acquire)) {
+      return;
     }
-    return PersistFiles(documentFiles);
+    auto document = store->Snapshot();
+    auto files = documentFiles;
+    const auto revision = store->Revision();
+    const auto projectId = document->project.uuid;
+    const auto session = sessionGeneration;
+    const auto sequence = ++persistenceSequence;
+    auto self = shared_from_this();
+    if (!PostPersistence(
+            [self, document = std::move(document), files = std::move(files),
+             revision, projectId, session, sequence]() mutable {
+              SerializedDocument serialized;
+              SaveResult result;
+              try {
+                serialized = SerializeDocument(*document);
+                result = SaveSerializedFiles(files, serialized);
+              } catch (const std::exception& error) {
+                result.projectError = error.what();
+              }
+              self->Post([self, serialized = std::move(serialized),
+                          result = std::move(result), files = std::move(files),
+                          revision, projectId, session, sequence]() mutable {
+                if (!self->store || self->sessionGeneration != session ||
+                    sequence < self->lastAppliedPersistenceSequence) {
+                  return;
+                }
+                if (!serialized.project.empty()) {
+                  self->store->MarkSaved(std::move(serialized), result);
+                }
+                self->lastAppliedPersistenceSequence = sequence;
+                self->persistenceBlocked = !result.Success();
+                Json event = Json::object(
+                    "type", "session.persistence", "projectId", projectId,
+                    "revision", revision, "success", result.Success());
+                if (!result.Success()) {
+                  std::vector<Json> details;
+                  if (result.projectError) {
+                    details.push_back(Json::object(
+                        "path", files.project.string(), "message",
+                        *result.projectError));
+                  }
+                  for (const auto& [id, error] : result.trajectoryErrors) {
+                    details.push_back(Json::object(
+                        "path", files.trajectories.at(id).string(), "message",
+                        error));
+                  }
+                  event["error"] = Json::object(
+                      "code", "SAVE_FAILED", "message",
+                      "One or more files could not be saved", "details",
+                      std::move(details));
+                }
+                self->server.BroadcastText("/api/v1/events", event.to_string());
+              });
+            })) {
+      persistenceBlocked = true;
+    }
   }
 
   ApiResponse CreateTrajectory(const choreo::api::HttpRequest& request) {
@@ -942,10 +1063,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
                     self->documentFiles.project.parent_path() /
                         (trajectoryId + ".traj"));
               }
-              if (auto failure = self->PersistFilesIfNamed()) {
-                result->set_value(*failure);
-                return;
-              }
+              self->PersistFilesIfNamedAsync();
               self->PublishSnapshot(true, idempotencyKey);
             }
 
@@ -1097,10 +1215,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             const auto previousRevision = self->store->Revision();
             self->store->Commit(std::move(candidate), expectedRevision);
             if (self->store->Revision() != previousRevision) {
-              if (auto failure = self->PersistFilesIfNamed()) {
-                result->set_value(*failure);
-                return;
-              }
+              self->PersistFilesIfNamedAsync();
               self->PublishSnapshot(true, idempotencyKey);
             }
 
@@ -1223,10 +1338,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             const auto previousRevision = self->store->Revision();
             self->store->UpdateVariable(variableId, name, expression);
             if (self->store->Revision() != previousRevision) {
-              if (auto failure = self->PersistFilesIfNamed()) {
-                result->set_value(*failure);
-                return;
-              }
+              self->PersistFilesIfNamedAsync();
               self->PublishSnapshot(true, idempotencyKey);
             }
             ApiResponse mutation{
@@ -1434,10 +1546,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             const auto previousRevision = self->store->Revision();
             self->store->Commit(std::move(candidate), expectedRevision);
             if (self->store->Revision() != previousRevision) {
-              if (auto failure = self->PersistFilesIfNamed()) {
-                result->set_value(*failure);
-                return;
-              }
+              self->PersistFilesIfNamedAsync();
               self->PublishSnapshot(true, idempotencyKey);
             }
 
@@ -1527,10 +1636,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
               return;
             }
 
-            if (auto failure = self->PersistFilesIfNamed()) {
-              result->set_value(*failure);
-              return;
-            }
+            self->PersistFilesIfNamedAsync();
             self->PublishSnapshot(true, idempotencyKey);
             ApiResponse mutation{
                 200,
@@ -1982,14 +2088,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         } else {
           try {
             generation.process->CommitResult(*store);
-            if (auto failure = PersistFilesIfNamed()) {
-              const auto error = ErrorBody(*failure).at("message").get_string();
-              EmitStatus(generation.operationId, generation.trajectoryId,
-                         "failed", "Generated result could not be saved",
-                         store->Revision(), error);
-              it = generations.erase(it);
-              continue;
-            }
+            PersistFilesIfNamedAsync();
             PublishSnapshot(true, std::nullopt, generation.operationId);
             EmitStatus(generation.operationId, generation.trajectoryId,
                        "succeeded", "Generation completed", store->Revision());
@@ -2048,6 +2147,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
   }
 
   void Shutdown() {
+    StopPersistenceWorker();
     {
       std::scoped_lock lock{queueMutex};
       stopping = true;
@@ -2061,10 +2161,15 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
   choreo::api::ApiServer& server;
   Options options;
   std::thread worker;
+  std::thread persistenceWorker;
   std::mutex queueMutex;
   std::condition_variable queueCondition;
   std::deque<Task> tasks;
   bool stopping = false;
+  std::mutex persistenceQueueMutex;
+  std::condition_variable persistenceQueueCondition;
+  std::deque<Task> persistenceTasks;
+  bool persistenceStopping = false;
   std::unique_ptr<DocumentStore> store;
   std::atomic<std::shared_ptr<const PublishedSnapshot>> publishedSnapshot;
   DocumentFiles documentFiles;
@@ -2073,6 +2178,9 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
   std::map<choreo::api::WebSocketId, std::string> progressConnections;
   std::map<std::string, CachedGeneration, std::less<>> idempotentGenerations;
   std::map<std::string, CachedMutation, std::less<>> idempotentMutations;
+  std::uint64_t sessionGeneration = 0;
+  std::uint64_t persistenceSequence = 0;
+  std::uint64_t lastAppliedPersistenceSequence = 0;
   bool persistenceBlocked = false;
 };
 

@@ -6,6 +6,7 @@
 #include <limits>
 #include <stdexcept>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include "choreo/document/document_store.hpp"
@@ -197,9 +198,9 @@ void WriteAtomic(const std::filesystem::path& path,
 
 }
 
-SaveResult DocumentStore::SaveFiles(const DocumentFiles& files) {
+SaveResult SaveSerializedFiles(const DocumentFiles& files,
+                               const SerializedDocument& serialized) {
   ValidatePaths(files);
-  const auto serialized = Serialize();
   if (serialized.trajectories.size() != files.trajectories.size()) {
     throw std::invalid_argument(
         "trajectory paths do not match document trajectories");
@@ -212,20 +213,23 @@ SaveResult DocumentStore::SaveFiles(const DocumentFiles& files) {
   SaveResult result;
   try {
     WriteAtomic(files.project, serialized.project);
-    savedProject_ = serialized.project;
   } catch (const std::exception& error) {
-    savedProject_.reset();
     result.projectError = error.what();
   }
   for (const auto& [id, content] : serialized.trajectories) {
     try {
       WriteAtomic(files.trajectories.at(id), content);
-      savedTrajectories_[id] = content;
     } catch (const std::exception& error) {
-      savedTrajectories_.erase(id);
       result.trajectoryErrors.emplace(id, error.what());
     }
   }
+  return result;
+}
+
+SaveResult DocumentStore::SaveFiles(const DocumentFiles& files) {
+  auto serialized = Serialize();
+  auto result = SaveSerializedFiles(files, serialized);
+  MarkSaved(std::move(serialized), result);
   return result;
 }
 

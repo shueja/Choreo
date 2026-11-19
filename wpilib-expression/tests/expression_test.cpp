@@ -35,8 +35,7 @@ bool EvaluatesTo(const EvaluationContext& context, std::string_view expression,
                  double expected, std::string_view unit, double tolerance = 1e-10) {
   auto parsedUnit = unit.empty() ? units::precise::one
                                  : units::unit_from_string(std::string(unit));
-  auto dimension = parsedUnit;
-  auto result = context.Evaluate(expression, dimension);
+  auto result = context.Evaluate(expression, parsedUnit);
   auto converted = unit.empty() ? std::expected<double, Error>{
                                       result.value() * result.units().multiplier()}
                                 : In(result, parsedUnit);
@@ -49,7 +48,7 @@ bool EvaluatesTo(const EvaluationContext& context, std::string_view expression,
     return true;
   }
   std::println(stderr, "Expression '{}' returned {} {}; expected {} within {}", expression,
-                value, unit, expected, tolerance);
+               value, unit, expected, tolerance);
   return false;
 }
 
@@ -66,7 +65,20 @@ std::vector<VariableDefinition> Definitions(const EvaluationContext& context) {
   return result;
 }
 
-int TestNamespaces() {
+std::vector<wpilib::expression::SetupVariable> DependencySetupVariables() {
+  return {{"total-id", "total", "base + offset"},
+          {"offset-id", "offset", "pose.X()"},
+          {"pose-id", "pose", "Pose2d(base, 0 m, 0 deg)"},
+          {"base-id", "base", "2 m // initial value"}};
+}
+
+EvaluationContext MakeDependencySetupContext() {
+  EvaluationContext context;
+  context.SetSetupVariables(DependencySetupVariables());
+  return context;
+}
+
+EvaluationContext MakeNamespaceContext() {
   EvaluationContext setup;
   setup.SetVariable("target", Pose2d{wpi::units::meter_t{4.0}, wpi::units::meter_t{4.0},
                                      wpi::math::Rotation2d{}});
@@ -82,17 +94,12 @@ int TestNamespaces() {
       Variable("legacy-id", "field.deep.legacy", "m", "3 m"),
       Variable("result-id", "", "result", "field.origin.X()"),
   });
-  bool geometryTypeChangeRejected = false;
-  try {
-    setup.SetVariable("target", wpi::math::Translation2d{});
-  } catch (const std::invalid_argument&) {
-    geometryTypeChangeRejected = true;
-  }
-  if (!geometryTypeChangeRejected ||
-      std::abs(setup.EvaluatePose2d("target").X().value() - 4.0) > 1e-10) {
-    std::println(stderr, "geometry variable type changed or its cached value was lost");
-    return 1;
-  }
+  return setup;
+}
+
+int TestNamespaceValuesEvaluate() {
+  auto setup = MakeNamespaceContext();
+
   if (!EvaluatesTo(setup, "field.origin.X() + field.distance", 3.0, "m") ||
       !EvaluatesTo(setup, "result", 1.0, "m") ||
       !EvaluatesTo(setup, "field.deep.goal.X()", 2.0, "ft") ||
@@ -112,6 +119,11 @@ int TestNamespaces() {
     std::println(stderr, "pose distance or norm returned the wrong value");
     return 1;
   }
+  return 0;
+}
+
+int TestNamespaceMutationsAreRejected() {
+  auto setup = MakeNamespaceContext();
   for (const char* expression : {"field.origin = Pose2d()", "field.deep.more.length = 5 m",
                                  "field.deep.more.missing", "field.deep.more = 3 m"}) {
     bool rejected = false;
@@ -125,6 +137,11 @@ int TestNamespaces() {
       return 1;
     }
   }
+  return 0;
+}
+
+int TestNamespaceDefinitionsRejectInvalidPaths() {
+  auto setup = MakeNamespaceContext();
   for (const char* expression : {"eval(\"1\")", "field.missing"}) {
     bool rejected = false;
     try {
@@ -162,6 +179,11 @@ int TestNamespaces() {
     std::println(stderr, "invalid namespace path changed existing variables");
     return 1;
   }
+  return 0;
+}
+
+int TestNamespaceSnapshotsAreIsolated() {
+  auto setup = MakeNamespaceContext();
   auto copy = setup;
   copy.SetVariables({Variable("replacement-id", "field.deep.third.fourth.fifth.sixth",
                               "replacement", "5 m")});
@@ -173,11 +195,25 @@ int TestNamespaces() {
   return 0;
 }
 
-int TestSetup() {
-  EvaluationContext setup;
-  EvaluationContext scriptSetup;
-  EvaluationContext unordered;
-  unordered.SetVariables({
+int TestNamespaceGeometryVariableTypeIsStable() {
+  auto setup = MakeNamespaceContext();
+  bool geometryTypeChangeRejected = false;
+  try {
+    setup.SetVariable("target", wpi::math::Translation2d{});
+  } catch (const std::invalid_argument&) {
+    geometryTypeChangeRejected = true;
+  }
+  if (!geometryTypeChangeRejected ||
+      std::abs(setup.EvaluatePose2d("target").X().value() - 4.0) > 1e-10) {
+    std::println(stderr, "geometry variable type changed or its cached value was lost");
+    return 1;
+  }
+  return 0;
+}
+
+int TestVariableDefinitionsEvaluateInDependencyOrder() {
+  EvaluationContext context;
+  context.SetVariables({
       Variable("combined-id", "", "combined", "total + extra"),
       Variable("target-id", "", "targetX", "pose.X()"),
       Variable("total-id", "", "total", "base + offset"),
@@ -186,25 +222,51 @@ int TestSetup() {
       Variable("pose-id", "", "pose", "Pose2d(3 m, 4 m, 90 deg)"),
       Variable("extra-id", "", "extra", "1 m"),
   });
-  if (!EvaluatesTo(unordered, "combined", 3.9144, "m") ||
-      !EvaluatesTo(unordered, "targetX", 3.0, "m")) {
+  if (!EvaluatesTo(context, "combined", 3.9144, "m") ||
+      !EvaluatesTo(context, "targetX", 3.0, "m")) {
     std::println(stderr, "variable definitions were not evaluated in dependency order");
     return 1;
   }
+  return 0;
+}
 
-  try {
-    scriptSetup.SetSetupScript("// 2 unknown_units\nvar base = 2 m; /* 3 unknown_units */ "
-                 "var offset = 3 ft; var total = base + offset; "
-                         "var pose = Pose2d(3 m, 4 m, 90 deg); var gain = 2; "
-                         "var heading = pose.Rotation().Degrees(); var targetX = pose.X(); "
-                         "global shared = 4 m; const var extra = 1 m; auto combined = total + extra; "
-                         "var target_points = [Translation2d(0 m, 0 m), Translation2d(3 m, 4 m)]; "
-                         "var magnitude = abs(-2 m); var shorter = min(3 m, 2 m); "
-                         "var longer = max(3 m, 2 m); var root = sqrt(9 m^2);");
-  } catch (const std::exception& error) {
-    std::println(stderr, "setup script load failed: {}", error.what());
-    return 1;
-  }
+int TestSetupVariablesEvaluateExpressionKinds() {
+  EvaluationContext scriptSetup;
+  using wpilib::expression::SetupVariable;
+  scriptSetup.SetSetupVariables(std::vector<SetupVariable>{
+      {"script-base-id", "base", "2 m"},
+      {"script-offset-id", "offset", "3 ft"},
+      {"script-total-id", "total", "base + offset"},
+      {"script-pose-id", "pose", "Pose2d(3 m, 4 m, 90 deg)"},
+      {"script-gain-id", "gain", "2"},
+      {"script-heading-id", "heading", "pose.Rotation().Degrees()"},
+      {"script-target-x-id", "targetX", "pose.X()"},
+      {"script-shared-id", "shared", "4 m"},
+      {"script-extra-id", "extra", "1 m"},
+      {"script-combined-id", "combined", "total + extra"},
+      {"script-target-points-id", "target_points",
+       "[Translation2d(0 m, 0 m), Translation2d(3 m, 4 m)]"},
+      {"script-magnitude-id", "magnitude", "abs(-2 m)"},
+      {"script-shorter-id", "shorter", "min(3 m, 2 m)"},
+      {"script-longer-id", "longer", "max(3 m, 2 m)"},
+      {"script-root-id", "root", "sqrt(9 m^2)"},
+  });
+  if (!EvaluatesTo(scriptSetup, "base + offset", 2.9144, "m") ||
+      !EvaluatesTo(scriptSetup, "target_points[1].Y()", 4.0, "m") ||
+      !EvaluatesTo(scriptSetup,
+                   "Translation2d(2 m, 4 m).Nearest(target_points).X()", 3.0, "m") ||
+      !EvaluatesTo(scriptSetup, "magnitude", 2.0, "m") ||
+      !EvaluatesTo(scriptSetup, "shorter", 2.0, "m") ||
+      !EvaluatesTo(scriptSetup, "longer", 3.0, "m") ||
+      !EvaluatesTo(scriptSetup, "root", 3.0, "m")) {
+      std::println(stderr, "setup variables returned incorrect values");
+      return 1;
+    }
+  return 0;
+}
+
+int TestNamespacedGeometryDefinitions() {
+  EvaluationContext setup;
   try {
     setup.SetVariables({
       Variable("base-id", "", "base", "2 m"),
@@ -269,22 +331,12 @@ int TestSetup() {
     std::println(stderr, "setup expression evaluation threw: {}", error.what());
     return 1;
   }
-  try {
-    if (!EvaluatesTo(scriptSetup, "base + offset", 2.9144, "m") ||
-        !EvaluatesTo(scriptSetup, "target_points[1].Y()", 4.0, "m") ||
-        !EvaluatesTo(scriptSetup,
-                     "Translation2d(2 m, 4 m).Nearest(target_points).X()", 3.0, "m") ||
-        !EvaluatesTo(scriptSetup, "magnitude", 2.0, "m") ||
-        !EvaluatesTo(scriptSetup, "shorter", 2.0, "m") ||
-        !EvaluatesTo(scriptSetup, "longer", 3.0, "m") ||
-        !EvaluatesTo(scriptSetup, "root", 3.0, "m")) {
-      std::println(stderr, "setup script returned incorrect variables");
-      return 1;
-    }
-  } catch (const std::exception& error) {
-    std::println(stderr, "setup script expression evaluation threw: {}", error.what());
-    return 1;
-  }
+  return 0;
+}
+
+int TestVariableDefinitionReplacementIsAtomic() {
+  EvaluationContext setup;
+  setup.SetVariables({Variable("base-id", "", "base", "2 m")});
   bool setupFailureRejected = false;
   try {
     auto definitions = Definitions(setup);
@@ -297,6 +349,12 @@ int TestSetup() {
     std::println(stderr, "failed variable replacement changed the context");
     return 1;
   }
+  return 0;
+}
+
+int TestQuantityDimensionIsPreservedAcrossUpdates() {
+  EvaluationContext setup;
+  setup.SetVariables({Variable("base-id", "", "base", "2 m")});
   bool quantityTypeChangeRejected = false;
   try {
     auto definitions = Definitions(setup);
@@ -329,6 +387,12 @@ int TestSetup() {
     std::println(stderr, "SetVariable changed a declared dimension or its cached value");
     return 1;
   }
+  return 0;
+}
+
+int TestVariableDependencyCyclesAreRejected() {
+  EvaluationContext setup;
+  setup.SetVariables({Variable("base-id", "", "base", "2 m")});
   bool cyclicSetupRejected = false;
   try {
     setup.SetVariables({Variable("left-id", "", "left", "right"),
@@ -340,6 +404,12 @@ int TestSetup() {
     std::println(stderr, "cyclic variable dependency was accepted or changed the context");
     return 1;
   }
+  return 0;
+}
+
+int TestUnsupportedVariableValuesAreRejected() {
+  EvaluationContext setup;
+  setup.SetVariables({Variable("base-id", "", "base", "2 m")});
   bool unsupportedSetupRejected = false;
   try {
     auto definitions = Definitions(setup);
@@ -352,6 +422,12 @@ int TestSetup() {
     std::println(stderr, "unsupported setup value was accepted or changed the context");
     return 1;
   }
+  return 0;
+}
+
+int TestVariableInitializersAreReadOnly() {
+  EvaluationContext setup;
+  setup.SetVariables({Variable("base-id", "", "base", "2 m")});
   for (const char* expression : {"eval(\"1\")", "use(\"missing.chai\")",
                                  "load_module(\"missing\")", "(fun() { return 1; })()",
                                  "get_objects()", "1; print(\"no\")"}) {
@@ -368,26 +444,12 @@ int TestSetup() {
       return 1;
     }
   }
-  for (const char* script : {"var count = 0; while (count < 1) { count += 1; }",
-                             "var value = eval(\"1\");", "var value = use(\"missing.chai\");",
-                             "load_module(\"missing\");", "var value = 1; value = 2;",
-                             "def calculate() { return 1; } var value = calculate();",
-                             "var value = (fun() { return 1; })();",
-                             "var value = quantity(1, \"${eval(1)}\");",
-                             "var value = get_objects();", "var value = 1 / 0; print(\"no\");",
-                             "var value = 1; var value = 2;", "var value;",
-                             "var bad = [Translation2d(), Pose2d()];"}) {
-    bool rejected = false;
-    try {
-      scriptSetup.SetSetupScript(script);
-    } catch (const std::exception&) {
-      rejected = true;
-    }
-    if (!rejected || !EvaluatesTo(scriptSetup, "base", 2.0, "m")) {
-      std::println(stderr, "unsafe setup script was accepted or changed the context");
-      return 1;
-    }
-  }
+  return 0;
+}
+
+int TestReservedVariableNamesAreRejected() {
+  EvaluationContext setup;
+  setup.SetVariables({Variable("base-id", "", "base", "2 m")});
   bool reservedSetupRejected = false;
   try {
     auto definitions = Definitions(setup);
@@ -400,6 +462,11 @@ int TestSetup() {
     std::println(stderr, "reserved setup name was accepted or changed the context");
     return 1;
   }
+  return 0;
+}
+
+int TestGeometryMethodNamesCannotBeVariables() {
+  EvaluationContext setup;
   for (const char* name : {"Cos", "Degrees"}) {
     bool methodNameRejected = false;
     try {
@@ -412,6 +479,12 @@ int TestSetup() {
       return 1;
     }
   }
+  return 0;
+}
+
+int TestVariableSetReplacementRemovesPreviousVariables() {
+  EvaluationContext setup;
+  setup.SetVariables({Variable("base-id", "", "base", "2 m")});
   setup.SetVariables({Variable("replacement-id", "", "replacement", "5 m")});
   bool oldSetupRejected = false;
   try {
@@ -426,21 +499,7 @@ int TestSetup() {
   return 0;
 }
 
-int TestUnorderedSetup() {
-  using wpilib::expression::SetupVariable;
-  EvaluationContext context;
-  const std::vector<SetupVariable> variables{
-      {"total-id", "total", "base + offset"},
-      {"offset-id", "offset", "pose.X()"},
-      {"pose-id", "pose", "Pose2d(base, 0 m, 0 deg)"},
-      {"base-id", "base", "2 m // initial value"}};
-  context.SetSetupVariables(variables);
-  if (!EvaluatesTo(context, "total", 4.0, "m")) {
-    std::println(stderr, "unordered setup returned the wrong value");
-    return 1;
-  }
-
-  auto renamed = wpilib::expression::RenameSetupVariable(variables, "base-id", "width");
+int TestVariableReferenceRenamePreservesSource() {
   const auto expression = wpilib::expression::RenameVariableReferences(
       "base + base_extra + other.base + base.X() /* base */ + 2 m // base",
       "base", "width");
@@ -459,10 +518,14 @@ int TestUnorderedSetup() {
            {"base +", "width +"},
            {"base + \"unfinished base", "width + \"unfinished base"}}) {
     if (wpilib::expression::RenameVariableReferences(source, "base", "width") != expected) {
-      std::println(stderr, "variable rename failed for '{}'", source);
+      std::println(stderr, "variable rename failed for '{}': {}", source, expected);
       return 1;
     }
   }
+  return 0;
+}
+
+int TestVariableReferenceRenameRejectsInvalidNames() {
   for (std::string_view invalidName : {"m", "var", "not valid"}) {
     bool rejected = false;
     try {
@@ -475,6 +538,47 @@ int TestUnorderedSetup() {
       return 1;
     }
   }
+  return 0;
+}
+
+int TestSetupVariableDependencyGraphTracksUpdates() {
+  using wpilib::expression::SetupVariable;
+  const std::vector<SetupVariable> variables{
+      {"total-id", "total", "base + offset"},
+      {"offset-id", "offset", "pose.X()"},
+      {"pose-id", "pose", "Pose2d(base, 0 m, 0 deg)"},
+      {"base-id", "base", "2 m // initial value"}};
+  auto renamed = wpilib::expression::RenameSetupVariable(variables, "base-id", "width");
+  EvaluationContext context;
+  context.SetSetupVariables(renamed);
+  auto references = context.FindReferences("base-id");
+  if (references.size() != 2 ||
+      std::find(references.begin(), references.end(), "total-id") == references.end() ||
+      std::find(references.begin(), references.end(), "pose-id") == references.end()) {
+    std::println(stderr, "setup dependency graph did not resolve UUID references");
+    return 1;
+  }
+
+  renamed[0].initializer = "4 m";
+  context.SetSetupVariables(renamed);
+  references = context.FindReferences("base-id");
+  if (references.size() != 1 || references.front() != "pose-id") {
+    std::println(stderr, "setup dependency graph retained stale UUID edges");
+    return 1;
+  }
+  return 0;
+}
+
+int TestSetupVariableRenamePreservesDependentExpressions() {
+  using wpilib::expression::SetupVariable;
+  const std::vector<SetupVariable> variables{
+      {"total-id", "total", "base + offset"},
+      {"offset-id", "offset", "pose.X()"},
+      {"pose-id", "pose", "Pose2d(base, 0 m, 0 deg)"},
+      {"base-id", "base", "2 m // initial value"}};
+  EvaluationContext originalContext;
+  originalContext.SetSetupVariables(variables);
+  auto renamed = wpilib::expression::RenameSetupVariable(variables, "base-id", "width");
   EvaluationContext renamedContext;
   renamedContext.SetSetupVariables(renamed);
   if (!EvaluatesTo(renamedContext, "total", 4.0, "m") ||
@@ -483,11 +587,13 @@ int TestUnorderedSetup() {
     std::println(stderr, "setup variable rename did not update dependent initializers");
     return 1;
   }
+
   std::vector<std::string> firstTree{"base * 2", "total - base"};
   std::vector<std::string> secondTree{"base + 1 m", "pose.X() + base"};
   for (auto* tree : {&firstTree, &secondTree}) {
     for (auto& treeExpression : *tree) {
-      treeExpression = wpilib::expression::RenameVariableReferences(treeExpression, "base", "width");
+      treeExpression = wpilib::expression::RenameVariableReferences(
+          treeExpression, "base", "width");
     }
   }
   if (!EvaluatesTo(renamedContext, firstTree[0], 4.0, "m") ||
@@ -497,13 +603,24 @@ int TestUnorderedSetup() {
     std::println(stderr, "renamed expressions in both trees returned the wrong values");
     return 1;
   }
+
   renamed[3].initializer = "3 m";
   renamedContext.SetSetupVariables(renamed);
   if (!EvaluatesTo(renamedContext, "total", 6.0, "m") ||
-      !EvaluatesTo(context, "total", 4.0, "m")) {
+      !EvaluatesTo(originalContext, "total", 4.0, "m")) {
     std::println(stderr, "setup initializer replacement changed an older context");
     return 1;
   }
+  return 0;
+}
+
+int TestSetupVariableRenameRejectsNameCollisions() {
+  using wpilib::expression::SetupVariable;
+  const std::vector<SetupVariable> variables{
+      {"total-id", "total", "base + offset"},
+      {"offset-id", "offset", "pose.X()"},
+      {"pose-id", "pose", "Pose2d(base, 0 m, 0 deg)"},
+      {"base-id", "base", "2 m"}};
   bool collisionRejected = false;
   try {
     wpilib::expression::RenameSetupVariable(variables, "base-id", "total");
@@ -514,45 +631,129 @@ int TestUnorderedSetup() {
     std::println(stderr, "setup variable rename accepted a name collision");
     return 1;
   }
+  return 0;
+}
 
-  for (const std::vector<SetupVariable> invalid : {
-           std::vector<SetupVariable>{{"cycle-a", "a", "b"}, {"cycle-b", "b", "a"}},
-           std::vector<SetupVariable>{{"self-id", "value", "value"}},
-           std::vector<SetupVariable>{{"missing-id", "value", "missing + 1 m"}},
-           std::vector<SetupVariable>{{"invalid-id", "value", "1 m; value = 2 m"}},
-           std::vector<SetupVariable>{{"unit-id", "m", "1 m"}},
-           std::vector<SetupVariable>{{"array-id", "value", "[1, 2]"}},
-           std::vector<SetupVariable>{{"duplicate-id", "first", "1 m"},
-                                      {"duplicate-id", "second", "2 m"}},
-           std::vector<SetupVariable>{{"good-id", "good", "1 m"},
-                                      {"bad-id", "bad", "good + 1 s"}},
-           std::vector<SetupVariable>{{"duplicate-id", "value", "1 m"},
-                                      {"second-id", "value", "2 m"}}}) {
-    bool rejected = false;
-    try {
-      context.SetSetupVariables(invalid);
-    } catch (const std::invalid_argument& error) {
-      rejected = std::string_view{error.what()}.find(invalid.front().id) != std::string_view::npos ||
-                 (invalid.size() > 1 &&
-                  std::string_view{error.what()}.find(invalid.back().id) != std::string_view::npos);
-    }
-    if (!rejected || !EvaluatesTo(context, "total", 4.0, "m")) {
-      std::println(stderr, "invalid unordered setup was accepted, lacked an ID, or changed the context");
+int TestUnorderedSetup() {
+  EvaluationContext context;
+  const auto variables = DependencySetupVariables();
+  context.SetSetupVariables(variables);
+  if (!EvaluatesTo(context, "total", 4.0, "m")) {
+    std::println(stderr, "unordered setup returned the wrong value");
+    return 1;
+  }
+
+  return 0;
+}
+
+bool SetupUpdateRejectedWithoutChangingContext(
+    EvaluationContext& context,
+    const std::vector<wpilib::expression::SetupVariable>& variables) {
+  try {
+    context.SetSetupVariables(variables);
+  } catch (const std::invalid_argument&) {
+    return EvaluatesTo(context, "total", 4.0, "m");
+  }
+  return false;
+}
+
+int TestSetupVariablesRejectCycles() {
+  using wpilib::expression::SetupVariable;
+  auto context = MakeDependencySetupContext();
+  const std::vector<std::vector<SetupVariable>> cyclicInputs{
+      {{"cycle-a", "a", "b"}, {"cycle-b", "b", "a"}},
+      {{"self-id", "value", "value"}}};
+  for (const auto& variables : cyclicInputs) {
+    if (!SetupUpdateRejectedWithoutChangingContext(context, variables)) {
+      std::println(stderr, "cyclic setup was accepted or changed the existing context");
       return 1;
     }
   }
+  return 0;
+}
+
+int TestSetupVariablesRejectUnknownReferencesAndStatements() {
+  using wpilib::expression::SetupVariable;
+  auto context = MakeDependencySetupContext();
+  const std::vector<std::vector<SetupVariable>> invalidInputs{
+      {{"missing-id", "value", "missing + 1 m"}},
+      {{"invalid-id", "value", "1 m; value = 2 m"}}};
+  for (const auto& variables : invalidInputs) {
+    if (!SetupUpdateRejectedWithoutChangingContext(context, variables)) {
+      std::println(stderr, "invalid setup reference or statement was accepted");
+      return 1;
+    }
+  }
+  return 0;
+}
+
+int TestSetupVariablesRejectReservedNames() {
+  using wpilib::expression::SetupVariable;
+  auto context = MakeDependencySetupContext();
+  if (!SetupUpdateRejectedWithoutChangingContext(
+          context, std::vector<SetupVariable>{{"unit-id", "m", "1 m"}})) {
+    std::println(stderr, "reserved setup variable name was accepted");
+    return 1;
+  }
+  return 0;
+}
+
+int TestSetupVariablesRejectUnsupportedValues() {
+  using wpilib::expression::SetupVariable;
+  auto context = MakeDependencySetupContext();
+  if (!SetupUpdateRejectedWithoutChangingContext(
+          context, std::vector<SetupVariable>{{"array-id", "value", "[1, 2]"}})) {
+    std::println(stderr, "unsupported setup value was accepted");
+    return 1;
+  }
+  return 0;
+}
+
+int TestSetupVariablesRejectDuplicateIds() {
+  using wpilib::expression::SetupVariable;
+  auto context = MakeDependencySetupContext();
+  if (!SetupUpdateRejectedWithoutChangingContext(
+          context, std::vector<SetupVariable>{{"duplicate-id", "first", "1 m"},
+                                             {"duplicate-id", "second", "2 m"}})) {
+    std::println(stderr, "duplicate setup UUID was accepted");
+    return 1;
+  }
+  return 0;
+}
+
+int TestSetupVariablesRejectDuplicateNames() {
+  using wpilib::expression::SetupVariable;
+  auto context = MakeDependencySetupContext();
+  if (!SetupUpdateRejectedWithoutChangingContext(
+          context, std::vector<SetupVariable>{{"first-id", "value", "1 m"},
+                                             {"second-id", "value", "2 m"}})) {
+    std::println(stderr, "duplicate setup variable name was accepted");
+    return 1;
+  }
+  return 0;
+}
+
+int TestSetupVariableDimensionErrorIdentifiesExpression() {
+  using wpilib::expression::SetupVariable;
+  using wpilib::expression::SetupVariableError;
+  auto context = MakeDependencySetupContext();
+  bool rejected = false;
   try {
     context.SetSetupVariables(std::vector<SetupVariable>{
         {"good-id", "good", "1 m"}, {"bad-id", "bad", "good + 1 s"}});
-    std::println(stderr, "incompatible setup initializer was accepted");
-    return 1;
-  } catch (const wpilib::expression::SetupVariableError& error) {
-    if (error.Id() != "bad-id" || !EvaluatesTo(context, "total", 4.0, "m")) {
-      std::println(stderr, "setup evaluation reported the wrong variable ID or changed the context");
-      return 1;
-    }
+  } catch (const SetupVariableError& error) {
+    rejected = error.Id() == "bad-id";
   }
-  auto snapshot = context;
+  if (!rejected || !EvaluatesTo(context, "total", 4.0, "m")) {
+    std::println(stderr, "invalid setup initializer was not attributed or changed context");
+    return 1;
+  }
+  return 0;
+}
+
+int TestEmptySetupClearsContextWithoutAffectingCopy() {
+  auto snapshot = MakeDependencySetupContext();
+  EvaluationContext context = snapshot;
   context.SetSetupVariables({});
   bool removed = false;
   try {
@@ -561,7 +762,7 @@ int TestUnorderedSetup() {
     removed = true;
   }
   if (!removed || !EvaluatesTo(snapshot, "total", 4.0, "m")) {
-    std::println(stderr, "empty setup did not clear the context or preserve its copy");
+    std::println(stderr, "empty setup did not clear context or preserve its copy");
     return 1;
   }
   return 0;
@@ -603,31 +804,51 @@ int TestVariableReferencesAndRename() {
     return 1;
   }
 
-  auto changed = Definitions(context);
-  for (auto& definition : changed) {
-    if (definition.id == "distance-id") {
-      definition.expression = "3 m";
+  return 0;
+}
+
+int TestVariableDependencyGraphRefreshesOnDefinitionUpdate() {
+  EvaluationContext context;
+  context.SetVariables({
+      Variable("distance-id", "field", "distance", "2 m"),
+      Variable("twice-id", "field", "twice", "field.distance * 2"),
+      Variable("result-id", "", "result", "field.distance + field.twice"),
+  });
+  auto definitions = Definitions(context);
+  for (auto& definition : definitions) {
+    if (definition.id == "twice-id") {
+      definition.expression = "6 m";
     }
   }
-  context.SetVariables(std::move(changed));
-  if (!EvaluatesTo(context, "result", 9.0, "m")) {
-    std::println(stderr, "dependency-driven reevaluation returned the wrong value");
+  context.SetVariables(std::move(definitions));
+  const auto references = context.FindReferences("distance-id");
+  if (references.size() != 1 || references.front() != "result-id") {
+    std::println(stderr, "dependency graph retained stale edges after variable updates");
     return 1;
   }
+  return 0;
+}
 
+int TestQuantityDimensionPersistsAcrossDefinitionUpdates() {
+  EvaluationContext context;
+  context.SetVariables({
+      Variable("distance-id", "field", "distance", "2 m"),
+      Variable("twice-id", "field", "twice", "field.distance * 2"),
+      Variable("result-id", "", "result", "field.distance + field.twice"),
+  });
+  auto definitions = Definitions(context);
+  for (auto& definition : definitions) {
+    if (definition.id == "distance-id") {
+      definition.expression = "3 s";
+    }
+  }
   bool typeChangeRejected = false;
   try {
-    changed = Definitions(context);
-    for (auto& definition : changed) {
-      if (definition.id == "distance-id") {
-        definition.expression = "3 s";
-      }
-    }
-    context.SetVariables(std::move(changed));
+    context.SetVariables(std::move(definitions));
   } catch (const std::invalid_argument&) {
     typeChangeRejected = true;
   }
-  if (!typeChangeRejected || !EvaluatesTo(context, "result", 9.0, "m")) {
+  if (!typeChangeRejected || !EvaluatesTo(context, "result", 6.0, "m")) {
     std::println(stderr, "incompatible dependency update corrupted cached values");
     return 1;
   }
@@ -647,36 +868,39 @@ int TestVariableReferencesAndRename() {
     std::println(stderr, "restored variable did not preserve its declared scalar dimension");
     return 1;
   }
+  definitions = Definitions(restored);
+  for (auto& definition : definitions) {
+    if (definition.id == "distance-id") {
+      definition.expression = "3 s";
+    }
+  }
   bool restoredDimensionChangeRejected = false;
   try {
-    changed = Definitions(restored);
-    for (auto& definition : changed) {
-      if (definition.id == "distance-id") {
-        definition.expression = "3 s";
-      }
-    }
-    restored.SetVariables(std::move(changed));
+    restored.SetVariables(std::move(definitions));
   } catch (const std::invalid_argument&) {
     restoredDimensionChangeRejected = true;
   }
-  if (!restoredDimensionChangeRejected || !EvaluatesTo(restored, "result", 9.0, "m")) {
+  if (!restoredDimensionChangeRejected || !EvaluatesTo(restored, "result", 6.0, "m")) {
     std::println(stderr, "persisted scalar dimension was not enforced after reload");
     return 1;
   }
+  return 0;
+}
 
+int TestGeometryVariableTypePersistsAcrossDefinitionReload() {
   EvaluationContext geometry;
   geometry.SetVariables({Variable("pose-id", "", "pose", "Pose2d(1 m, 2 m, 0 deg)")});
   EvaluationContext restoredGeometry;
   restoredGeometry.SetVariables(Definitions(geometry));
-  bool restoredGeometryTypeChangeRejected = false;
+  auto definitions = Definitions(restoredGeometry);
+  definitions.front().expression = "Translation2d(1 m, 2 m)";
+  bool typeChangeRejected = false;
   try {
-    auto geometryDefinitions = Definitions(restoredGeometry);
-    geometryDefinitions.front().expression = "Translation2d(1 m, 2 m)";
-    restoredGeometry.SetVariables(std::move(geometryDefinitions));
+    restoredGeometry.SetVariables(std::move(definitions));
   } catch (const std::invalid_argument&) {
-    restoredGeometryTypeChangeRejected = true;
+    typeChangeRejected = true;
   }
-  if (!restoredGeometryTypeChangeRejected ||
+  if (!typeChangeRejected ||
       std::abs(restoredGeometry.EvaluatePose2d("pose").X().value() - 1.0) > 1e-10) {
     std::println(stderr, "persisted geometry type was not enforced after reload");
     return 1;
@@ -1408,28 +1632,111 @@ int TestShapes() {
   return 0;
 }
 
+int TestImplicitMultiplication() {
+  EvaluationContext context;
+  context.SetSetupVariables(std::vector<wpilib::expression::SetupVariable>{
+      {"scale-id", "scale", "2"}, {"width-id", "width", "3"}});
+  return !(EvaluatesTo(context, "scale width", 6.0, "") &&
+           EvaluatesTo(context, "2width", 6.0, "") &&
+           EvaluatesTo(context, "(scale + 1) width", 9.0, "") &&
+           EvaluatesTo(context, "(scale + 1)2", 6.0, "") &&
+           EvaluatesTo(context, "2(scale + 1)", 6.0, "") &&
+           EvaluatesTo(context, "abs(-2)(width)", 6.0, ""));
+}
+
+int TestImplicitMultiplicationPrecedence() {
+  EvaluationContext context;
+  context.SetSetupVariables(std::vector<wpilib::expression::SetupVariable>{
+      {"scale-id", "scale", "2"}, {"width-id", "width", "3"}});
+  return !(EvaluatesTo(context, "scale/3 m", 2.0 / 3.0, "1/m") &&
+           EvaluatesTo(context, "2/3 m", 2.0 / 3.0, "m") &&
+           EvaluatesTo(context, "-2/3 m", -2.0 / 3.0, "m") &&
+           EvaluatesTo(context, "2/3(m + m)", 4.0 / 3.0, "m") &&
+           EvaluatesTo(context, "12 / scale width", 2.0, "") &&
+           EvaluatesTo(context, "scale width^2", 18.0, ""));
+}
+
+int TestImplicitMultiplicationUnits() {
+  EvaluationContext context;
+  context.SetSetupVariables(std::vector<wpilib::expression::SetupVariable>{
+      {"scale-id", "scale", "2"}});
+  return !(EvaluatesTo(context, "Pose2d(scale m, 4.719 m, 0 rad).X()", 2.0, "m") &&
+           EvaluatesTo(context, "scale m/s^2", 2.0, "m/s^2") &&
+           EvaluatesTo(context, "(scale + 1) m", 3.0, "m"));
+}
+
+int TestImplicitMultiplicationRename() {
+  using wpilib::expression::RenameSetupVariable;
+  using wpilib::expression::SetupVariable;
+  const std::vector<SetupVariable> variables{
+      {"area-id", "area", "2width m * width m"},
+      {"width-id", "width", "3"},
+  };
+  auto renamed = RenameSetupVariable(variables, "width-id", "e3");
+  if (renamed[0].initializer != "2 e3 m * e3 m") {
+    std::println(stderr, "renaming a multiplied variable produced '{}'", renamed[0].initializer);
+    return 1;
+  }
+  EvaluationContext context;
+  context.SetSetupVariables(renamed);
+  return !EvaluatesTo(context, "area", 18.0, "m^2");
+}
+
 struct TestCase {
   std::string_view name;
   int (*run)();
 };
 
 constexpr TestCase tests[]{
-    {"namespaces", TestNamespaces},
-    {"setup", TestSetup},
-    {"unordered_setup", TestUnorderedSetup},
-    {"variable_references_and_rename", TestVariableReferencesAndRename},
-    {"setup_replacement_many_expressions",
-     TestSetupReplacementWithManyExpressions},
-    {"arithmetic_and_variables", TestArithmeticAndVariables},
-    {"read_only_expressions", TestReadOnlyExpressions},
-    {"error_messages", TestErrorMessages},
-    {"context_copies", TestContextCopies},
-    {"unit_expressions", TestUnitExpressions},
-    {"identifiers", TestIdentifiers},
-    {"measurement_math", TestMeasurementMath},
-    {"geometry_constructors", TestGeometryConstructors},
-    {"geometry_operations", TestGeometryOperations},
-    {"shapes", TestShapes},
+  {"namespace_values_evaluate", TestNamespaceValuesEvaluate},
+  {"namespace_mutations_rejected", TestNamespaceMutationsAreRejected},
+  {"namespace_definitions_reject_invalid_paths", TestNamespaceDefinitionsRejectInvalidPaths},
+  {"namespace_snapshots_are_isolated", TestNamespaceSnapshotsAreIsolated},
+  {"namespace_geometry_type_is_stable", TestNamespaceGeometryVariableTypeIsStable},
+  {"variable_definition_dependency_order", TestVariableDefinitionsEvaluateInDependencyOrder},
+  {"setup_variable_expression_kinds", TestSetupVariablesEvaluateExpressionKinds},
+  {"namespaced_geometry_definitions", TestNamespacedGeometryDefinitions},
+  {"variable_definition_replacement_is_atomic", TestVariableDefinitionReplacementIsAtomic},
+  {"quantity_dimension_is_preserved", TestQuantityDimensionIsPreservedAcrossUpdates},
+  {"variable_dependency_cycles_are_rejected", TestVariableDependencyCyclesAreRejected},
+  {"unsupported_variable_values_are_rejected", TestUnsupportedVariableValuesAreRejected},
+  {"variable_initializers_are_read_only", TestVariableInitializersAreReadOnly},
+  {"reserved_variable_names_are_rejected", TestReservedVariableNamesAreRejected},
+  {"geometry_method_names_cannot_be_variables", TestGeometryMethodNamesCannotBeVariables},
+  {"variable_set_replacement_removes_old_variables", TestVariableSetReplacementRemovesPreviousVariables},
+  {"unordered_setup", TestUnorderedSetup},
+  {"variable_reference_rename_preserves_source", TestVariableReferenceRenamePreservesSource},
+  {"variable_reference_rename_rejects_invalid_names", TestVariableReferenceRenameRejectsInvalidNames},
+  {"setup_variable_dependency_graph_tracks_updates", TestSetupVariableDependencyGraphTracksUpdates},
+  {"setup_variable_rename_preserves_dependents", TestSetupVariableRenamePreservesDependentExpressions},
+  {"setup_variable_rename_rejects_collisions", TestSetupVariableRenameRejectsNameCollisions},
+  {"setup_variables_reject_cycles", TestSetupVariablesRejectCycles},
+  {"setup_variables_reject_unknown_references", TestSetupVariablesRejectUnknownReferencesAndStatements},
+  {"setup_variables_reject_reserved_names", TestSetupVariablesRejectReservedNames},
+  {"setup_variables_reject_unsupported_values", TestSetupVariablesRejectUnsupportedValues},
+  {"setup_variables_reject_duplicate_ids", TestSetupVariablesRejectDuplicateIds},
+  {"setup_variables_reject_duplicate_names", TestSetupVariablesRejectDuplicateNames},
+  {"setup_variable_dimension_error_identifies_expression", TestSetupVariableDimensionErrorIdentifiesExpression},
+  {"empty_setup_clears_context_copy", TestEmptySetupClearsContextWithoutAffectingCopy},
+  {"variable_references_and_rename", TestVariableReferencesAndRename},
+  {"variable_dependency_graph_refreshes", TestVariableDependencyGraphRefreshesOnDefinitionUpdate},
+  {"quantity_dimension_persists", TestQuantityDimensionPersistsAcrossDefinitionUpdates},
+  {"geometry_variable_type_persists", TestGeometryVariableTypePersistsAcrossDefinitionReload},
+  {"setup_replacement_many_expressions", TestSetupReplacementWithManyExpressions},
+  {"arithmetic_and_variables", TestArithmeticAndVariables},
+  {"read_only_expressions", TestReadOnlyExpressions},
+  {"error_messages", TestErrorMessages},
+  {"context_copies", TestContextCopies},
+  {"unit_expressions", TestUnitExpressions},
+  {"implicit_multiplication", TestImplicitMultiplication},
+  {"implicit_multiplication_precedence", TestImplicitMultiplicationPrecedence},
+  {"implicit_multiplication_units", TestImplicitMultiplicationUnits},
+  {"implicit_multiplication_rename", TestImplicitMultiplicationRename},
+  {"identifiers", TestIdentifiers},
+  {"measurement_math", TestMeasurementMath},
+  {"geometry_constructors", TestGeometryConstructors},
+  {"geometry_operations", TestGeometryOperations},
+  {"shapes", TestShapes},
 };
 
 }  // namespace

@@ -135,6 +135,13 @@ export type ServerEvent =
   | { type: "document.changed"; projectId: string; revision: number }
   | { type: "session.closed"; projectId: string; revision: number }
   | {
+      type: "session.persistence";
+      projectId: string;
+      revision: number;
+      success: boolean;
+      error?: ApiErrorPayload;
+    }
+  | {
       type: "session.operation";
       operationId: string;
       operation: string;
@@ -361,6 +368,16 @@ export class ServerSessionStore {
       return;
     }
     this.update({ lastEvent: event });
+
+    if (event.type === "session.persistence") {
+      this.update({
+        error: event.success
+          ? null
+          : (event.error?.message ?? "Automatic save failed.")
+      });
+      void this.refreshStatus();
+      return;
+    }
 
     if (event.type === "session.operation" && event.status === "failed") {
       this.update({

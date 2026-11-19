@@ -216,15 +216,34 @@ bool DocumentStore::Redo() {
 }
 
 SerializedDocument DocumentStore::Serialize() const {
-  const auto snapshot = Snapshot();
-  SerializedDocument result{wpi::util::json{snapshot->project}.to_string(), {}};
-  for (const auto& [id, trajectory] : snapshot->trajectories) {
+  return SerializeDocument(*Snapshot());
+}
+
+SerializedDocument SerializeDocument(const Document& document) {
+  SerializedDocument result{wpi::util::json{document.project}.to_string(), {}};
+  for (const auto& [id, trajectory] : document.trajectories) {
     if (id != trajectory.uuid) {
       throw std::invalid_argument("trajectory key does not match UUID");
     }
     result.trajectories.emplace(id, wpi::util::json{trajectory}.to_string());
   }
   return result;
+}
+
+void DocumentStore::MarkSaved(SerializedDocument serialized,
+                              const SaveResult& result) {
+  if (result.projectError) {
+    savedProject_.reset();
+  } else {
+    savedProject_ = std::move(serialized.project);
+  }
+  for (auto& [id, content] : serialized.trajectories) {
+    if (result.trajectoryErrors.contains(id)) {
+      savedTrajectories_.erase(id);
+    } else {
+      savedTrajectories_[id] = std::move(content);
+    }
+  }
 }
 
 void DocumentStore::Reload(const SerializedDocument& serialized) {

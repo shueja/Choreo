@@ -37,6 +37,10 @@ class SaveResult {
   bool Success() const { return !projectError && trajectoryErrors.empty(); }
 };
 
+SerializedDocument SerializeDocument(const Document& document);
+SaveResult SaveSerializedFiles(const DocumentFiles& files,
+                               const SerializedDocument& serialized);
+
 class DocumentStore {
  public:
   using Listener =
@@ -65,6 +69,7 @@ class DocumentStore {
   bool Undo();
   bool Redo();
   SerializedDocument Serialize() const;
+  void MarkSaved(SerializedDocument serialized, const SaveResult& result);
   void Reload(const SerializedDocument& serialized);
   SaveResult SaveFiles(const DocumentFiles& files);
   void ReloadFiles(const DocumentFiles& files);
