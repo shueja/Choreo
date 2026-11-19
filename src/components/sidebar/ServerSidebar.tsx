@@ -9,18 +9,15 @@ import {
   CloudOff,
   ContentCopy,
   DeleteOutline,
-  DriveFileRenameOutline,
   Menu as MenuIcon,
   NearMe,
-  Polyline,
   Room,
   Redo,
-  ShapeLine,
   Speed,
   Sync,
   Undo
 } from "@mui/icons-material";
-import { IconButton, Menu, MenuItem, TextField, Tooltip } from "@mui/material";
+import { IconButton, Menu, MenuItem, Tooltip } from "@mui/material";
 import { useState } from "react";
 import WaypointIcon from "../../assets/Waypoint";
 import {
@@ -102,11 +99,6 @@ interface Props {
   selectedWaypointId: string;
   selectedConstraintId: string;
   selectedEventMarkerId: string;
-  onSelectTrajectory: (trajectoryId: string) => void;
-  onRenameTrajectory: (trajectory: TrajectoryDocument, name: string) => void;
-  onDeleteTrajectory: (trajectory: TrajectoryDocument) => void;
-  onGenerateAll: () => void;
-  onGenerateAllOutdated: () => void;
   onDuplicateTrajectory: (trajectory: TrajectoryDocument) => void;
   onSelectWaypoint: (waypointId: string) => void;
   onDeleteWaypoint: (waypointId: string) => void;
@@ -134,11 +126,6 @@ export default function ServerSidebar({
   selectedWaypointId,
   selectedConstraintId,
   selectedEventMarkerId,
-  onSelectTrajectory,
-  onRenameTrajectory,
-  onDeleteTrajectory,
-  onGenerateAll,
-  onGenerateAllOutdated,
   onDuplicateTrajectory,
   onSelectWaypoint,
   onDeleteWaypoint,
@@ -156,7 +143,6 @@ export default function ServerSidebar({
 }: Props) {
   const [constraintMenuAnchor, setConstraintMenuAnchor] =
     useState<HTMLElement | null>(null);
-  const [renamingTrajectoryId, setRenamingTrajectoryId] = useState("");
   const activeTrajectory = trajectories.find(
     (trajectory) => trajectory.uuid === selectedTrajectoryId
   );
@@ -220,30 +206,6 @@ export default function ServerSidebar({
 
       <div className={styles.sectionHeading}>
         <span>PATHS</span>
-        <Tooltip title="Generate all">
-          <span>
-            <IconButton
-              aria-label="Generate all"
-              size="small"
-              disabled={!connected || pending || trajectories.length === 0}
-              onClick={onGenerateAll}
-            >
-              <Polyline fontSize="small" />
-            </IconButton>
-          </span>
-        </Tooltip>
-        <Tooltip title="Generate all outdated">
-          <span>
-            <IconButton
-              aria-label="Generate all outdated"
-              size="small"
-              disabled={!connected || pending || trajectories.length === 0}
-              onClick={onGenerateAllOutdated}
-            >
-              <ShapeLine fontSize="small" />
-            </IconButton>
-          </span>
-        </Tooltip>
         <Tooltip title="Duplicate trajectory">
           <span>
             <IconButton
@@ -272,61 +234,6 @@ export default function ServerSidebar({
             </IconButton>
           </span>
         </Tooltip>
-      </div>
-      <div className={styles.trajectoryList}>
-        {trajectories.map((trajectory) => (
-          <div className={styles.trajectoryRow} key={trajectory.uuid}>
-            {renamingTrajectoryId === trajectory.uuid ? (
-              <TextField
-                autoFocus
-                size="small"
-                defaultValue={trajectory.name}
-                onBlur={(event) => {
-                  onRenameTrajectory(trajectory, event.target.value);
-                  setRenamingTrajectoryId("");
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.currentTarget.blur();
-                  }
-                }}
-              />
-            ) : (
-              <button
-                className={`${styles.trajectoryItem} ${trajectory.uuid === selectedTrajectoryId ? styles.selected : ""}`}
-                onClick={() => onSelectTrajectory(trajectory.uuid)}
-                onDoubleClick={() => setRenamingTrajectoryId(trajectory.uuid)}
-                type="button"
-              >
-                <span>{trajectory.name}</span>
-                <small>{trajectory.params.waypoints.length} waypoints</small>
-              </button>
-            )}
-            <Tooltip title="Rename trajectory">
-              <IconButton
-                aria-label={`Rename ${trajectory.name}`}
-                size="small"
-                disabled={!connected || pending}
-                onClick={() => setRenamingTrajectoryId(trajectory.uuid)}
-              >
-                <DriveFileRenameOutline fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete trajectory">
-              <IconButton
-                aria-label={`Delete ${trajectory.name}`}
-                size="small"
-                disabled={!connected || pending}
-                onClick={() => onDeleteTrajectory(trajectory)}
-              >
-                <DeleteOutline fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </div>
-        ))}
-        {trajectories.length === 0 && (
-          <p className={styles.emptyHint}>No paths</p>
-        )}
       </div>
       <div className={styles.featuresHeading}>FEATURES</div>
       <div className={styles.featureList}>

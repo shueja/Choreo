@@ -53,10 +53,130 @@
 }
 
 .editor {
+  --variables-panel-width: min(var(--variables-width), 45vw);
+  position: relative;
   display: grid;
   flex: 1;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  grid-template-columns: min(var(--sidebar-width), 40%) minmax(0, 1fr);
   min-height: 0;
+}
+
+.withVariables {
+  grid-template-columns: min(var(--sidebar-width), 40%) minmax(0, 1fr) var(
+      --variables-panel-width
+    );
+}
+
+.withVariables > .variablePanel {
+  grid-column: 3;
+}
+
+.sidebarPanel,
+.variablePanel {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.panelResizer {
+  position: absolute;
+  z-index: 8;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.variablePanel > .panelResizer {
+  right: auto;
+  left: -4px;
+}
+
+.variablePanel[hidden] {
+  display: none;
+}
+
+.variablePanel {
+  margin-top: var(--top-nav-height);
+}
+
+.rightRail {
+  position: absolute;
+  z-index: 11;
+  top: var(--top-nav-height);
+  right: 0;
+  bottom: 0;
+  display: flex;
+  width: 42px;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.rightRailTabs {
+  display: flex;
+  width: 42px;
+  flex-direction: column;
+  background: var(--background-dark-gray);
+  pointer-events: auto;
+}
+
+.rightRailTabs :global(.MuiIconButton-root) {
+  width: 42px;
+  height: 38px;
+  padding: 8px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: #c4c6c8;
+}
+
+.rightRailTabs :global(.MuiIconButton-root + .MuiIconButton-root) {
+  margin-top: -1px;
+  border-top: 1px solid var(--line);
+}
+
+.rightRailTabs :global(.MuiIconButton-root:hover),
+.rightRailTabs :global(.MuiIconButton-root[aria-selected="true"]) {
+  border-color: var(--select-yellow);
+  border-right-color: transparent;
+  background: var(--background-dark-gray);
+  color: #fff;
+}
+
+.navbarWithVariables {
+  width: calc(100% + var(--variables-panel-width));
+  box-sizing: border-box;
+}
+
+.withVariables .rightRail {
+  right: var(--variables-panel-width);
+}
+
+@media (max-width: 900px) {
+  .navbarWithVariables {
+    width: 100%;
+  }
+
+  .withVariables {
+    grid-template-columns: min(var(--sidebar-width), 40%) minmax(0, 1fr);
+  }
+
+  .withVariables > .variablePanel {
+    position: absolute;
+    z-index: 6;
+    top: 0;
+    right: 42px;
+    bottom: 0;
+    width: min(var(--variables-width), calc(100vw - 42px));
+    box-shadow: -3px 0 10px rgba(0, 0, 0, 0.3);
+  }
+
+  .withVariables .rightRail {
+    right: 0;
+  }
 }
 
 .waypointStripHeading h3,
@@ -98,33 +218,127 @@
   position: relative;
   display: flex;
   flex: 1;
+  box-sizing: border-box;
   min-width: 0;
   min-height: 0;
+  border: 1px solid var(--divider-gray);
+}
+
+.fieldViewportWithPanel {
+  border-right-color: var(--select-yellow);
+}
+
+.floatingArea {
+  position: absolute;
+  z-index: 10;
+  top: var(--top-nav-height);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
 }
 
 .featureEditorPanel {
   position: absolute;
-  z-index: 4;
-  top: 0;
-  left: 0;
   width: min(460px, calc(100% - 24px));
-  padding: 8px;
-  border-radius: 0 0 8px 0;
+  min-width: min(300px, calc(100% - 24px));
+  min-height: 100px;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  box-sizing: border-box;
+  overflow: auto;
+  resize: both;
+  border: 1px solid var(--divider-gray);
+  border-radius: 4px;
   background: var(--background-light-gray);
   color: #fff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
 }
 
 .constraintEditorPanel {
-  right: 0;
-  width: auto;
-  box-sizing: border-box;
-  border-radius: 0 0 8px 8px;
+  width: min(600px, calc(100% - 24px));
 }
 
-.featureEditorPanel h3 {
-  margin: 0 0 8px;
+.studioBar {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  background: var(--background-dark-gray);
+}
+
+.studioBar :global(.MuiIconButton-root) {
+  color: #c4c6c8;
+}
+
+.studioTabs {
+  display: flex;
+  min-width: 0;
+  align-self: stretch;
+  overflow-x: auto;
+}
+
+.studioTab {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  border-right: 1px solid var(--line);
+  border-bottom: 3px solid transparent;
+}
+
+.activeStudioTab {
+  border-bottom-color: var(--select-yellow);
+  background: var(--background-light-gray);
+}
+
+.studioTab > button {
+  display: flex;
+  max-width: 220px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 12px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.studioTab > button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.featureEditorHeader {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--divider-gray);
+  background: var(--background-dark-gray);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.featureEditorHeader:active {
+  cursor: grabbing;
+}
+
+.featureEditorHeader:focus-visible {
+  outline: 2px solid var(--select-yellow);
+  outline-offset: -2px;
+}
+
+.featureEditorHeader h3 {
+  margin: 0;
   font-size: 13px;
+}
+
+.featureEditorBody {
+  padding: 8px;
 }
 
 .waypointStrip {

@@ -7,5 +7,7 @@
         "*.traj": "json"
     },
     "java.configuration.updateBuildConfiguration": "interactive",
-    "cmake.sourceDirectory": "C:/Users/jashu/git/Choreo-2026/wpilib-expression"
+    "cmake.sourceDirectory": "${workspaceFolder}/cpp/choreo_app",
+    "cmake.buildDirectory": "${workspaceFolder}/cpp/choreo_app/build-clangcl",
+    "cmake.parallelJobs": 1
 }

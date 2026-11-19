@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import svgr from "vite-plugin-svgr";
 
 // https://vitejs.dev/config/
-export default defineConfig(async () => ({
+export default defineConfig(({ command, mode }) => ({
   plugins: [react(), svgr({ include: "**/*.svg" })],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
@@ -13,8 +13,15 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
+    origin:
+      command === "serve" && mode === "choreo-server"
+        ? "http://127.0.0.1:1420"
+        : undefined,
     watch: {
-      ignored: ["target/**"]
+      ignored:
+        mode === "choreo-server"
+          ? ["**/target/**", "**/build/**", "**/build-*/**"]
+          : ["target/**"]
     }
   },
   // to make use of `TAURI_DEBUG` and other env variables

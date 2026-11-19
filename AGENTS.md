@@ -11,3 +11,5 @@ Code formatting rules:
 * Use descriptive assertions and error messages in tests to make it clear what is being verified and why a test might fail. This aids in debugging and understanding test failures quickly.
 * When testing edge cases and error conditions, explicitly include tests for invalid inputs, boundary values, and exceptional scenarios. This ensures that the code handles unexpected situations gracefully and reduces the likelihood of hidden bugs.
 * Continuously update and expand the test suite as new features are added or existing functionality changes. This helps maintain high test coverage and ensures that the codebase remains robust against regressions.
+
+This app does not need to be tested for mobile platforms, as it is primarily designed for desktop environments and its functionality is not dependent on mobile-specific features or behaviors.

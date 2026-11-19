@@ -1521,10 +1521,7 @@ void TestProjectAndTrajectoryPatches(const std::filesystem::path& executable) {
   Require(orderedProjectStatus == kHttpOk &&
               Json::parse_or_throw(orderedProjectBody)
                       .at("variables")
-                      .at("order")
-                      .get<std::vector<std::string>>() ==
-                  std::vector<std::string>{kTestTwiceVariableUuid,
-                                           kTestLengthVariableUuid},
+              .at("order") == requestedOrder,
           "variable declaration order should persist in the project snapshot");
   WaitForDocumentChanged(events.Get(), orderingRevision,
                          kVariableOrderPatchIdempotencyKey);

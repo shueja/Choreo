@@ -1,6 +1,34 @@
-import { Add, CloudDone, CloudOff, FolderOpen } from "@mui/icons-material";
-import { Alert, Button, CircularProgress } from "@mui/material";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  Add,
+  CloudDone,
+  CloudOff,
+  DragIndicator,
+  FolderOpen,
+  MoreVert,
+  Polyline,
+  Route,
+  ShapeLine,
+  TableChart
+} from "@mui/icons-material";
+import {
+  Alert,
+  Button,
+  CircularProgress,
+  IconButton,
+  Menu,
+  MenuItem,
+  TextField,
+  Tooltip
+} from "@mui/material";
+import {
+  CSSProperties,
+  ReactNode,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore
+} from "react";
+import { createPortal } from "react-dom";
 import ServerFieldCanvas from "./components/field/ServerFieldCanvas";
 import ServerFieldControls from "./components/field/ServerFieldControls";
 import ServerPathAnimationPanel from "./components/field/ServerPathAnimationPanel";
@@ -32,6 +60,208 @@ import {
 import styles from "./ServerWorkspace.module.css";
 
 const TRAJECTORY_SCHEMA_VERSION = 4;
+const FEATURE_MIN_WIDTH = 260;
+const FEATURE_MAX_WIDTH = 560;
+const VARIABLES_MIN_WIDTH = 320;
+const VARIABLES_MAX_WIDTH = 800;
+
+interface FloatingFeaturePanelProps {
+  container: HTMLElement | null;
+  title: string;
+  initialX: number;
+  wide?: boolean;
+  children: ReactNode;
+}
+
+function FloatingFeaturePanel({
+  container,
+  title,
+  initialX,
+  wide = false,
+  children
+}: FloatingFeaturePanelProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{
+    x: number;
+    y: number;
+    left: number;
+    top: number;
+  } | null>(null);
+  const [position, setPosition] = useState({ x: initialX + 12, y: 12 });
+
+  function boundedPosition(x: number, y: number) {
+    const panel = panelRef.current;
+    if (!container || !panel) {
+      return { x, y };
+    }
+    return {
+      x: Math.max(0, Math.min(x, container.clientWidth - panel.offsetWidth)),
+      y: Math.max(0, Math.min(y, container.clientHeight - panel.offsetHeight))
+    };
+  }
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!container || !panel) {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      setPosition((current) => {
+        const next = boundedPosition(current.x, current.y);
+        return next.x === current.x && next.y === current.y ? current : next;
+      });
+    });
+    observer.observe(container);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [container]);
+
+  if (!container) {
+    return null;
+  }
+
+  return createPortal(
+    <div
+      ref={panelRef}
+      className={`${styles.featureEditorPanel} ${wide ? styles.constraintEditorPanel : ""}`}
+      style={{ left: position.x, top: position.y }}
+    >
+      <div
+        className={styles.featureEditorHeader}
+        role="button"
+        tabIndex={0}
+        aria-label={`Move ${title} panel`}
+        onPointerDown={(event) => {
+          if (event.button !== 0) {
+            return;
+          }
+          drag.current = {
+            x: event.clientX,
+            y: event.clientY,
+            left: position.x,
+            top: position.y
+          };
+          event.currentTarget.setPointerCapture(event.pointerId);
+          event.preventDefault();
+        }}
+        onPointerMove={(event) => {
+          if (drag.current) {
+            setPosition(
+              boundedPosition(
+                drag.current.left + event.clientX - drag.current.x,
+                drag.current.top + event.clientY - drag.current.y
+              )
+            );
+          }
+        }}
+        onPointerUp={() => {
+          drag.current = null;
+        }}
+        onPointerCancel={() => {
+          drag.current = null;
+        }}
+        onLostPointerCapture={() => {
+          drag.current = null;
+        }}
+        onKeyDown={(event) => {
+          const delta = event.shiftKey ? 40 : 10;
+          const offsets: Record<string, [number, number]> = {
+            ArrowLeft: [-delta, 0],
+            ArrowRight: [delta, 0],
+            ArrowUp: [0, -delta],
+            ArrowDown: [0, delta]
+          };
+          const offset = offsets[event.key];
+          if (offset) {
+            event.preventDefault();
+            setPosition((current) =>
+              boundedPosition(current.x + offset[0], current.y + offset[1])
+            );
+          }
+        }}
+      >
+        <DragIndicator fontSize="small" />
+        <h3>{title}</h3>
+      </div>
+      <div className={styles.featureEditorBody}>{children}</div>
+    </div>,
+    container
+  );
+}
+
+interface PanelResizerProps {
+  label: string;
+  width: number;
+  min: number;
+  max: number;
+  direction: 1 | -1;
+  onResize: (width: number) => void;
+}
+
+function PanelResizer({
+  label,
+  width,
+  min,
+  max,
+  direction,
+  onResize
+}: PanelResizerProps) {
+  const drag = useRef<{ startX: number; startWidth: number } | null>(null);
+  const clampWidth = (value: number) => Math.max(min, Math.min(max, value));
+
+  return (
+    <div
+      className={styles.panelResizer}
+      role="separator"
+      tabIndex={0}
+      aria-label={label}
+      aria-orientation="vertical"
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={width}
+      onPointerDown={(event) => {
+        if (event.button !== 0) {
+          return;
+        }
+        drag.current = {
+          startX: event.clientX,
+          startWidth:
+            event.currentTarget.parentElement!.getBoundingClientRect().width
+        };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      }}
+      onPointerMove={(event) => {
+        if (drag.current) {
+          onResize(
+            clampWidth(
+              drag.current.startWidth +
+                direction * (event.clientX - drag.current.startX)
+            )
+          );
+        }
+      }}
+      onPointerUp={() => {
+        drag.current = null;
+      }}
+      onPointerCancel={() => {
+        drag.current = null;
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          event.preventDefault();
+          const currentWidth =
+            event.currentTarget.parentElement!.getBoundingClientRect().width;
+          onResize(
+            clampWidth(
+              currentWidth + direction * (event.key === "ArrowRight" ? 10 : -10)
+            )
+          );
+        }
+      }}
+    />
+  );
+}
 
 function useServerSession() {
   const state = useSyncExternalStore(
@@ -127,6 +357,15 @@ function ServerWorkspace() {
   >("waypoint");
   const [pending, setPending] = useState(false);
   const [mainMenuOpen, setMainMenuOpen] = useState(false);
+  const [variablesOpen, setVariablesOpen] = useState(true);
+  const [featureWidth, setFeatureWidth] = useState(300);
+  const [variablesWidth, setVariablesWidth] = useState(460);
+  const [floatingArea, setFloatingArea] = useState<HTMLDivElement | null>(null);
+  const [renamingTrajectoryId, setRenamingTrajectoryId] = useState("");
+  const [tabMenu, setTabMenu] = useState<{
+    anchor: HTMLElement;
+    trajectory: TrajectoryDocument;
+  } | null>(null);
   const [animationTimestamp, setAnimationTimestamp] = useState(0);
   const [placementType, setPlacementType] = useState<ServerWaypointType>(
     SERVER_WAYPOINT_TYPE_DEFAULT
@@ -867,82 +1106,99 @@ function ServerWorkspace() {
         }
         onNewProject={() => void createProject()}
       />
-      <div className={styles.editor}>
-        <ServerSidebar
-          project={project}
-          trajectories={trajectories}
-          selectedTrajectoryId={selectedTrajectoryId}
-          connected={state.connected}
-          pending={pending}
-          dirty={Boolean(state.status?.dirty)}
-          persistenceBlocked={Boolean(state.status?.persistenceBlocked)}
-          selectedWaypointId={selectedWaypointId}
-          selectedConstraintId={selectedConstraintId}
-          selectedEventMarkerId={selectedEventMarkerId}
-          onToggleMainMenu={() => setMainMenuOpen(true)}
-          onSelectTrajectory={setSelectedTrajectoryId}
-          onRenameTrajectory={(trajectory, name) =>
-            void renameTrajectory(trajectory, name)
-          }
-          onDeleteTrajectory={(trajectory) => void deleteTrajectory(trajectory)}
-          onSelectWaypoint={(id) => {
-            setSelectedWaypointId(id);
-            setActiveEditor("waypoint");
-          }}
-          onDeleteWaypoint={(id) => {
-            const index = activeTrajectory?.params.waypoints.findIndex(
-              (waypoint) => waypoint.uuid === id
-            );
-            const waypoint = activeTrajectory?.params.waypoints.find(
-              (item) => item.uuid === id
-            );
-            if (waypoint && index !== undefined && index >= 0) {
-              void deleteWaypoint(waypoint, index);
+      <div
+        className={`${styles.editor} ${variablesOpen ? styles.withVariables : ""}`}
+        style={
+          {
+            "--sidebar-width": `${featureWidth}px`,
+            "--variables-width": `${variablesWidth}px`
+          } as CSSProperties
+        }
+      >
+        <div className={styles.sidebarPanel}>
+          <ServerSidebar
+            project={project}
+            trajectories={trajectories}
+            selectedTrajectoryId={selectedTrajectoryId}
+            connected={state.connected}
+            pending={pending}
+            dirty={Boolean(state.status?.dirty)}
+            persistenceBlocked={Boolean(state.status?.persistenceBlocked)}
+            selectedWaypointId={selectedWaypointId}
+            selectedConstraintId={selectedConstraintId}
+            selectedEventMarkerId={selectedEventMarkerId}
+            onToggleMainMenu={() => setMainMenuOpen(true)}
+            onSelectWaypoint={(id) => {
+              setSelectedWaypointId(id);
+              setActiveEditor("waypoint");
+            }}
+            onDeleteWaypoint={(id) => {
+              const index = activeTrajectory?.params.waypoints.findIndex(
+                (waypoint) => waypoint.uuid === id
+              );
+              const waypoint = activeTrajectory?.params.waypoints.find(
+                (item) => item.uuid === id
+              );
+              if (waypoint && index !== undefined && index >= 0) {
+                void deleteWaypoint(waypoint, index);
+              }
+            }}
+            onSelectConstraint={(id) => {
+              setSelectedConstraintId(id);
+              setActiveEditor("constraint");
+            }}
+            onSelectEventMarker={(id) => {
+              setSelectedEventMarkerId(id);
+              setActiveEditor("marker");
+            }}
+            onAddTrajectory={() => void addTrajectory()}
+            onAddConstraint={(type) => void addConstraint(type)}
+            onToggleConstraint={(id, enabled) =>
+              void toggleConstraint(id, enabled)
             }
-          }}
-          onSelectConstraint={(id) => {
-            setSelectedConstraintId(id);
-            setActiveEditor("constraint");
-          }}
-          onSelectEventMarker={(id) => {
-            setSelectedEventMarkerId(id);
-            setActiveEditor("marker");
-          }}
-          onAddTrajectory={() => void addTrajectory()}
-          onAddConstraint={(type) => void addConstraint(type)}
-          onToggleConstraint={(id, enabled) =>
-            void toggleConstraint(id, enabled)
-          }
-          onDeleteConstraint={(id) => void deleteConstraint(id)}
-          onAddEventMarker={() => void addEventMarker()}
-          onDeleteEventMarker={(id) => void deleteEventMarker(id)}
-          onUndo={() => void perform(() => serverSession.undo(), "Undoing")}
-          onRedo={() => void perform(() => serverSession.redo(), "Redoing")}
-          onGenerateAll={generateAll}
-          onGenerateAllOutdated={generateAllOutdated}
-          onDuplicateTrajectory={(trajectory) =>
-            void duplicateTrajectory(trajectory)
-          }
-        />
+            onDeleteConstraint={(id) => void deleteConstraint(id)}
+            onAddEventMarker={() => void addEventMarker()}
+            onDeleteEventMarker={(id) => void deleteEventMarker(id)}
+            onUndo={() => void perform(() => serverSession.undo(), "Undoing")}
+            onRedo={() => void perform(() => serverSession.redo(), "Redoing")}
+            onDuplicateTrajectory={(trajectory) =>
+              void duplicateTrajectory(trajectory)
+            }
+          />
+          <PanelResizer
+            label="Resize features panel"
+            width={featureWidth}
+            min={FEATURE_MIN_WIDTH}
+            max={FEATURE_MAX_WIDTH}
+            direction={1}
+            onResize={setFeatureWidth}
+          />
+        </div>
 
         <section className={styles.editorMain}>
           {activeTrajectory ? (
             <>
-              <ServerNavbar
-                waypointType={placementType}
-                constraintType={constraintTool}
-                pending={pending}
-                connected={state.connected}
-                onWaypointTypeChange={(type) => {
-                  setPlacementType(type);
-                  setConstraintTool(null);
-                  setActiveEditor("waypoint");
-                }}
-                onConstraintTypeChange={(type) => {
-                  setConstraintTool(type);
-                  setActiveEditor(type === null ? "waypoint" : "none");
-                }}
-              />
+              <div
+                className={
+                  variablesOpen ? styles.navbarWithVariables : undefined
+                }
+              >
+                <ServerNavbar
+                  waypointType={placementType}
+                  constraintType={constraintTool}
+                  pending={pending}
+                  connected={state.connected}
+                  onWaypointTypeChange={(type) => {
+                    setPlacementType(type);
+                    setConstraintTool(null);
+                    setActiveEditor("waypoint");
+                  }}
+                  onConstraintTypeChange={(type) => {
+                    setConstraintTool(type);
+                    setActiveEditor(type === null ? "waypoint" : "none");
+                  }}
+                />
+              </div>
               {(actionError || state.error) && (
                 <Alert severity="error" onClose={() => setActionError(null)}>
                   {actionError ?? state.error}
@@ -966,7 +1222,9 @@ function ServerWorkspace() {
                   </div>
                 )}
               <div className={styles.canvasArea}>
-                <div className={styles.fieldViewport}>
+                <div
+                  className={`${styles.fieldViewport} ${variablesOpen ? styles.fieldViewportWithPanel : ""}`}
+                >
                   <ServerFieldCanvas
                     waypoints={activeTrajectory.params.waypoints}
                     selectedWaypointId={selectedWaypointId}
@@ -997,47 +1255,53 @@ function ServerWorkspace() {
                   {constraintTool === null &&
                     activeEditor === "waypoint" &&
                     selectedWaypoint && (
-                      <ServerWaypointEditor
-                        key={selectedWaypoint.uuid}
-                        index={activeTrajectory.params.waypoints.indexOf(
-                          selectedWaypoint
-                        )}
-                        isLast={
-                          activeTrajectory.params.waypoints.indexOf(
+                      <FloatingFeaturePanel
+                        container={floatingArea}
+                        initialX={featureWidth}
+                        title={`Waypoint ${activeTrajectory.params.waypoints.indexOf(selectedWaypoint) + 1}`}
+                      >
+                        <ServerWaypointEditor
+                          key={selectedWaypoint.uuid}
+                          index={activeTrajectory.params.waypoints.indexOf(
                             selectedWaypoint
-                          ) ===
-                          activeTrajectory.params.waypoints.length - 1
-                        }
-                        waypoint={selectedWaypoint}
-                        disabled={pending || !state.connected}
-                        onOptionsChange={(options) =>
-                          void patchWaypointOptions(selectedWaypoint, options)
-                        }
-                        onDelete={() =>
-                          void deleteWaypoint(
-                            selectedWaypoint,
+                          )}
+                          isLast={
                             activeTrajectory.params.waypoints.indexOf(
                               selectedWaypoint
+                            ) ===
+                            activeTrajectory.params.waypoints.length - 1
+                          }
+                          waypoint={selectedWaypoint}
+                          disabled={pending || !state.connected}
+                          onOptionsChange={(options) =>
+                            void patchWaypointOptions(selectedWaypoint, options)
+                          }
+                          onDelete={() =>
+                            void deleteWaypoint(
+                              selectedWaypoint,
+                              activeTrajectory.params.waypoints.indexOf(
+                                selectedWaypoint
+                              )
                             )
-                          )
-                        }
-                        onSave={(pose) =>
-                          void patchWaypoint(selectedWaypoint, pose)
-                        }
-                      />
+                          }
+                          onSave={(pose) =>
+                            void patchWaypoint(selectedWaypoint, pose)
+                          }
+                        />
+                      </FloatingFeaturePanel>
                     )}
                   {constraintTool === null &&
                     activeEditor === "constraint" &&
                     selectedConstraint && (
-                      <div
-                        className={`${styles.featureEditorPanel} ${styles.constraintEditorPanel}`}
+                      <FloatingFeaturePanel
+                        container={floatingArea}
+                        initialX={featureWidth}
+                        wide
+                        title={selectedConstraint.data.type.replace(
+                          /([a-z])([A-Z])/g,
+                          "$1 $2"
+                        )}
                       >
-                        <h3>
-                          {selectedConstraint.data.type.replace(
-                            /([a-z])([A-Z])/g,
-                            "$1 $2"
-                          )}
-                        </h3>
                         <ServerConstraintEditor
                           constraint={selectedConstraint}
                           points={activeTrajectory.params.waypoints}
@@ -1053,13 +1317,16 @@ function ServerWorkspace() {
                             )
                           }
                         />
-                      </div>
+                      </FloatingFeaturePanel>
                     )}
                   {constraintTool === null &&
                     activeEditor === "marker" &&
                     selectedEventMarker && (
-                      <div className={styles.featureEditorPanel}>
-                        <h3>Event Marker</h3>
+                      <FloatingFeaturePanel
+                        container={floatingArea}
+                        initialX={featureWidth}
+                        title="Event Marker"
+                      >
                         <ServerEventMarkerEditor
                           marker={selectedEventMarker}
                           points={activeTrajectory.params.waypoints}
@@ -1068,13 +1335,8 @@ function ServerWorkspace() {
                             void patchEventMarker(selectedEventMarker, patch)
                           }
                         />
-                      </div>
+                      </FloatingFeaturePanel>
                     )}
-                  {activeTrajectory.params.waypoints.length === 0 && (
-                    <p className={styles.emptyHint}>
-                      Double-click the field to place the first waypoint.
-                    </p>
-                  )}
                 </div>
               </div>
             </>
@@ -1087,27 +1349,203 @@ function ServerWorkspace() {
             </div>
           )}
         </section>
+        <div className={styles.rightRail}>
+          <div
+            className={styles.rightRailTabs}
+            role="tablist"
+            aria-label="Right-side panels"
+          >
+            <Tooltip
+              title={variablesOpen ? "Close variables" : "Open variables"}
+            >
+              <IconButton
+                id="variables-tab"
+                role="tab"
+                aria-label="Variables"
+                aria-controls="variables-panel"
+                aria-selected={variablesOpen}
+                aria-expanded={variablesOpen}
+                onClick={() => setVariablesOpen(!variablesOpen)}
+              >
+                <TableChart />
+              </IconButton>
+            </Tooltip>
+          </div>
+        </div>
+        <div
+          id="variables-panel"
+          className={styles.variablePanel}
+          role="tabpanel"
+          aria-labelledby="variables-tab"
+          hidden={!variablesOpen}
+        >
+          <PanelResizer
+            label="Resize variables panel"
+            width={variablesWidth}
+            min={VARIABLES_MIN_WIDTH}
+            max={VARIABLES_MAX_WIDTH}
+            direction={-1}
+            onResize={setVariablesWidth}
+          />
+          <ServerVariablesPanel
+            variables={project.variables.variables}
+            order={
+              project.variables.order ??
+              Object.keys(project.variables.variables).sort()
+            }
+            disabled={pending || !state.connected}
+            onExpressionChange={(id, expression) =>
+              void patchVariable(id, { expression })
+            }
+            onNameChange={(id, name) => void patchVariable(id, { name })}
+            onAdd={(variable) => void addVariable(variable)}
+            onDelete={(id) => void deleteVariable(id)}
+            onReorder={(order) => void reorderVariables(order)}
+          />
+        </div>
+        <div ref={setFloatingArea} className={styles.floatingArea} />
       </div>
-      <ServerVariablesPanel
-        variables={project.variables.variables}
-        order={
-          project.variables.order ??
-          Object.keys(project.variables.variables).sort()
-        }
-        disabled={pending || !state.connected}
-        onExpressionChange={(id, expression) =>
-          void patchVariable(id, { expression })
-        }
-        onNameChange={(id, name) => void patchVariable(id, { name })}
-        onAdd={(variable) => void addVariable(variable)}
-        onDelete={(id) => void deleteVariable(id)}
-        onReorder={(order) => void reorderVariables(order)}
-      />
       <ServerPathAnimationPanel
         samples={outputSamples}
         timestamp={animationTimestamp}
         onChange={setAnimationTimestamp}
       />
+      <nav className={styles.studioBar} aria-label="Trajectory studios">
+        <Tooltip title="Generate all">
+          <span>
+            <IconButton
+              aria-label="Generate all"
+              disabled={
+                !state.connected || pending || trajectories.length === 0
+              }
+              onClick={generateAll}
+            >
+              <Polyline />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title="Generate all outdated">
+          <span>
+            <IconButton
+              aria-label="Generate all outdated"
+              disabled={
+                !state.connected || pending || trajectories.length === 0
+              }
+              onClick={generateAllOutdated}
+            >
+              <ShapeLine />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title="Add trajectory">
+          <span>
+            <IconButton
+              aria-label="Add trajectory"
+              disabled={!state.connected || pending}
+              onClick={() => void addTrajectory()}
+            >
+              <Add />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <div
+          className={styles.studioTabs}
+          role="tablist"
+          aria-label="Trajectories"
+        >
+          {trajectories.map((trajectory) => (
+            <div
+              className={`${styles.studioTab} ${trajectory.uuid === selectedTrajectoryId ? styles.activeStudioTab : ""}`}
+              key={trajectory.uuid}
+            >
+              {renamingTrajectoryId === trajectory.uuid ? (
+                <TextField
+                  autoFocus
+                  size="small"
+                  defaultValue={trajectory.name}
+                  aria-label={`Rename ${trajectory.name}`}
+                  onBlur={(event) => {
+                    void renameTrajectory(trajectory, event.target.value);
+                    setRenamingTrajectoryId("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.currentTarget.blur();
+                    } else if (event.key === "Escape") {
+                      setRenamingTrajectoryId("");
+                    }
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={trajectory.uuid === selectedTrajectoryId}
+                  onClick={() => setSelectedTrajectoryId(trajectory.uuid)}
+                  onDoubleClick={() => {
+                    if (state.connected && !pending) {
+                      setRenamingTrajectoryId(trajectory.uuid);
+                    }
+                  }}
+                >
+                  <Route fontSize="small" />
+                  <span>{trajectory.name}</span>
+                </button>
+              )}
+              <Tooltip title="Trajectory options">
+                <span>
+                  <IconButton
+                    size="small"
+                    aria-label={`Options for ${trajectory.name}`}
+                    disabled={!state.connected || pending}
+                    onClick={(event) =>
+                      setTabMenu({ anchor: event.currentTarget, trajectory })
+                    }
+                  >
+                    <MoreVert fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </div>
+          ))}
+        </div>
+        <Menu
+          anchorEl={tabMenu?.anchor}
+          open={Boolean(tabMenu)}
+          onClose={() => setTabMenu(null)}
+        >
+          <MenuItem
+            onClick={() => {
+              if (tabMenu) {
+                setRenamingTrajectoryId(tabMenu.trajectory.uuid);
+              }
+              setTabMenu(null);
+            }}
+          >
+            Rename
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              if (tabMenu) {
+                void duplicateTrajectory(tabMenu.trajectory);
+              }
+              setTabMenu(null);
+            }}
+          >
+            Duplicate
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              if (tabMenu) {
+                void deleteTrajectory(tabMenu.trajectory);
+              }
+              setTabMenu(null);
+            }}
+          >
+            Delete
+          </MenuItem>
+        </Menu>
+      </nav>
     </main>
   );
 }

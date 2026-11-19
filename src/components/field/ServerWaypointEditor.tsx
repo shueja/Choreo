@@ -66,12 +66,12 @@ export default function ServerWaypointEditor({
     <div
       className={PanelStyles.WaypointPanel}
       style={{
-        left: 0,
-        right: 0,
+        position: "static",
         width: "100%",
         minWidth: 0,
         boxSizing: "border-box",
-        borderRadius: "0 0 8px 8px"
+        padding: 0,
+        borderRadius: 0
       }}
       aria-label={`Waypoint ${index + 1} settings`}
     >

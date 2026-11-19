@@ -73,8 +73,9 @@ void from_json(const json& serialized, Project& project) {
     result.variables.emplace(id, variable.get<Variable>());
   }
   if (serialized.at("variables").contains("order")) {
-    result.variableOrder =
-        serialized.at("variables").at("order").get<std::vector<std::string>>();
+    for (const auto& id : serialized.at("variables").at("order").get_array()) {
+      result.variableOrder.push_back(id.get_string());
+    }
     std::set<std::string> orderedIds;
     if (result.variableOrder.size() != result.variables.size()) {
       throw std::invalid_argument("variable order does not match variables");

@@ -64,6 +64,27 @@ written until a save location is selected. Other hosts must provide
 to open an existing project at startup. Stop the process with Ctrl+C or
 SIGTERM.
 
+### UI Development With Hot Reload
+
+From the repository root, start Vite and the built Choreo server with one command:
+
+```text
+pnpm dev:server
+```
+
+The task uses the executable in `cpp/choreo_app/build-clangcl` or on `PATH`.
+Set `CHOREO_SERVER_BIN` to the executable path for another build. Additional
+arguments go to Choreo, for example `pnpm dev:server --project PATH`.
+Choreo opens its URL in the browser; pass `--no-browser` to open it yourself.
+Stop both processes with Ctrl+C. Choreo serves the page, API, and events, while
+Vite applies edits live from `127.0.0.1:1420`. Stop any standalone Vite task
+using that port before starting this task. No frontend rebuild,
+server restart, or `--allowed-origin` flag is needed for frontend source edits.
+Reload the page manually after editing the development HTML shell itself.
+For a normal build, use `pnpm build:web` and launch with `--web-root dist`.
+
+### API Events
+
 The `/api/v1/events` WebSocket publishes transient `document.changed` events
 with the active `projectId` and committed `revision`, and a `session.closed`
 event when the active document closes. Events are not replayed after a
