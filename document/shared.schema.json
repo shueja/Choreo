@@ -20,16 +20,6 @@
       "required": ["exp", "val"],
       "additionalProperties": false
     },
-    "AxisDrag": {
-      "type": "object",
-      "description": "Per-axis permission for field handles to edit a geometry expression.",
-      "properties": {
-        "x": { "type": "boolean", "default": true },
-        "y": { "type": "boolean", "default": true },
-        "heading": { "type": "boolean", "default": true }
-      },
-      "additionalProperties": false
-    },
     "Translation2d": {
       "$ref": "./wpi.schema.json#/$defs/WpiTranslation2d"
     },

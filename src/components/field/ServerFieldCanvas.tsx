@@ -9,11 +9,21 @@ import FieldGridLayer from "./svg/FieldGridLayer";
 import FieldPathLine from "./svg/FieldPathLine";
 import FieldSampleLayer from "./svg/FieldSampleLayer";
 import { ServerConstraintType, ServerViewLayers } from "./ServerViewLayers";
-import { Waypoint } from "../../document/ServerSessionStore";
+import {
+  ServerVariable,
+  Waypoint
+} from "../../document/ServerSessionStore";
+import {
+  EditableGeometryAxes,
+  GeometryDragValues,
+  getEditableGeometryAxes,
+  updateGeometryExpressionForDrag
+} from "../../util/GeometryExpressionDrag";
 import styles from "./ServerFieldCanvas.module.css";
 
 interface Props {
   waypoints: Waypoint[];
+  variables: Record<string, ServerVariable>;
   selectedWaypointId: string;
   bumperVertices: { x: number; y: number }[];
   robotPose?: { x: number; y: number; heading: number };
@@ -21,6 +31,8 @@ interface Props {
   visibleLayers: ServerViewLayers;
   constraintType: ServerConstraintType | null;
   onAddWaypoint: (x: number, y: number) => void;
+  onDragWaypoint: (waypointId: string, expression: string) => Promise<void>;
+  onDragVariable: (variableId: string, expression: string) => Promise<void>;
   onAddConstraint: (
     type: ServerConstraintType,
     fromIndex: number,
@@ -28,8 +40,51 @@ interface Props {
   ) => void;
 }
 
+interface FieldPose extends GeometryDragValues {
+  heading: number;
+}
+
+interface ActiveDrag {
+  id: string;
+  kind: "waypoint" | "variable";
+  type: "Pose2d" | "Translation2d";
+  expression: string;
+  axes: EditableGeometryAxes;
+  mode: "position" | "heading";
+  pointerId: number;
+  pose: FieldPose;
+  candidate: FieldPose;
+}
+
+function variablePose(variable: ServerVariable): FieldPose | null {
+  if (variable.type === "Pose2d") {
+    const pose = variable.value as {
+      translation?: { x?: number; y?: number };
+      rotation?: { radians?: number };
+    };
+    const { x, y } = pose.translation ?? {};
+    const heading = pose.rotation?.radians;
+    if (
+      Number.isFinite(x) &&
+      Number.isFinite(y) &&
+      Number.isFinite(heading)
+    ) {
+      return { x: x!, y: y!, heading: heading! };
+    }
+  }
+  if (variable.type === "Translation2d") {
+    const translation = variable.value as { x?: number; y?: number };
+    const { x, y } = translation;
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      return { x: x!, y: y!, heading: 0 };
+    }
+  }
+  return null;
+}
+
 export default function ServerFieldCanvas({
   waypoints,
+  variables,
   selectedWaypointId,
   bumperVertices,
   robotPose,
@@ -37,15 +92,117 @@ export default function ServerFieldCanvas({
   visibleLayers,
   constraintType,
   onAddWaypoint,
+  onDragWaypoint,
+  onDragVariable,
   onAddConstraint
 }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const frameRef = useRef<SVGGElement | null>(null);
+  const activeDrag = useRef<ActiveDrag | null>(null);
+  const [dragPreview, setDragPreview] = useState<{
+    id: string;
+    kind: ActiveDrag["kind"];
+    pose: FieldPose;
+  } | null>(null);
   const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [constraintStartIndex, setConstraintStartIndex] = useState<
     number | null
   >(null);
   const points = waypoints.map((waypoint) => waypoint.pose.val.translation);
+
+  function pointerCoordinates(
+    event: React.PointerEvent<SVGElement>
+  ): { x: number; y: number } | null {
+    const svg = svgRef.current;
+    const matrix = frameRef.current?.getScreenCTM();
+    if (!svg || !matrix) {
+      return null;
+    }
+    const point = svg.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    return point.matrixTransform(matrix.inverse());
+  }
+
+  function beginDrag(
+    event: React.PointerEvent<SVGCircleElement>,
+    drag: Omit<ActiveDrag, "pointerId" | "candidate">
+  ) {
+    if (
+      constraintType !== null ||
+      (drag.mode === "position"
+        ? !drag.axes.x && !drag.axes.y
+        : !drag.axes.heading)
+    ) {
+      return;
+    }
+    event.stopPropagation();
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    activeDrag.current = {
+      ...drag,
+      pointerId: event.pointerId,
+      candidate: drag.pose
+    };
+    setDragPreview({ id: drag.id, kind: drag.kind, pose: drag.pose });
+  }
+
+  function moveDrag(event: React.PointerEvent<SVGGElement>) {
+    const drag = activeDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+    const pointer = pointerCoordinates(event);
+    if (!pointer) {
+      return;
+    }
+    const candidate =
+      drag.mode === "position"
+        ? {
+            ...drag.pose,
+            x: Math.max(0, Math.min(FIELD_LENGTH, pointer.x)),
+            y: Math.max(0, Math.min(FIELD_WIDTH, pointer.y))
+          }
+        : {
+            ...drag.pose,
+            heading: Math.atan2(
+              pointer.y - drag.pose.y,
+              pointer.x - drag.pose.x
+            )
+          };
+    drag.candidate = candidate;
+    setDragPreview({ id: drag.id, kind: drag.kind, pose: candidate });
+  }
+
+  function endDrag(event: React.PointerEvent<SVGGElement>) {
+    const drag = activeDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+    activeDrag.current = null;
+    const expression = updateGeometryExpressionForDrag(
+      drag.expression,
+      drag.type,
+      drag.candidate,
+      drag.axes
+    );
+    if (expression === null) {
+      setDragPreview(null);
+      return;
+    }
+    const update =
+      drag.kind === "waypoint"
+        ? onDragWaypoint(drag.id, expression)
+        : onDragVariable(drag.id, expression);
+    void update.finally(() => setDragPreview(null));
+  }
+
+  function cancelDrag(event: React.PointerEvent<SVGGElement>) {
+    if (activeDrag.current?.pointerId === event.pointerId) {
+      activeDrag.current = null;
+      setDragPreview(null);
+    }
+  }
 
   useEffect(() => {
     setConstraintStartIndex(null);
@@ -91,6 +248,9 @@ export default function ServerFieldCanvas({
         <g
           ref={frameRef}
           transform={`matrix(${transform.k} 0 0 ${-transform.k} ${transform.x} ${transform.y})`}
+          onPointerMove={moveDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={cancelDrag}
         >
           <FieldAxisLayer />
           {visibleLayers.field && (
@@ -112,8 +272,20 @@ export default function ServerFieldCanvas({
             <>
               <FieldPathLine points={points} />
               {waypoints.map((waypoint, index) => {
-                const { x, y } = waypoint.pose.val.translation;
-                const heading = waypoint.pose.val.rotation.radians;
+                const waypointPose: FieldPose = {
+                  ...waypoint.pose.val.translation,
+                  heading: waypoint.pose.val.rotation.radians
+                };
+                const pose =
+                  dragPreview?.id === waypoint.uuid &&
+                  dragPreview.kind === "waypoint"
+                    ? dragPreview.pose
+                    : waypointPose;
+                const { x, y, heading } = pose;
+                const axes = getEditableGeometryAxes(
+                  waypoint.pose.exp,
+                  "Pose2d"
+                );
                 const xCoordinates = bumperVertices.map((point) => point.x);
                 const yCoordinates = bumperVertices.map((point) => point.y);
                 const bumperLength =
@@ -151,6 +323,7 @@ export default function ServerFieldCanvas({
                   <g
                     key={waypoint.uuid}
                     transform={`translate(${x} ${y}) rotate(${(heading * 180) / Math.PI})`}
+                    onDoubleClick={(event) => event.stopPropagation()}
                   >
                     {bumperVertices.length > 2 && (
                       <FieldBumperOutline
@@ -177,7 +350,162 @@ export default function ServerFieldCanvas({
                       fill={markerColor}
                       stroke="black"
                       strokeWidth={0.03}
+                      style={{
+                        cursor:
+                          constraintType === null && (axes.x || axes.y)
+                            ? "move"
+                            : "default",
+                        pointerEvents:
+                          constraintType === null && (axes.x || axes.y)
+                            ? "auto"
+                            : "none"
+                      }}
+                      onPointerDown={(event) =>
+                        beginDrag(event, {
+                          id: waypoint.uuid,
+                          kind: "waypoint",
+                          type: "Pose2d",
+                          expression: waypoint.pose.exp,
+                          axes,
+                          mode: "position",
+                          pose: waypointPose
+                        })
+                      }
                     />
+                    {axes.heading && (
+                      <>
+                        <line
+                          x1={0}
+                          y1={0}
+                          x2={markerSize * 1.15}
+                          y2={0}
+                          stroke={outlineColor}
+                          strokeWidth={0.035}
+                        />
+                        <circle
+                          cx={markerSize * 1.15}
+                          cy={0}
+                          r={markerSize * 0.1 || 0.09}
+                          fill={outlineColor}
+                          stroke="black"
+                          strokeWidth={0.025}
+                          style={{
+                            cursor:
+                              constraintType === null ? "crosshair" : "default",
+                            pointerEvents:
+                              constraintType === null ? "auto" : "none"
+                          }}
+                          onPointerDown={(event) =>
+                            beginDrag(event, {
+                              id: waypoint.uuid,
+                              kind: "waypoint",
+                              type: "Pose2d",
+                              expression: waypoint.pose.exp,
+                              axes,
+                              mode: "heading",
+                              pose: waypointPose
+                            })
+                          }
+                        />
+                      </>
+                    )}
+                  </g>
+                );
+              })}
+              {Object.entries(variables).map(([id, variable]) => {
+                if (
+                  variable.type !== "Pose2d" &&
+                  variable.type !== "Translation2d"
+                ) {
+                  return null;
+                }
+                const pose = variablePose(variable);
+                if (!pose) {
+                  return null;
+                }
+                const geometryType = variable.type;
+                const axes = getEditableGeometryAxes(
+                  variable.expression,
+                  geometryType
+                );
+                if (!axes.x && !axes.y && !axes.heading) {
+                  return null;
+                }
+                const displayedPose =
+                  dragPreview?.id === id && dragPreview.kind === "variable"
+                    ? dragPreview.pose
+                    : pose;
+                const color = "var(--select-yellow)";
+                return (
+                  <g
+                    key={`variable-${id}`}
+                    transform={`translate(${displayedPose.x} ${displayedPose.y}) rotate(${(displayedPose.heading * 180) / Math.PI})`}
+                    onDoubleClick={(event) => event.stopPropagation()}
+                  >
+                    <circle
+                      r={markerSize * 0.12 || 0.11}
+                      fill="transparent"
+                      stroke={color}
+                      strokeWidth={0.045}
+                      style={{
+                        cursor:
+                          constraintType === null && (axes.x || axes.y)
+                            ? "move"
+                            : "default",
+                        pointerEvents:
+                          constraintType === null && (axes.x || axes.y)
+                            ? "auto"
+                            : "none"
+                      }}
+                      onPointerDown={(event) =>
+                        beginDrag(event, {
+                          id,
+                          kind: "variable",
+                          type: geometryType,
+                          expression: variable.expression,
+                          axes,
+                          mode: "position",
+                          pose
+                        })
+                      }
+                    />
+                    <text
+                      x={markerSize * 0.15}
+                      y={-markerSize * 0.2}
+                      transform="scale(1, -1)"
+                      fill={color}
+                      fontSize={markerSize * 0.2 || 0.18}
+                      pointerEvents="none"
+                    >
+                      {variable.name}
+                    </text>
+                    {geometryType === "Pose2d" && axes.heading && (
+                      <circle
+                        cx={markerSize * 1.1}
+                        cy={0}
+                        r={markerSize * 0.09 || 0.08}
+                        fill={color}
+                        stroke="black"
+                        strokeWidth={0.025}
+                        style={{
+                          cursor:
+                            constraintType === null ? "crosshair" : "default",
+                          pointerEvents:
+                            constraintType === null ? "auto" : "none"
+                        }}
+                        onPointerDown={(event) =>
+                          beginDrag(event, {
+                            id,
+                            kind: "variable",
+                            type: "Pose2d",
+                            expression: variable.expression,
+                            axes,
+                            mode: "heading",
+                            pose
+                          })
+                        }
+                      />
+                    )}
                   </g>
                 );
               })}

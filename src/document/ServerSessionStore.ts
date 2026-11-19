@@ -43,13 +43,6 @@ export interface ServerVariable {
   type: ServerVariableType;
   dimension?: Record<string, number>;
   value: unknown;
-  allowDrag?: AxisDrag;
-}
-
-export interface AxisDrag {
-  x?: boolean;
-  y?: boolean;
-  heading?: boolean;
 }
 
 export type ServerVariableType =
@@ -130,7 +123,6 @@ export interface Waypoint {
   fixTranslation: boolean;
   fixHeading: boolean;
   overrideIntervals: boolean;
-  allowDrag?: AxisDrag;
 }
 
 export interface SessionSnapshot {

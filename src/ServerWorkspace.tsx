@@ -658,6 +658,16 @@ function ServerWorkspace() {
     );
   }
 
+  async function dragWaypoint(waypointId: string, expression: string) {
+    const waypoint = activeTrajectory?.params.waypoints.find(
+      (entry) => entry.uuid === waypointId
+    );
+    if (!waypoint) {
+      return;
+    }
+    await patchWaypoint(waypoint, { ...waypoint.pose, exp: expression });
+  }
+
   async function patchWaypointOptions(
     waypoint: Waypoint,
     options: Partial<
@@ -1227,6 +1237,7 @@ function ServerWorkspace() {
                 >
                   <ServerFieldCanvas
                     waypoints={activeTrajectory.params.waypoints}
+                    variables={project?.variables.variables ?? {}}
                     selectedWaypointId={selectedWaypointId}
                     constraintType={constraintTool}
                     bumperVertices={bumperVertices}
@@ -1241,6 +1252,10 @@ function ServerWorkspace() {
                     }
                     visibleLayers={visibleLayers}
                     onAddWaypoint={(x, y) => void addWaypoint(x, y)}
+                    onDragWaypoint={dragWaypoint}
+                    onDragVariable={(id, expression) =>
+                      patchVariable(id, { expression })
+                    }
                     onAddConstraint={(type, startIndex, endIndex) =>
                       void addConstraint(type, startIndex, endIndex)
                     }

@@ -12,6 +12,12 @@ export interface GeometryDragValues {
   heading?: number;
 }
 
+export interface EditableGeometryAxes extends AxisDragPermissions {
+  x: boolean;
+  y: boolean;
+  heading: boolean;
+}
+
 const constantUnits = new Set([
   "m",
   "meter",
@@ -56,6 +62,35 @@ function isConstantArgument(node: MathNode): boolean {
   return false;
 }
 
+export function getEditableGeometryAxes(
+  expression: string,
+  type: "Pose2d" | "Translation2d"
+): EditableGeometryAxes {
+  const axes: EditableGeometryAxes = {
+    x: false,
+    y: false,
+    heading: false
+  };
+  try {
+    const node = parse(expression);
+    if (node.type !== "FunctionNode") {
+      return axes;
+    }
+    const call = node as FunctionNode;
+    if (call.name !== type) {
+      return axes;
+    }
+    axes.x = isConstantArgument(call.args[0]);
+    axes.y = isConstantArgument(call.args[1]);
+    if (type === "Pose2d") {
+      axes.heading = isConstantArgument(call.args[2]);
+    }
+  } catch {
+    return axes;
+  }
+  return axes;
+}
+
 export function updateGeometryExpressionForDrag(
   expression: string,
   type: "Pose2d" | "Translation2d",
@@ -71,11 +106,11 @@ export function updateGeometryExpressionForDrag(
   if (node.type !== "FunctionNode") {
     return null;
   }
-
   const call = node as FunctionNode;
   if (call.name !== type) {
     return null;
   }
+  const editableAxes = getEditableGeometryAxes(expression, type);
 
   const axes: Array<{
     name: keyof AxisDragPermissions;
@@ -99,7 +134,7 @@ export function updateGeometryExpressionForDrag(
     if (
       !argument ||
       !range ||
-      !isConstantArgument(argument) ||
+      !editableAxes[axis.name] ||
       !Number.isFinite(axis.value)
     ) {
       return;

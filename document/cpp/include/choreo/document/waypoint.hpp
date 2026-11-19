@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <map>
 #include <string>
 
 #include "choreo/document/expression.hpp"
@@ -17,8 +16,6 @@ class Waypoint {
   bool fixTranslation = false;
   bool fixHeading = false;
   bool overrideIntervals = false;
-  std::map<std::string, bool> allowDrag{
-      {"x", true}, {"y", true}, {"heading", true}};
 
   wpi::util::json ToJson() const;
   static Waypoint FromJson(const wpi::util::json& json);

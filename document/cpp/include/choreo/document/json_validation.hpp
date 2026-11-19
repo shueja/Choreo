@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <initializer_list>
-#include <map>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -29,31 +28,6 @@ inline void CheckNumber(const wpi::util::json& json) {
   if (!std::isfinite(json.get_number())) {
     throw std::invalid_argument("geometry value must be finite");
   }
-}
-
-inline std::map<std::string, bool> ReadAllowDrag(
-    const wpi::util::json& json) {
-  CheckProperties(json, {"x", "y", "heading"});
-  std::map<std::string, bool> allowDrag;
-  for (const auto& [axis, allowed] : json.get_object()) {
-    if (!allowed.is_bool()) {
-      throw std::invalid_argument("allowDrag values must be booleans");
-    }
-    allowDrag.emplace(axis, allowed.get_bool());
-  }
-  return allowDrag;
-}
-
-inline wpi::util::json WriteAllowDrag(
-    const std::map<std::string, bool>& allowDrag) {
-  wpi::util::json json = wpi::util::json::object();
-  for (const auto& [axis, allowed] : allowDrag) {
-    if (axis != "x" && axis != "y" && axis != "heading") {
-      throw std::invalid_argument("unknown allowDrag axis: " + axis);
-    }
-    json[axis] = allowed;
-  }
-  return json;
 }
 
 inline void CheckUuid(std::string_view uuid) {

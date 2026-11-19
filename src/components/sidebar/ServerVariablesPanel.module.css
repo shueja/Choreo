@@ -93,26 +93,6 @@
   min-width: 0;
 }
 
-.dragControls {
-  grid-column: 1 / 5;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: #c4c6c8;
-  font-size: 11px;
-}
-
-.dragControls label {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.dragControls input {
-  margin: 0;
-  accent-color: var(--accent-purple);
-}
-
 .initializer :global(input) {
   flex: 1;
   min-width: 0;

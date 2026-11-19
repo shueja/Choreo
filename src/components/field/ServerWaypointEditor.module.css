@@ -6,24 +6,6 @@
   padding-top: 8px;
 }
 
-.dragControls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #c4c6c8;
-  font-size: 11px;
-}
-
-.dragControls label {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.dragControls input {
-  margin: 0;
-  accent-color: var(--accent-purple);
-}
 
 .indexBadge {
   display: flex;
