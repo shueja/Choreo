@@ -21,10 +21,9 @@ or `wpilib::expression` target is reused when composing a parent build.
 `DocumentStore` evaluates editable expressions before publishing a snapshot,
 supports undo and redo, and persists or reloads project and trajectory files.
 Use the store from one writer thread; it does not provide synchronization.
-Variable renames update editable expressions atomically; application
-integration is not implemented yet. Subscribers receive ordered snapshots
-after successful changes. Exceptions from subscribers are collected by
-`TakeNotificationErrors` and do not roll back a committed change.
+Variable renames update editable expressions atomically. Subscribers receive
+ordered snapshots after successful changes. Exceptions from subscribers are
+collected by `TakeNotificationErrors` and do not roll back a committed change.
 
 `SaveFiles` writes each file atomically and reports failures per file; saving
 multiple files is not an atomic transaction. `ReloadFiles` reads and validates
@@ -42,6 +41,38 @@ child; an optional progress URL is passed through but progress forwarding is not
 implemented. This target is not yet installed, and the store does not provide
 the server's durable multi-file commit contract. See `../../generator/README.md`
 for the process boundary.
+
+When `wpinet` is available, the `choreo_server` executable composes
+`ApiServer` and `ApplicationApi`. It binds to `127.0.0.1`, defaults to an
+ephemeral port, and prints one JSON readiness record to stdout:
+
+```text
+{"type":"ready","url":"http://127.0.0.1:PORT"}
+```
+
+Pass the Vite output directory with `--web-root PATH` to serve its static
+assets, load a project before the server reports readiness with
+`--project PATH`, and configure an optional generator path with
+`--generator PATH`. The server opens its localhost URL in the default browser
+after printing the readiness record; pass `--no-browser` for headless use.
+Repeat `--allowed-origin ORIGIN` to permit cross-origin UI clients. The default
+Vite output directory is `dist`. The current host does not provide a native
+project picker. Open projects using `--project PATH` or the API's path-based
+session operation. Closing or replacing a session first saves any modified
+project and trajectory files; if saving fails, the current session remains
+open. Stop the process with Ctrl+C or SIGTERM. The existing UI still uses
+Tauri commands, so static hosting is not yet a usable browser app.
+
+The `/api/v1/events` WebSocket publishes transient `document.changed` events
+with the active `projectId` and committed `revision`, and a `session.closed`
+event when the active document closes. Events are not replayed after a
+disconnect. A client should connect to the WebSocket before fetching
+`/api/v1/snapshot`, apply that snapshot, then refresh it when it receives a
+newer revision or a session event; after reconnecting, fetch a fresh snapshot
+because revisions and missed events are not retained as a transport log.
+`GET /api/v1/session/status` reports whether a session is open, its published
+revision, whether its document differs from persisted files, and whether a
+failed write is blocking further mutations.
 
 When `wpinet` is available, separate CTest cases cover the test-child handoff
 and real-generator differential, swerve, and split scenarios. Set

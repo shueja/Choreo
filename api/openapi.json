@@ -3,7 +3,7 @@
   "info": {
     "title": "Choreo Local API",
     "version": "1.0.0",
-    "description": "Resource-oriented API for the locally running Choreo server. The server owns one active project. Session open/new/save and generation-start requests return 202 after enqueueing work; operation outcomes and generator progress arrive over the WebSocket event channel. Subscribe before issuing long-running requests. Events are not replayed, so clients must refetch the snapshot after a revision gap."
+    "description": "Resource-oriented API for the locally running Choreo server. The server owns one active project. Session open/new/close/save and generation-start requests return 202 after enqueueing work; operation outcomes, committed document revisions, and generator progress arrive over the WebSocket event channel. Connect before fetching the snapshot, buffer events during the fetch, and apply events newer than the snapshot revision. Events are not replayed, so clients must refetch the snapshot after reconnecting or detecting a revision gap."
   },
   "servers": [
     {
@@ -21,7 +21,7 @@
     "/api/v1/session/open": {
       "post": {
         "operationId": "openSession",
-        "summary": "Open a project or show the server's file picker",
+        "summary": "Save modified active files, then open a project or show the file picker",
         "requestBody": {
           "required": true,
           "content": {
@@ -34,7 +34,7 @@
         },
         "responses": {
           "202": {
-            "description": "Session open was accepted; completion is reported over the events WebSocket",
+            "description": "Session open was accepted; completion is reported over the events WebSocket. If saving modified current files fails, the current session remains active.",
             "content": {
               "application/json": {
                 "schema": {
@@ -55,7 +55,7 @@
     "/api/v1/session/new": {
       "post": {
         "operationId": "createSession",
-        "summary": "Create the active project from a v4 project document",
+        "summary": "Save modified active files, then create a project from a v4 document",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -73,7 +73,7 @@
         },
         "responses": {
           "202": {
-            "description": "Session creation was accepted; completion is reported over the events WebSocket",
+            "description": "Session creation was accepted; completion is reported over the events WebSocket. If saving modified current files fails, the current session remains active.",
             "content": {
               "application/json": {
                 "schema": {
@@ -84,6 +84,27 @@
           },
           "409": {
             "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/session/close": {
+      "post": {
+        "operationId": "closeSession",
+        "summary": "Save modified files and close the active project, cancelling active generation",
+        "responses": {
+          "202": {
+            "description": "Session close was accepted; completion or SAVE_FAILED is reported over the events WebSocket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOperationAccepted"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/ApiError"
@@ -118,6 +139,27 @@
           },
           "409": {
             "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/session/status": {
+      "get": {
+        "operationId": "getSessionStatus",
+        "summary": "Get active session persistence and revision status",
+        "responses": {
+          "200": {
+            "description": "Session state, published revision, and persistence status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionStatus"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/ApiError"
@@ -182,6 +224,9 @@
           "404": {
             "$ref": "#/components/responses/ApiError"
           },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "default": {
             "$ref": "#/components/responses/ApiError"
           }
@@ -212,8 +257,18 @@
           "200": {
             "$ref": "#/components/responses/MutationAck"
           },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/RevisionConflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "500": {
+            "description": "The candidate could not be persisted and edits are paused until save succeeds",
+            "$ref": "#/components/responses/ApiError"
           },
           "default": {
             "$ref": "#/components/responses/ApiError"
@@ -247,6 +302,9 @@
             }
           },
           "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
             "$ref": "#/components/responses/ApiError"
           },
           "default": {
@@ -326,6 +384,9 @@
           "404": {
             "$ref": "#/components/responses/ApiError"
           },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "default": {
             "$ref": "#/components/responses/ApiError"
           }
@@ -356,8 +417,18 @@
           "200": {
             "$ref": "#/components/responses/MutationAck"
           },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/RevisionConflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "500": {
+            "description": "The candidate could not be persisted and edits are paused until save succeeds",
+            "$ref": "#/components/responses/ApiError"
           },
           "default": {
             "$ref": "#/components/responses/ApiError"
@@ -417,6 +488,9 @@
             }
           },
           "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
             "$ref": "#/components/responses/ApiError"
           },
           "default": {
@@ -497,6 +571,9 @@
             }
           },
           "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
             "$ref": "#/components/responses/ApiError"
           },
           "default": {
@@ -592,6 +669,9 @@
           "404": {
             "$ref": "#/components/responses/ApiError"
           },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "default": {
             "$ref": "#/components/responses/ApiError"
           }
@@ -670,6 +750,9 @@
             }
           },
           "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
             "$ref": "#/components/responses/ApiError"
           },
           "default": {
@@ -765,6 +848,9 @@
           "404": {
             "$ref": "#/components/responses/ApiError"
           },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "default": {
             "$ref": "#/components/responses/ApiError"
           }
@@ -845,6 +931,9 @@
           "404": {
             "$ref": "#/components/responses/ApiError"
           },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "default": {
             "$ref": "#/components/responses/ApiError"
           }
@@ -923,8 +1012,15 @@
           "200": {
             "$ref": "#/components/responses/MutationAck"
           },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/RevisionConflict"
+          },
+          "500": {
+            "description": "The history change could not be persisted and further edits are paused until save succeeds",
+            "$ref": "#/components/responses/ApiError"
           },
           "default": {
             "$ref": "#/components/responses/ApiError"
@@ -948,8 +1044,15 @@
           "200": {
             "$ref": "#/components/responses/MutationAck"
           },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/RevisionConflict"
+          },
+          "500": {
+            "description": "The history change could not be persisted and further edits are paused until save succeeds",
+            "$ref": "#/components/responses/ApiError"
           },
           "default": {
             "$ref": "#/components/responses/ApiError"
@@ -1214,13 +1317,50 @@
             "$ref": "#/components/schemas/UUID"
           },
           "operation": {
-            "enum": ["open", "new", "save"]
+            "enum": ["open", "new", "close", "save"]
           },
           "accepted": {
             "const": true
           }
         },
         "required": ["operationId", "operation", "accepted"],
+        "additionalProperties": false
+      },
+      "SessionStatus": {
+        "type": "object",
+        "properties": {
+          "open": {
+            "type": "boolean"
+          },
+          "projectId": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UUID"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dirty": {
+            "type": "boolean"
+          },
+          "persistenceBlocked": {
+            "type": "boolean"
+          }
+        },
+        "required": ["open", "projectId", "revision", "dirty", "persistenceBlocked"],
         "additionalProperties": false
       },
       "OpenSessionRequest": {
@@ -1567,6 +1707,9 @@
             "$ref": "#/components/schemas/DocumentChangedEvent"
           },
           {
+            "$ref": "#/components/schemas/SessionClosedEvent"
+          },
+          {
             "$ref": "#/components/schemas/SessionOperationEvent"
           },
           {
@@ -1589,37 +1732,40 @@
           "type": {
             "const": "document.changed"
           },
-          "revision": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "requestId": {
+          "projectId": {
             "$ref": "#/components/schemas/UUID"
           },
-          "resource": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "enum": [
-                  "project",
-                  "trajectory",
-                  "waypoint",
-                  "constraint",
-                  "event-marker"
-                ]
-              },
-              "id": {
-                "$ref": "#/components/schemas/UUID"
-              },
-              "action": {
-                "enum": ["created", "updated", "deleted"]
-              }
-            },
-            "required": ["type", "id", "action"],
-            "additionalProperties": false
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/UUID",
+            "description": "Idempotency key of the mutation that committed this revision."
+          },
+          "operationId": {
+            "$ref": "#/components/schemas/UUID",
+            "description": "Generation operation that committed this revision."
           }
         },
-        "required": ["type", "revision", "requestId", "resource"],
+        "required": ["type", "projectId", "revision"],
+        "additionalProperties": false
+      },
+      "SessionClosedEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "session.closed"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["type", "projectId", "revision"],
         "additionalProperties": false
       },
       "SessionOperationEvent": {
@@ -1632,7 +1778,7 @@
             "$ref": "#/components/schemas/UUID"
           },
           "operation": {
-            "enum": ["open", "new", "save"]
+            "enum": ["open", "new", "close", "save"]
           },
           "status": {
             "enum": ["running", "succeeded", "failed", "cancelled"]

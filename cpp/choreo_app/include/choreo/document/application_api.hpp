@@ -19,6 +19,7 @@ class ApplicationApi {
 
   struct Options {
     std::filesystem::path generatorExecutable;
+    std::filesystem::path initialProjectPath;
     ProjectPathPrompt promptForProjectPath;
   };
 

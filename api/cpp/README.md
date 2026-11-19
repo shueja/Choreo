@@ -18,6 +18,14 @@ api.Start();
 const auto port = api.Port();
 ```
 
-HTTP route templates use `{name}` path parameters. Request header names are normalized to lower case. HTTP and WebSocket callbacks execute on the server event-loop thread, so they should be short and non-blocking; `SendText` and `BroadcastText` may be called from other threads. Register all routes before `Start()`. The default bind address is loopback and port `0` requests an available ephemeral port. Configure `ServerOptions::allowedOrigins` for cross-origin browser or Tauri clients; same-origin and requests without an `Origin` header are accepted by default.
+HTTP route templates use `{name}` path parameters. Request header names are normalized to lower case. HTTP and WebSocket callbacks execute on the server event-loop thread, so they should be short and non-blocking; `SendText` and `BroadcastText` may be called from other threads. Register all routes before `Start()`. The default bind address is loopback and port `0` requests an available ephemeral port. The bind address must be a numeric IPv4 loopback address, and HTTP requests and WebSocket upgrades must send a `Host` header exactly matching the bound address and selected port. A supplied `Origin` must be same-origin or listed in `ServerOptions::allowedOrigins`; this is checked before dispatch for all HTTP requests and WebSocket upgrades. Requests without an `Origin` header are accepted for non-browser clients. Allowed cross-origin HTTP responses include the matching `Access-Control-Allow-Origin` header.
 
 The target is added to `cpp/choreo_app` when the `wpinet` CMake target is available. The loopback integration test is `choreo_api_server.loopback`.
+
+`RegisterStaticDirectory` installs one not-found handler for a canonical
+directory. It serves only GET requests, rejects traversal and malformed
+percent-encoding, refuses symlinks that resolve outside the root, and serves
+`index.html` for extensionless UI routes. `/api/` remains reserved for API
+routes; an unknown API path is still a 404. Static files are limited to 64 MiB
+and are read on the server event-loop thread, so use this for trusted bundled
+UI assets rather than large or user-controlled files.
