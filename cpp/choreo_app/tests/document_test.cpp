@@ -28,8 +28,8 @@ bool EvaluatesTo(wpilib::expression::EvaluationContext& context,
   const auto value =
       choreo::document::evaluation::FromMeasurement<Dimension>(measurement);
   if (!value || std::abs(value->value() - expected) > tolerance) {
-    std::cerr << "Expression '" << source << "' did not evaluate to " << expected
-              << '\n';
+    std::cerr << "Expression '" << source << "' did not evaluate to "
+              << expected << '\n';
     return false;
   }
   return true;
@@ -42,10 +42,10 @@ bool TestTransformChainDragControls() {
       ".TransformBy(Transform2d(1 m, 0 m, 90 deg))"
       ".TransformBy(Transform2d(2 m, 0 m, 0 deg))";
   wpilib::expression::EvaluationContext context;
-  if (!EvaluatesTo<decltype(RobotConfig{}.radius)>(
-          context, expression + ".X()", 1.0) ||
-      !EvaluatesTo<decltype(RobotConfig{}.radius)>(
-          context, expression + ".Y()", 2.0)) {
+  if (!EvaluatesTo<decltype(RobotConfig{}.radius)>(context, expression + ".X()",
+                                                   1.0) ||
+      !EvaluatesTo<decltype(RobotConfig{}.radius)>(context, expression + ".Y()",
+                                                   2.0)) {
     return false;
   }
   const auto analysis = evaluation::GetGeometryDragControls(
@@ -61,8 +61,7 @@ bool TestTransformChainDragControls() {
          std::abs(analysis.chain[2].endY - 2.0) <= 1e-5 &&
          control != analysis.controls.end() && control->chainIndex == 2 &&
          std::abs(control->anchorX - 1.0) <= 1e-5 &&
-         std::abs(control->anchorY) <= 1e-5 &&
-         std::abs(control->dx) <= 1e-5 &&
+         std::abs(control->anchorY) <= 1e-5 && std::abs(control->dx) <= 1e-5 &&
          std::abs(control->dy - 1.0) <= 1e-5 &&
          std::abs(control->segmentDx - 1.0) <= 1e-5 &&
          std::abs(control->segmentDy) <= 1e-5;
@@ -88,8 +87,7 @@ bool TestEllipseRotationRigidMotion() {
   return !analysis.paths.empty() && analysis.paths.front().size() > 2 &&
          control != analysis.controls.end() && control->rigidMotion &&
          std::abs(control->motionDheading - std::acos(-1.0) / 180.0) <= 1e-5 &&
-         std::abs(control->pivotX) <= 1e-5 &&
-         std::abs(control->pivotY) <= 1e-5;
+         std::abs(control->pivotX) <= 1e-5 && std::abs(control->pivotY) <= 1e-5;
 }
 
 bool TestRectangleWidthDragControl() {
@@ -97,14 +95,12 @@ bool TestRectangleWidthDragControl() {
   const std::string expression =
       "Rectangle2d(Pose2d(2 m, 3 m, 0 rad), 4 m, 2 m)";
   const auto analysis = evaluation::GetGeometryDragControls(
-      MakeTestProject(), expression,
-      evaluation::DragGeometryType::Rectangle2d);
+      MakeTestProject(), expression, evaluation::DragGeometryType::Rectangle2d);
   const auto token = expression.find("4 m");
   const auto control = std::find_if(
       analysis.controls.begin(), analysis.controls.end(),
       [&](const auto& candidate) { return candidate.start == token; });
-  return analysis.paths.size() == 1 &&
-         analysis.paths.front().size() == 5 &&
+  return analysis.paths.size() == 1 && analysis.paths.front().size() == 5 &&
          control != analysis.controls.end() && !control->effects.empty();
 }
 
@@ -114,10 +110,9 @@ bool TestPolygonVertexDragControls() {
       "[Translation2d(0 m, 0 m), Translation2d(2 m, 0 m), "
       "Translation2d(0 m, 2 m)]";
   const auto analysis = evaluation::GetGeometryDragControls(
-      MakeTestProject(), expression,
-      evaluation::DragGeometryType::Polygon2d);
-  return analysis.paths.size() == 1 &&
-         analysis.paths.front().size() == 4 && !analysis.controls.empty();
+      MakeTestProject(), expression, evaluation::DragGeometryType::Polygon2d);
+  return analysis.paths.size() == 1 && analysis.paths.front().size() == 4 &&
+         !analysis.controls.empty();
 }
 
 bool TestAdditionalGeometryDragControls() {
@@ -127,13 +122,11 @@ bool TestAdditionalGeometryDragControls() {
           {"Rotation2d(45 deg)", evaluation::DragGeometryType::Rotation2d},
           {"Transform2d(2 m, 1 m, 45 deg)",
            evaluation::DragGeometryType::Transform2d},
-          {"Twist2d(2 m, 1 m, 45 deg)",
-           evaluation::DragGeometryType::Twist2d},
+          {"Twist2d(2 m, 1 m, 45 deg)", evaluation::DragGeometryType::Twist2d},
       }};
   for (const auto& [expression, type] : expressions) {
-    const auto analysis =
-        evaluation::GetGeometryDragControls(MakeTestProject(), expression,
-                                            type);
+    const auto analysis = evaluation::GetGeometryDragControls(MakeTestProject(),
+                                                              expression, type);
     if (analysis.paths.empty() || analysis.paths.front().size() < 2 ||
         analysis.controls.empty()) {
       std::cerr << "Expected drag controls for expression '" << expression
@@ -197,8 +190,7 @@ int main(int argc, char** argv) {
       !EvaluatesTo<decltype(MotorConfig{}.supplyLimit)>(context, "40 A",
                                                         40.0) ||
       !EvaluatesTo<decltype(RobotConfig{}.mass)>(context, "5 kg", 5.0) ||
-      !EvaluatesTo<decltype(RobotConfig{}.inertia)>(context, "3 kg*m^2",
-                                                    3.0) ||
+      !EvaluatesTo<decltype(RobotConfig{}.inertia)>(context, "3 kg*m^2", 3.0) ||
       !EvaluatesTo<decltype(RobotConfig{}.gearing)>(context, "6.5", 6.5) ||
       !EvaluatesTo<decltype(MaxLinearVelocity{}.max)>(context, "3 m/s", 3.0) ||
       !EvaluatesTo<decltype(MaxAngularVelocity{}.max)>(context, "2 rad/s",
@@ -664,10 +656,8 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  if (!TestTransformChainDragControls() ||
-      !TestEllipseRotationRigidMotion() ||
-      !TestRectangleWidthDragControl() ||
-      !TestPolygonVertexDragControls() ||
+  if (!TestTransformChainDragControls() || !TestEllipseRotationRigidMotion() ||
+      !TestRectangleWidthDragControl() || !TestPolygonVertexDragControls() ||
       !TestAdditionalGeometryDragControls()) {
     return EXIT_FAILURE;
   }
