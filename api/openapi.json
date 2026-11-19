@@ -1649,7 +1649,16 @@
           },
           "type": {
             "type": "string",
-            "enum": ["Pose2d", "Translation2d"]
+            "enum": [
+              "Pose2d",
+              "Translation2d",
+              "Polygon2d",
+              "Rotation2d",
+              "Transform2d",
+              "Twist2d",
+              "Rectangle2d",
+              "Ellipse2d"
+            ]
           }
         },
         "required": ["expression", "type"],
@@ -1675,7 +1684,21 @@
                 "chainIndex": { "type": "integer", "minimum": 0 },
                 "anchorX": { "type": "number" },
                 "anchorY": { "type": "number" },
-                "anchorHeading": { "type": "number" }
+                "anchorHeading": { "type": "number" },
+                "effects": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "pathIndex": { "type": "integer", "minimum": 0 },
+                      "pointIndex": { "type": "integer", "minimum": 0 },
+                      "dx": { "type": "number" },
+                      "dy": { "type": "number" }
+                    },
+                    "required": ["pathIndex", "pointIndex", "dx", "dy"],
+                    "additionalProperties": false
+                  }
+                }
               },
               "required": [
                 "start",
@@ -1690,7 +1713,8 @@
                 "chainIndex",
                 "anchorX",
                 "anchorY",
-                "anchorHeading"
+                "anchorHeading",
+                "effects"
               ],
               "additionalProperties": false
             }
@@ -1717,9 +1741,24 @@
               ],
               "additionalProperties": false
             }
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "x": { "type": "number" },
+                  "y": { "type": "number" }
+                },
+                "required": ["x", "y"],
+                "additionalProperties": false
+              }
+            }
           }
         },
-        "required": ["controls", "chain"],
+        "required": ["controls", "chain", "paths"],
         "additionalProperties": false
       },
       "VariablePatch": {

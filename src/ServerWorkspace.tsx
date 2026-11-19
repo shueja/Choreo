@@ -30,6 +30,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import ServerFieldCanvas from "./components/field/ServerFieldCanvas";
+import GeometryFieldCanvas from "./components/field/GeometryFieldCanvas";
 import ServerFieldControls from "./components/field/ServerFieldControls";
 import ServerPathAnimationPanel from "./components/field/ServerPathAnimationPanel";
 import ServerWaypointEditor from "./components/field/ServerWaypointEditor";
@@ -353,6 +354,9 @@ function ServerWorkspace() {
   const [selectedWaypointId, setSelectedWaypointId] = useState("");
   const [selectedConstraintId, setSelectedConstraintId] = useState("");
   const [selectedEventMarkerId, setSelectedEventMarkerId] = useState("");
+  const [studioView, setStudioView] = useState<"trajectory" | "geometry">(
+    "trajectory"
+  );
   const [activeEditor, setActiveEditor] = useState<
     "waypoint" | "constraint" | "marker" | "none"
   >("waypoint");
@@ -435,7 +439,7 @@ function ServerWorkspace() {
   );
 
   useEffect(() => {
-    if (!project || !activeTrajectory) {
+    if (!project) {
       setWaypointDragAnalysis({});
       setVariableDragAnalysis({});
       return;
@@ -444,7 +448,7 @@ function ServerWorkspace() {
     let cancelled = false;
     const loadAnalysis = async () => {
       const waypoints = await Promise.all(
-        activeTrajectory.params.waypoints.map(async (waypoint) => {
+        (activeTrajectory?.params.waypoints ?? []).map(async (waypoint) => {
           try {
             return [
               waypoint.uuid,
@@ -462,10 +466,7 @@ function ServerWorkspace() {
       const variables = await Promise.all(
         Object.entries(project.variables.variables).map(
           async ([id, variable]) => {
-            if (
-              variable.type !== "Pose2d" &&
-              variable.type !== "Translation2d"
-            ) {
+            if (variable.type === "Quantity") {
               return [id, null] as const;
             }
             try {
@@ -1268,7 +1269,28 @@ function ServerWorkspace() {
         </div>
 
         <section className={styles.editorMain}>
-          {activeTrajectory ? (
+          {studioView === "geometry" ? (
+            <section className={styles.geometryEditor}>
+              <header className={styles.geometryHeader}>
+                <h2>Geometry field</h2>
+                <span>Drag a handle to update the geometry expression.</span>
+              </header>
+              <div className={styles.canvasArea}>
+                <div
+                  className={`${styles.fieldViewport} ${variablesOpen ? styles.fieldViewportWithPanel : ""}`}
+                >
+                  <GeometryFieldCanvas
+                    variables={project.variables.variables}
+                    analyses={variableDragAnalysis}
+                    visibleLayers={visibleLayers}
+                    onDragVariable={(id, expression) =>
+                      patchVariable(id, { expression })
+                    }
+                  />
+                </div>
+              </div>
+            </section>
+          ) : activeTrajectory ? (
             <>
               <div
                 className={
@@ -1509,7 +1531,7 @@ function ServerWorkspace() {
         timestamp={animationTimestamp}
         onChange={setAnimationTimestamp}
       />
-      <nav className={styles.studioBar} aria-label="Trajectory studios">
+      <nav className={styles.studioBar} aria-label="Studios">
         <Tooltip title="Generate all">
           <span>
             <IconButton
@@ -1550,11 +1572,24 @@ function ServerWorkspace() {
         <div
           className={styles.studioTabs}
           role="tablist"
-          aria-label="Trajectories"
+          aria-label="Studios"
         >
+          <div
+            className={`${styles.studioTab} ${studioView === "geometry" ? styles.activeStudioTab : ""}`}
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={studioView === "geometry"}
+              onClick={() => setStudioView("geometry")}
+            >
+              <ShapeLine fontSize="small" />
+              <span>Geometry</span>
+            </button>
+          </div>
           {trajectories.map((trajectory) => (
             <div
-              className={`${styles.studioTab} ${trajectory.uuid === selectedTrajectoryId ? styles.activeStudioTab : ""}`}
+              className={`${styles.studioTab} ${studioView === "trajectory" && trajectory.uuid === selectedTrajectoryId ? styles.activeStudioTab : ""}`}
               key={trajectory.uuid}
             >
               {renamingTrajectoryId === trajectory.uuid ? (
@@ -1580,7 +1615,10 @@ function ServerWorkspace() {
                   type="button"
                   role="tab"
                   aria-selected={trajectory.uuid === selectedTrajectoryId}
-                  onClick={() => setSelectedTrajectoryId(trajectory.uuid)}
+                  onClick={() => {
+                    setStudioView("trajectory");
+                    setSelectedTrajectoryId(trajectory.uuid);
+                  }}
                   onDoubleClick={() => {
                     if (state.connected && !pending) {
                       setRenamingTrajectoryId(trajectory.uuid);

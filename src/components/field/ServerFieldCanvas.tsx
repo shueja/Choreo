@@ -572,7 +572,8 @@ export default function ServerFieldCanvas({
                 }
                 const controls = variableControls[id] ?? {
                   controls: [],
-                  chain: []
+                  chain: [],
+                  paths: []
                 };
                 const pose =
                   geometryChainPose(controls.chain) ?? variablePose(variable);

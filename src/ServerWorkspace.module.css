@@ -205,6 +205,35 @@
   min-height: 0;
 }
 
+.geometryEditor {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.geometryHeader {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--background-dark-gray);
+}
+
+.geometryHeader h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.geometryHeader span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .canvasArea {
   display: flex;
   flex: 1;

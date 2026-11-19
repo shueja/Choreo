@@ -136,6 +136,9 @@ export default function GeometryFieldLayer({
         const paths =
           preview?.id === id ? preview.paths : analysis.paths;
         const points = paths.flat();
+        if (points.length === 0) {
+          return null;
+        }
         const center = points.reduce(
           (sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }),
           { x: 0, y: 0 }
@@ -150,14 +153,26 @@ export default function GeometryFieldLayer({
         return (
           <g key={id}>
             {paths.map((path, pathIndex) => (
-              <polyline
-                key={`path-${pathIndex}`}
-                points={path.map(({ x, y }) => `${x},${y}`).join(" ")}
-                fill={fill ? `${color}22` : "none"}
-                stroke={color}
-                strokeWidth={0.04}
-                pointerEvents="none"
-              />
+              <g key={`path-${pathIndex}`}>
+                <polyline
+                  points={path.map(({ x, y }) => `${x},${y}`).join(" ")}
+                  fill={fill ? `${color}22` : "none"}
+                  stroke={color}
+                  strokeWidth={0.04}
+                  pointerEvents="none"
+                />
+                {(path.length === 1 || variable.type === "Polygon2d") &&
+                  path.map(({ x, y }, pointIndex) => (
+                    <circle
+                      key={`point-${pointIndex}`}
+                      cx={x}
+                      cy={y}
+                      r={0.045}
+                      fill={color}
+                      pointerEvents="none"
+                    />
+                  ))}
+              </g>
             ))}
             <text
               x={center.x + 0.12}

@@ -1,5 +1,6 @@
 #include "choreo/document/document.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -580,6 +581,34 @@ int main(int argc, char** argv) {
       std::abs(secondTransformControl->dy - 1.0) > 1e-5 ||
       std::abs(secondTransformControl->segmentDx - 1.0) > 1e-5 ||
       std::abs(secondTransformControl->segmentDy) > 1e-5) {
+    return EXIT_FAILURE;
+  }
+
+  const std::string rectangleExpression =
+      "Rectangle2d(Pose2d(2 m, 3 m, 0 rad), 4 m, 2 m)";
+  const auto rectangleAnalysis = evaluation::GetGeometryDragControls(
+      MakeTestProject(), rectangleExpression,
+      evaluation::DragGeometryType::Rectangle2d);
+  const auto rectangleWidth = rectangleExpression.find("4 m");
+  const auto widthControl = std::find_if(
+      rectangleAnalysis.controls.begin(), rectangleAnalysis.controls.end(),
+      [&](const auto& control) { return control.start == rectangleWidth; });
+  if (rectangleAnalysis.paths.size() != 1 ||
+      rectangleAnalysis.paths.front().size() != 5 ||
+      widthControl == rectangleAnalysis.controls.end() ||
+      widthControl->effects.empty()) {
+    return EXIT_FAILURE;
+  }
+
+  const std::string polygonExpression =
+      "[Translation2d(0 m, 0 m), Translation2d(2 m, 0 m), "
+      "Translation2d(0 m, 2 m)]";
+  const auto polygonAnalysis = evaluation::GetGeometryDragControls(
+      MakeTestProject(), polygonExpression,
+      evaluation::DragGeometryType::Polygon2d);
+  if (polygonAnalysis.paths.size() != 1 ||
+      polygonAnalysis.paths.front().size() != 4 ||
+      polygonAnalysis.controls.empty()) {
     return EXIT_FAILURE;
   }
 
