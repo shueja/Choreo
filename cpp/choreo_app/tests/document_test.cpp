@@ -577,7 +577,9 @@ int main(int argc, char** argv) {
       std::abs(secondTransformControl->anchorX - 1.0) > 1e-5 ||
       std::abs(secondTransformControl->anchorY) > 1e-5 ||
       std::abs(secondTransformControl->dx) > 1e-5 ||
-      std::abs(secondTransformControl->dy - 1.0) > 1e-5) {
+      std::abs(secondTransformControl->dy - 1.0) > 1e-5 ||
+      std::abs(secondTransformControl->segmentDx - 1.0) > 1e-5 ||
+      std::abs(secondTransformControl->segmentDy) > 1e-5) {
     return EXIT_FAILURE;
   }
 

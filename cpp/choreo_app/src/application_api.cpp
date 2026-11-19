@@ -1411,7 +1411,9 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         serializedControls.push_back(Json::object(
             "start", control.start, "end", control.end, "value",
             control.value, "dx", control.dx, "dy", control.dy, "dheading",
-            control.dheading, "chainIndex", control.chainIndex, "anchorX",
+            control.dheading, "segmentDx", control.segmentDx, "segmentDy",
+            control.segmentDy, "segmentDheading", control.segmentDheading,
+            "chainIndex", control.chainIndex, "anchorX",
             control.anchorX, "anchorY", control.anchorY, "anchorHeading",
             control.anchorHeading));
       }

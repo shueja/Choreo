@@ -52,6 +52,9 @@ export interface GeometryDragControl {
   dx: number;
   dy: number;
   dheading: number;
+  segmentDx: number;
+  segmentDy: number;
+  segmentDheading: number;
   chainIndex: number;
   anchorX: number;
   anchorY: number;

@@ -27,6 +27,9 @@ struct GeometryDragControl {
   double dx;
   double dy;
   double dheading;
+  double segmentDx;
+  double segmentDy;
+  double segmentDheading;
   std::size_t chainIndex;
   double anchorX;
   double anchorY;

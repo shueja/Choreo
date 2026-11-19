@@ -312,48 +312,6 @@
             }
           }
         },
-        "/api/v1/projects/{projectId}/geometry-controls": {
-          "parameters": [
-            {
-              "$ref": "#/components/parameters/ProjectId"
-            }
-          ],
-          "post": {
-            "operationId": "getGeometryDragControls",
-            "summary": "Find editable numeric expression parameters and their field-space effects",
-            "requestBody": {
-              "required": true,
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/GeometryControlsRequest"
-                  }
-                }
-              }
-            },
-            "responses": {
-              "200": {
-                "description": "Numeric constants that affect the evaluated geometry",
-                "content": {
-                  "application/json": {
-                    "schema": {
-                      "$ref": "#/components/schemas/GeometryControlsResponse"
-                    }
-                  }
-                }
-              },
-              "404": {
-                "$ref": "#/components/responses/ApiError"
-              },
-              "422": {
-                "$ref": "#/components/responses/ApiError"
-              },
-              "default": {
-                "$ref": "#/components/responses/ApiError"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "$ref": "#/components/responses/MutationAck"
@@ -366,6 +324,48 @@
           },
           "409": {
             "$ref": "#/components/responses/RevisionConflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{projectId}/geometry-controls": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        }
+      ],
+      "post": {
+        "operationId": "getGeometryDragControls",
+        "summary": "Find editable numeric expression parameters and their field-space effects",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeometryControlsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Numeric constants that affect the evaluated geometry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeometryControlsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
           },
           "422": {
             "$ref": "#/components/responses/ApiError"
@@ -1640,88 +1640,94 @@
         "minProperties": 1,
         "additionalProperties": false
       },
+      "GeometryControlsRequest": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": ["Pose2d", "Translation2d"]
+          }
+        },
+        "required": ["expression", "type"],
+        "additionalProperties": false
+      },
+      "GeometryControlsResponse": {
+        "type": "object",
+        "properties": {
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": { "type": "integer", "minimum": 0 },
+                "end": { "type": "integer", "minimum": 0 },
+                "value": { "type": "number" },
+                "dx": { "type": "number" },
+                "dy": { "type": "number" },
+                "dheading": { "type": "number" },
+                "segmentDx": { "type": "number" },
+                "segmentDy": { "type": "number" },
+                "segmentDheading": { "type": "number" },
+                "chainIndex": { "type": "integer", "minimum": 0 },
+                "anchorX": { "type": "number" },
+                "anchorY": { "type": "number" },
+                "anchorHeading": { "type": "number" }
+              },
+              "required": [
+                "start",
+                "end",
+                "value",
+                "dx",
+                "dy",
+                "dheading",
+                "segmentDx",
+                "segmentDy",
+                "segmentDheading",
+                "chainIndex",
+                "anchorX",
+                "anchorY",
+                "anchorHeading"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "chain": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "startX": { "type": "number" },
+                "startY": { "type": "number" },
+                "startHeading": { "type": "number" },
+                "endX": { "type": "number" },
+                "endY": { "type": "number" },
+                "endHeading": { "type": "number" }
+              },
+              "required": [
+                "startX",
+                "startY",
+                "startHeading",
+                "endX",
+                "endY",
+                "endHeading"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["controls", "chain"],
+        "additionalProperties": false
+      },
       "VariablePatch": {
         "type": "object",
         "properties": {
           "name": {
             "type": "string",
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-          },
-          "GeometryControlsRequest": {
-            "type": "object",
-            "properties": {
-              "expression": {
-                "type": "string",
-                "minLength": 1
-              },
-              "type": {
-                "type": "string",
-                "enum": ["Pose2d", "Translation2d"]
-              }
-            },
-            "required": ["expression", "type"],
-            "additionalProperties": false
-          },
-          "GeometryControlsResponse": {
-            "type": "object",
-            "properties": {
-              "controls": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "start": { "type": "integer", "minimum": 0 },
-                    "end": { "type": "integer", "minimum": 0 },
-                    "value": { "type": "number" },
-                    "dx": { "type": "number" },
-                    "dy": { "type": "number" },
-                    "dheading": { "type": "number" },
-                    "chainIndex": { "type": "integer", "minimum": 0 },
-                    "anchorX": { "type": "number" },
-                    "anchorY": { "type": "number" },
-                    "anchorHeading": { "type": "number" }
-                  },
-                  "required": [
-                    "start",
-                    "end",
-                    "value",
-                    "dx",
-                    "dy",
-                    "dheading",
-                    "chainIndex",
-                    "anchorX",
-                    "anchorY",
-                    "anchorHeading"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "chain": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "startX": { "type": "number" },
-                    "startY": { "type": "number" },
-                    "startHeading": { "type": "number" },
-                    "endX": { "type": "number" },
-                    "endY": { "type": "number" },
-                    "endHeading": { "type": "number" }
-                  },
-                  "required": [
-                    "startX",
-                    "startY",
-                    "startHeading",
-                    "endX",
-                    "endY",
-                    "endHeading"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            },
-            "required": ["controls", "chain"],
-            "additionalProperties": false
           },
           "expression": {
             "type": "string",

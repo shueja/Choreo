@@ -16,7 +16,9 @@ import {
   Waypoint
 } from "../../document/ServerSessionStore";
 import {
-  GeometryDragValues,
+  GeometryDragPose,
+  composeGeometryChain,
+  geometryChainPose,
   updateGeometryExpressionForDrag
 } from "../../util/GeometryExpressionDrag";
 import styles from "./ServerFieldCanvas.module.css";
@@ -42,9 +44,7 @@ interface Props {
   ) => void;
 }
 
-interface FieldPose extends GeometryDragValues {
-  heading: number;
-}
+type FieldPose = GeometryDragPose;
 
 interface ActiveDrag {
   id: string;
@@ -53,6 +53,7 @@ interface ActiveDrag {
   mode: "position" | "heading";
   pointerId: number;
   control: GeometryDragControl;
+  chain: GeometryDragAnalysis["chain"];
   pose: FieldPose;
   pointerStart: { x: number; y: number };
   candidateExpression: string;
@@ -108,12 +109,25 @@ export default function ServerFieldCanvas({
     id: string;
     kind: ActiveDrag["kind"];
     pose: FieldPose;
+    chain: GeometryDragAnalysis["chain"];
   } | null>(null);
   const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [constraintStartIndex, setConstraintStartIndex] = useState<
     number | null
   >(null);
-  const points = waypoints.map((waypoint) => waypoint.pose.val.translation);
+  const waypointPoses = waypoints.map((waypoint) => {
+    const pose =
+      geometryChainPose(waypointControls[waypoint.uuid]?.chain) ??
+      ({
+        ...waypoint.pose.val.translation,
+        heading: waypoint.pose.val.rotation.radians
+      } satisfies FieldPose);
+    return dragPreview?.id === waypoint.uuid &&
+      dragPreview.kind === "waypoint"
+      ? dragPreview.pose
+      : pose;
+  });
+  const points = waypointPoses.map(({ x, y }) => ({ x, y }));
   const fieldMarkerSize = Math.min(
     bumperVertices.length > 0
       ? Math.max(...bumperVertices.map((point) => point.x)) -
@@ -168,7 +182,8 @@ export default function ServerFieldCanvas({
       candidateExpression: drag.expression,
       candidate: drag.pose
     };
-    setDragPreview({ id: drag.id, kind: drag.kind, pose: drag.pose });
+    const chain = composeGeometryChain(drag.chain);
+    setDragPreview({ id: drag.id, kind: drag.kind, pose: drag.pose, chain });
   }
 
   function moveDrag(event: React.PointerEvent<SVGGElement>) {
@@ -205,47 +220,51 @@ export default function ServerFieldCanvas({
       parameterDelta = angleDelta / drag.control.dheading;
     }
 
-    let minimumDelta = Number.NEGATIVE_INFINITY;
-    let maximumDelta = Number.POSITIVE_INFINITY;
-    for (const [position, derivative, maximum] of [
-      [drag.pose.x, drag.control.dx, FIELD_LENGTH],
-      [drag.pose.y, drag.control.dy, FIELD_WIDTH]
-    ]) {
-      if (derivative > 0) {
-        minimumDelta = Math.max(minimumDelta, -position / derivative);
-        maximumDelta = Math.min(
-          maximumDelta,
-          (maximum - position) / derivative
-        );
-      } else if (derivative < 0) {
-        minimumDelta = Math.max(
-          minimumDelta,
-          (maximum - position) / derivative
-        );
-        maximumDelta = Math.min(maximumDelta, -position / derivative);
-      }
-    }
-    parameterDelta = Math.max(
-      minimumDelta,
-      Math.min(maximumDelta, parameterDelta)
-    );
-    const candidate = {
-      ...drag.pose,
-      x: drag.pose.x + drag.control.dx * parameterDelta,
-      y: drag.pose.y + drag.control.dy * parameterDelta,
-      heading: drag.pose.heading + drag.control.dheading * parameterDelta
+    const previewForDelta = (delta: number) => {
+      const chain = composeGeometryChain(drag.chain, drag.control, delta);
+      const pose = geometryChainPose(chain);
+      return pose ? { chain, pose } : null;
     };
+    const isInField = (pose: FieldPose) =>
+      pose.x >= 0 &&
+      pose.x <= FIELD_LENGTH &&
+      pose.y >= 0 &&
+      pose.y <= FIELD_WIDTH;
+    let preview = previewForDelta(parameterDelta);
+    if (preview && !isInField(preview.pose)) {
+      let inFieldDelta = 0;
+      let outOfFieldDelta = parameterDelta;
+      for (let iteration = 0; iteration < 32; iteration += 1) {
+        const midpoint = (inFieldDelta + outOfFieldDelta) / 2;
+        const midpointPreview = previewForDelta(midpoint);
+        if (midpointPreview && isInField(midpointPreview.pose)) {
+          inFieldDelta = midpoint;
+        } else {
+          outOfFieldDelta = midpoint;
+        }
+      }
+      parameterDelta = inFieldDelta;
+      preview = previewForDelta(parameterDelta);
+    }
+    if (!preview) {
+      return;
+    }
     const expression = updateGeometryExpressionForDrag(
       drag.expression,
       drag.control,
-      candidate.parameterDelta
+      parameterDelta
     );
     if (expression === null) {
       return;
     }
-    drag.candidate = candidate;
+    drag.candidate = preview.pose;
     drag.candidateExpression = expression;
-    setDragPreview({ id: drag.id, kind: drag.kind, pose: candidate });
+    setDragPreview({
+      id: drag.id,
+      kind: drag.kind,
+      pose: preview.pose,
+      chain: preview.chain
+    });
   }
 
   function endDrag(event: React.PointerEvent<SVGGElement>) {
@@ -336,19 +355,21 @@ export default function ServerFieldCanvas({
             <>
               <FieldPathLine points={points} />
               {waypoints.map((waypoint, index) => {
-                const waypointPose: FieldPose = {
-                  ...waypoint.pose.val.translation,
-                  heading: waypoint.pose.val.rotation.radians
-                };
-                const pose =
+                const waypointPose = waypointPoses[index];
+                const waypointAnalysis = waypointControls[waypoint.uuid];
+                const activePreview =
                   dragPreview?.id === waypoint.uuid &&
                   dragPreview.kind === "waypoint"
-                    ? dragPreview.pose
+                    ? dragPreview
+                    : null;
+                const renderedChain = activePreview
+                  ? activePreview.chain
+                  : composeGeometryChain(waypointAnalysis?.chain ?? []);
+                const pose =
+                  activePreview
+                    ? activePreview.pose
                     : waypointPose;
                 const { x, y, heading } = pose;
-                const waypointAnalysis = waypointControls[waypoint.uuid];
-                const previewOffsetX = x - waypointPose.x;
-                const previewOffsetY = y - waypointPose.y;
                 const xCoordinates = bumperVertices.map((point) => point.x);
                 const yCoordinates = bumperVertices.map((point) => point.y);
                 const bumperLength =
@@ -416,21 +437,21 @@ export default function ServerFieldCanvas({
                         strokeWidth={0.03}
                       />
                     </g>
-                    {(waypointAnalysis?.chain.length ?? 0) > 1 &&
-                      waypointAnalysis!.chain.slice(1).map((link, index) => (
+                    {renderedChain.length > 1 &&
+                      renderedChain.slice(1).map((link, index) => (
                         <g key={`chain-link-${index}`}>
                           <line
-                            x1={link.startX + previewOffsetX}
-                            y1={link.startY + previewOffsetY}
-                            x2={link.endX + previewOffsetX}
-                            y2={link.endY + previewOffsetY}
+                            x1={link.startX}
+                            y1={link.startY}
+                            x2={link.endX}
+                            y2={link.endY}
                             stroke="var(--select-yellow)"
                             strokeWidth={0.035}
                             pointerEvents="none"
                           />
                           <circle
-                            cx={link.endX + previewOffsetX}
-                            cy={link.endY + previewOffsetY}
+                            cx={link.endX}
+                            cy={link.endY}
                             r={markerSize * 0.07 || 0.06}
                             fill="var(--select-yellow)"
                             stroke="black"
@@ -441,40 +462,42 @@ export default function ServerFieldCanvas({
                       ))}
                     {(waypointAnalysis?.controls ?? []).map(
                       (control, controlIndex) => {
+                        const anchor =
+                          renderedChain[control.chainIndex] ?? null;
+                        const anchorX = anchor?.startX ?? control.anchorX;
+                        const anchorY = anchor?.startY ?? control.anchorY;
+                        const anchorHeading =
+                          anchor?.startHeading ?? control.anchorHeading;
                         const positionMagnitude = Math.hypot(
                           control.dx,
                           control.dy
                         );
                         const handleDistance = markerSize * 0.8;
                         const handleX =
-                          control.anchorX +
-                          previewOffsetX +
+                          anchorX +
                           (positionMagnitude > 0
                             ? (control.dx / positionMagnitude) * handleDistance
                             : 0);
                         const handleY =
-                          control.anchorY +
-                          previewOffsetY +
+                          anchorY +
                           (positionMagnitude > 0
                             ? (control.dy / positionMagnitude) * handleDistance
                             : 0);
                         const rotationX =
-                          control.anchorX +
-                          previewOffsetX +
-                          Math.cos(control.anchorHeading + Math.PI / 2) *
+                          anchorX +
+                          Math.cos(anchorHeading + Math.PI / 2) *
                             handleDistance;
                         const rotationY =
-                          control.anchorY +
-                          previewOffsetY +
-                          Math.sin(control.anchorHeading + Math.PI / 2) *
+                          anchorY +
+                          Math.sin(anchorHeading + Math.PI / 2) *
                             handleDistance;
                         return (
                           <g key={`control-${controlIndex}`}>
                             {positionMagnitude > 1e-10 && (
                               <>
                                 <line
-                                  x1={control.anchorX + previewOffsetX}
-                                  y1={control.anchorY + previewOffsetY}
+                                  x1={anchorX}
+                                  y1={anchorY}
                                   x2={handleX}
                                   y2={handleY}
                                   stroke="var(--select-yellow)"
@@ -499,6 +522,7 @@ export default function ServerFieldCanvas({
                                       expression: waypoint.pose.exp,
                                       mode: "position",
                                       control,
+                                      chain: waypointAnalysis?.chain ?? [],
                                       pose: waypointPose
                                     })
                                   }
@@ -526,6 +550,7 @@ export default function ServerFieldCanvas({
                                     expression: waypoint.pose.exp,
                                     mode: "heading",
                                     control,
+                                    chain: waypointAnalysis?.chain ?? [],
                                     pose: waypointPose
                                   })
                                 }
@@ -545,23 +570,26 @@ export default function ServerFieldCanvas({
                 ) {
                   return null;
                 }
-                const pose = variablePose(variable);
-                if (!pose) {
-                  return null;
-                }
                 const controls = variableControls[id] ?? {
                   controls: [],
                   chain: []
                 };
-                if (controls.controls.length === 0) {
+                const pose =
+                  geometryChainPose(controls.chain) ?? variablePose(variable);
+                if (!pose) {
                   return null;
                 }
-                const displayedPose =
+                const activePreview =
                   dragPreview?.id === id && dragPreview.kind === "variable"
-                    ? dragPreview.pose
+                    ? dragPreview
+                    : null;
+                const renderedChain = activePreview
+                  ? activePreview.chain
+                  : composeGeometryChain(controls.chain);
+                const displayedPose =
+                  activePreview
+                    ? activePreview.pose
                     : pose;
-                const previewOffsetX = displayedPose.x - pose.x;
-                const previewOffsetY = displayedPose.y - pose.y;
                 const color = "var(--select-yellow)";
                 return (
                   <g
@@ -576,22 +604,22 @@ export default function ServerFieldCanvas({
                       stroke={color}
                       strokeWidth={0.045}
                     />
-                    {controls.chain.length > 1 &&
-                      controls.chain.slice(1).map((link, linkIndex) => (
+                    {renderedChain.length > 1 &&
+                      renderedChain.slice(1).map((link, linkIndex) => (
                         <g key={`chain-${linkIndex}`}>
                           <line
-                            x1={link.startX + previewOffsetX}
-                            y1={link.startY + previewOffsetY}
-                            x2={link.endX + previewOffsetX}
-                            y2={link.endY + previewOffsetY}
+                            x1={link.startX}
+                            y1={link.startY}
+                            x2={link.endX}
+                            y2={link.endY}
                             stroke={color}
                             strokeWidth={0.035}
                             strokeDasharray={linkIndex === 0 ? "0" : "0.08 0.05"}
                             pointerEvents="none"
                           />
                           <circle
-                            cx={link.endX + previewOffsetX}
-                            cy={link.endY + previewOffsetY}
+                            cx={link.endX}
+                            cy={link.endY}
                             r={fieldMarkerSize * 0.07 || 0.06}
                             fill={color}
                             stroke="black"
@@ -611,37 +639,39 @@ export default function ServerFieldCanvas({
                       {variable.name}
                     </text>
                     {controls.controls.map((control, controlIndex) => {
+                      const anchor =
+                        renderedChain[control.chainIndex] ?? null;
+                      const anchorX = anchor?.startX ?? control.anchorX;
+                      const anchorY = anchor?.startY ?? control.anchorY;
+                      const anchorHeading =
+                        anchor?.startHeading ?? control.anchorHeading;
                       const magnitude = Math.hypot(control.dx, control.dy);
                       const handleDistance = fieldMarkerSize * 0.8;
                       const handleX =
-                        control.anchorX +
-                        previewOffsetX +
+                        anchorX +
                         (magnitude > 0
                           ? (control.dx / magnitude) * handleDistance
                           : 0);
                       const handleY =
-                        control.anchorY +
-                        previewOffsetY +
+                        anchorY +
                         (magnitude > 0
                           ? (control.dy / magnitude) * handleDistance
                           : 0);
                       const rotationX =
-                        control.anchorX +
-                        previewOffsetX +
-                        Math.cos(control.anchorHeading + Math.PI / 2) *
+                        anchorX +
+                        Math.cos(anchorHeading + Math.PI / 2) *
                           handleDistance;
                       const rotationY =
-                        control.anchorY +
-                        previewOffsetY +
-                        Math.sin(control.anchorHeading + Math.PI / 2) *
+                        anchorY +
+                        Math.sin(anchorHeading + Math.PI / 2) *
                           handleDistance;
                       return (
                         <g key={`control-${controlIndex}`}>
                           {magnitude > 1e-10 && (
                             <>
                               <line
-                                x1={control.anchorX + previewOffsetX}
-                                y1={control.anchorY + previewOffsetY}
+                                x1={anchorX}
+                                y1={anchorY}
                                 x2={handleX}
                                 y2={handleY}
                                 stroke={color}
@@ -666,6 +696,7 @@ export default function ServerFieldCanvas({
                                     expression: variable.expression,
                                     mode: "position",
                                     control,
+                                    chain: controls.chain,
                                     pose
                                   })
                                 }
@@ -693,6 +724,7 @@ export default function ServerFieldCanvas({
                                   expression: variable.expression,
                                   mode: "heading",
                                   control,
+                                  chain: controls.chain,
                                   pose
                                 })
                               }

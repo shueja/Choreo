@@ -556,7 +556,7 @@ GeometryDragAnalysis GetGeometryDragControls(
   controls.reserve(tokens.size());
   for (const auto& token : tokens) {
     const double step = std::max(1e-5, std::abs(token.value) * 1e-5);
-    auto replace = [&](double value) -> std::string {
+    auto format = [&](double value) -> std::string {
       char buffer[64];
       const auto converted = std::to_chars(
           std::begin(buffer), std::end(buffer), value,
@@ -565,10 +565,22 @@ GeometryDragAnalysis GetGeometryDragControls(
       if (converted.ec != std::errc{}) {
         return {};
       }
+      return {buffer, converted.ptr};
+    };
+    auto replace = [&](double value) -> std::string {
       std::string updated{expression};
+      const auto replacement = format(value);
       updated.replace(token.start, token.end - token.start,
-                      buffer, converted.ptr - buffer);
+                      replacement);
       return updated;
+    };
+    auto evaluateChangedPrefix = [&](double value, std::size_t end) {
+      std::string updated{expression.substr(0, end)};
+      const auto replacement = format(value);
+      if (token.start < end && token.end <= end) {
+        updated.replace(token.start, token.end - token.start, replacement);
+      }
+      return evaluate(updated);
     };
 
     try {
@@ -588,8 +600,50 @@ GeometryDragAnalysis GetGeometryDragControls(
       }
       const auto chainIndex = chainIndexForToken(token);
       const auto& anchor = analysis.chain.at(chainIndex);
+      GeometryValue segmentStart{};
+      GeometryValue segmentPlus{};
+      GeometryValue segmentMinus{};
+      if (chainIndex == 0) {
+        if (calls.empty()) {
+          segmentPlus = plus;
+          segmentMinus = minus;
+        } else {
+          segmentPlus =
+              evaluateChangedPrefix(token.value + step,
+                                     calls.front().methodStart);
+          segmentMinus =
+              evaluateChangedPrefix(token.value - step,
+                                     calls.front().methodStart);
+        }
+      } else {
+        const auto& call = calls.at(chainIndex - 1);
+        segmentStart = call.start;
+        segmentPlus = evaluateChangedPrefix(token.value + step, call.end + 1);
+        segmentMinus = evaluateChangedPrefix(token.value - step, call.end + 1);
+      }
+      double segmentDx = (segmentPlus.x - segmentMinus.x) * scale;
+      double segmentDy = (segmentPlus.y - segmentMinus.y) * scale;
+      if (chainIndex > 0) {
+        const double cosine = std::cos(segmentStart.heading);
+        const double sine = std::sin(segmentStart.heading);
+        const double localDx = cosine * segmentDx + sine * segmentDy;
+        const double localDy = -sine * segmentDx + cosine * segmentDy;
+        segmentDx = localDx;
+        segmentDy = localDy;
+      }
+      double segmentDheading =
+          std::remainder(segmentPlus.heading - segmentMinus.heading,
+                         2 * std::acos(-1.0)) *
+          scale;
+      if (!std::isfinite(segmentDx) || !std::isfinite(segmentDy) ||
+          !std::isfinite(segmentDheading) ||
+          (std::abs(segmentDx) < 1e-10 && std::abs(segmentDy) < 1e-10 &&
+           std::abs(segmentDheading) < 1e-10)) {
+        continue;
+      }
       controls.push_back({token.start, token.end, token.value, dx, dy,
-                          dheading, chainIndex, anchor.startX,
+                          dheading, segmentDx, segmentDy, segmentDheading,
+                          chainIndex, anchor.startX,
                           anchor.startY, anchor.startHeading});
     } catch (const std::exception&) {
     }
