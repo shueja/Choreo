@@ -146,6 +146,27 @@
         }
       }
     },
+    "/api/v1/session/status": {
+      "get": {
+        "operationId": "getSessionStatus",
+        "summary": "Get active session persistence and revision status",
+        "responses": {
+          "200": {
+            "description": "Session state, published revision, and persistence status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/api/v1/snapshot": {
       "get": {
         "operationId": "getSnapshot",
@@ -1303,6 +1324,43 @@
           }
         },
         "required": ["operationId", "operation", "accepted"],
+        "additionalProperties": false
+      },
+      "SessionStatus": {
+        "type": "object",
+        "properties": {
+          "open": {
+            "type": "boolean"
+          },
+          "projectId": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UUID"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dirty": {
+            "type": "boolean"
+          },
+          "persistenceBlocked": {
+            "type": "boolean"
+          }
+        },
+        "required": ["open", "projectId", "revision", "dirty", "persistenceBlocked"],
         "additionalProperties": false
       },
       "OpenSessionRequest": {

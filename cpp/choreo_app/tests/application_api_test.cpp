@@ -54,6 +54,7 @@ constexpr std::string_view kNewProjectFileName = "Created.chor";
 constexpr std::string_view kSessionOpenPath = "/api/v1/session/open";
 constexpr std::string_view kSessionNewPath = "/api/v1/session/new";
 constexpr std::string_view kSessionClosePath = "/api/v1/session/close";
+constexpr std::string_view kSessionStatusPath = "/api/v1/session/status";
 constexpr std::string_view kSnapshotPath = "/api/v1/snapshot";
 constexpr std::string_view kSavePath = "/api/v1/session/save";
 constexpr std::string_view kEventsPath = "/api/v1/events";
@@ -648,6 +649,10 @@ class ApiTestFixture {
     return HttpRequest(Port(), "GET", kSnapshotPath, {});
   }
 
+  std::pair<int, std::string> SessionStatus() const {
+    return HttpRequest(Port(), "GET", kSessionStatusPath, {});
+  }
+
   std::pair<int, std::string> GetTrajectory(
       std::string_view projectId, std::string_view trajectoryId) const {
     const auto path = "/api/v1/projects/" + std::string{projectId} +
@@ -966,6 +971,73 @@ void TestCloseSessionClearsSnapshot(const std::filesystem::path& executable) {
                   .at("uuid")
                   .get_string() == kTestProjectUuid,
           "close should persist the project before releasing the session");
+}
+
+void TestSessionStatusTracksPersistenceRecovery(
+    const std::filesystem::path& executable) {
+  ApiTestFixture fixture{executable};
+  auto events = fixture.ConnectEvents();
+  Require(static_cast<bool>(events), "event WebSocket should connect");
+
+  const auto [closedStatus, closedBody] = fixture.SessionStatus();
+  Require(closedStatus == kHttpOk, "closed session status should return HTTP 200");
+  auto status = Json::parse_or_throw(closedBody);
+  Require(!status.at("open").get_bool() && status.at("projectId").is_null() &&
+              status.at("revision").is_null() &&
+              !status.at("dirty").get_bool() &&
+              !status.at("persistenceBlocked").get_bool(),
+          "closed session status should report no active document");
+
+  const auto [openStatus, openBody] = fixture.OpenPath(fixture.ProjectPath());
+  const auto openOperationId =
+      AcceptedOperationId(openStatus, openBody, "open");
+  WaitForSessionOperation(events.Get(), openOperationId, "open", "succeeded");
+  const auto [cleanStatus, cleanBody] = fixture.SessionStatus();
+  Require(cleanStatus == kHttpOk, "open session status should return HTTP 200");
+  status = Json::parse_or_throw(cleanBody);
+  Require(status.at("open").get_bool() &&
+              status.at("projectId").get_string() == kTestProjectUuid &&
+              !status.at("dirty").get_bool() &&
+              !status.at("persistenceBlocked").get_bool(),
+          "loaded session should be clean and writable");
+
+  const auto revision =
+      static_cast<std::uint64_t>(status.at("revision").get_number());
+  std::filesystem::remove(fixture.ProjectPath());
+  std::filesystem::create_directory(fixture.ProjectPath());
+  const auto [patchStatus, patchBody] =
+      fixture.PatchProject(kTestProjectUuid, Json::object("name", "Pending"),
+                           revision, kFailedPatchIdempotencyKey);
+  Require(patchStatus == 500 &&
+              Json::parse_or_throw(patchBody).at("code").get_string() ==
+                  "SAVE_FAILED",
+          "failed persistence should reject the project mutation");
+  const auto [blockedStatus, blockedBody] = fixture.SessionStatus();
+  Require(blockedStatus == kHttpOk,
+          "blocked session status should return HTTP 200");
+  status = Json::parse_or_throw(blockedBody);
+  Require(status.at("open").get_bool() && status.at("dirty").get_bool() &&
+              status.at("persistenceBlocked").get_bool() &&
+              static_cast<std::uint64_t>(
+                  status.at("revision").get_number()) == revision,
+          "failed persistence should expose pending changes without advancing "
+          "the published revision");
+
+  std::filesystem::remove(fixture.ProjectPath());
+  const auto [saveStatus, saveBody] = fixture.Save();
+  const auto saveOperationId =
+      AcceptedOperationId(saveStatus, saveBody, "save");
+  WaitForSessionOperation(events.Get(), saveOperationId, "save", "succeeded");
+  const auto [recoveredStatus, recoveredBody] = fixture.SessionStatus();
+  Require(recoveredStatus == kHttpOk,
+          "recovered session status should return HTTP 200");
+  status = Json::parse_or_throw(recoveredBody);
+  Require(status.at("open").get_bool() && !status.at("dirty").get_bool() &&
+              !status.at("persistenceBlocked").get_bool() &&
+              static_cast<std::uint64_t>(
+                  status.at("revision").get_number()) > revision,
+          "successful save should clear the persistence block and publish the "
+          "pending revision");
 }
 
 void TestCloseSessionRetainsSessionWhenSaveFails(
@@ -1664,7 +1736,7 @@ struct TestCase {
   void (*run)(const std::filesystem::path&);
 };
 
-constexpr std::array<TestCase, 16> kTestCases{{
+constexpr std::array<TestCase, 17> kTestCases{{
     {"picker open loads project snapshot", TestPickerOpenLoadsProjectSnapshot},
     {"picker cancellation leaves session closed",
      TestPickerCancellationLeavesSessionClosed},
@@ -1672,6 +1744,8 @@ constexpr std::array<TestCase, 16> kTestCases{{
     {"new session completes asynchronously",
      TestNewSessionCompletesAsynchronously},
     {"close session clears snapshot", TestCloseSessionClearsSnapshot},
+    {"session status tracks persistence recovery",
+     TestSessionStatusTracksPersistenceRecovery},
     {"close retains session when saving fails",
      TestCloseSessionRetainsSessionWhenSaveFails},
     {"session replacement retains current document when save fails",

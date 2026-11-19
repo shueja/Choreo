@@ -67,6 +67,9 @@ disconnect. A client should connect to the WebSocket before fetching
 `/api/v1/snapshot`, apply that snapshot, then refresh it when it receives a
 newer revision or a session event; after reconnecting, fetch a fresh snapshot
 because revisions and missed events are not retained as a transport log.
+`GET /api/v1/session/status` reports whether a session is open, its published
+revision, whether its document differs from persisted files, and whether a
+failed write is blocking further mutations.
 
 When `wpinet` is available, separate CTest cases cover the test-child handoff
 and real-generator differential, swerve, and split scenarios. Set

@@ -273,6 +273,13 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
                                });
                          });
     server.RegisterRoute(
+        "GET", "/api/v1/session/status",
+        [weak](const choreo::api::HttpRequest&) {
+          return WithHttpOwner(weak, [](std::shared_ptr<Impl> self) {
+            return self->SessionStatusResponse();
+          });
+        });
+    server.RegisterRoute(
         "GET", "/api/v1/snapshot", [weak](const choreo::api::HttpRequest&) {
           return WithHttpOwner(weak, [](std::shared_ptr<Impl> self) {
             return self->SnapshotResponse();
@@ -1325,6 +1332,38 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
     response.headers.emplace(
         "ETag", "\"revision-" + std::to_string(snapshot->revision) + "\"");
     return response;
+  }
+
+  ApiResponse SessionStatusResponse() {
+    auto self = shared_from_this();
+    auto result = std::make_shared<std::promise<ApiResponse>>();
+    auto response = result->get_future();
+    if (!Post([self, result] {
+          if (!self->store) {
+            result->set_value(JsonResponse(
+                200, Json::object("open", false, "projectId", nullptr,
+                                  "revision", nullptr, "dirty", false,
+                                  "persistenceBlocked", false)));
+            return;
+          }
+          auto snapshot = self->store->Snapshot();
+          bool dirty = self->store->IsProjectDirty();
+          for (const auto& [id, trajectory] : snapshot->trajectories) {
+            static_cast<void>(trajectory);
+            dirty = dirty || self->store->IsTrajectoryDirty(id);
+          }
+          const auto published = self->publishedSnapshot.load();
+          const auto revision = published ? published->revision : 0;
+          result->set_value(JsonResponse(
+              200, Json::object("open", true, "projectId",
+                                snapshot->project.uuid, "revision", revision,
+                                "dirty", dirty,
+                                "persistenceBlocked",
+                                self->persistenceBlocked)));
+        })) {
+      return ApiError(503, "INTERNAL_ERROR", "API is stopping");
+    }
+    return response.get();
   }
 
   ApiResponse TrajectoryResponse(
