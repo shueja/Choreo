@@ -215,6 +215,30 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
   Impl(choreo::api::ApiServer& serverIn, Options optionsIn)
       : server{serverIn}, options{std::move(optionsIn)} {
     worker = std::thread([this] { RunWorker(); });
+    if (!options.initialProjectPath.empty()) {
+      const auto path = options.initialProjectPath;
+      auto result = std::make_shared<std::promise<ApiResponse>>();
+      auto response = result->get_future();
+      if (!Post([this, path, result] {
+            try {
+              result->set_value(OpenProject(path, false));
+            } catch (...) {
+              result->set_exception(std::current_exception());
+            }
+          })) {
+        StopWorker();
+        throw std::runtime_error("application worker is stopping");
+      }
+      try {
+        auto initialResponse = response.get();
+        if (initialResponse.status < 200 || initialResponse.status >= 300) {
+          throw std::runtime_error(initialResponse.body);
+        }
+      } catch (...) {
+        StopWorker();
+        throw;
+      }
+    }
   }
 
   ~Impl() { StopWorker(); }
@@ -604,7 +628,8 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
     return OperationAccepted(operationId, "open");
   }
 
-  ApiResponse OpenProject(const std::filesystem::path& projectPath) {
+  ApiResponse OpenProject(const std::filesystem::path& projectPath,
+                          bool notify = true) {
     auto files = DiscoverFiles(projectPath);
     auto document = ReadDocument(files);
     if (auto failure = PersistActiveSession()) {
@@ -615,7 +640,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
     replacement->ReloadFiles(files);
     store = std::move(replacement);
     documentFiles = std::move(files);
-    PublishSnapshot();
+    PublishSnapshot(notify);
     return JsonResponse(200, Json::object("status", "opened"));
   }
 
@@ -1490,10 +1515,10 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
                         std::move(trajectories));
   }
 
-  void PublishSnapshot() {
+  void PublishSnapshot(bool notify = true) {
     if (!store) {
       auto previous = publishedSnapshot.exchange({});
-      if (previous) {
+      if (previous && notify) {
         server.BroadcastText(
             "/api/v1/events",
             Json::object("type", "session.closed", "projectId",
@@ -1512,7 +1537,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
     auto snapshot = std::make_shared<const PublishedSnapshot>(
         PublishedSnapshot{revision, projectId, std::move(body)});
     publishedSnapshot.store(std::move(snapshot));
-    if (changed) {
+    if (changed && notify) {
       server.BroadcastText(
           "/api/v1/events",
           Json::object("type", "document.changed", "projectId", projectId,

@@ -51,7 +51,9 @@ ephemeral port, and prints one JSON readiness record to stdout:
 ```
 
 Pass the Vite output directory with `--web-root PATH` to serve its static
-assets, and configure an optional generator path with `--generator PATH`.
+assets, load a project before the server reports readiness with
+`--project PATH`, and configure an optional generator path with
+`--generator PATH`.
 Repeat `--allowed-origin ORIGIN` to permit cross-origin UI clients. The default
 Vite output directory is `dist`. The current host does not yet open a browser
 or provide a native project picker. Open projects using the API's path-based

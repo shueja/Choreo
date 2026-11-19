@@ -585,7 +585,8 @@ struct DeferredPicker {
 class ApiTestFixture {
  public:
   explicit ApiTestFixture(const std::filesystem::path& executable,
-                          PickerMode pickerMode = PickerMode::SelectImmediately)
+                          PickerMode pickerMode = PickerMode::SelectImmediately,
+                          bool openProjectAtStartup = false)
       : projectPath_{directory_.Path() / kProjectFileName},
         trajectoryPath_{directory_.Path() / kTrajectoryFileName},
         deferredPicker_{std::make_shared<DeferredPicker>()} {
@@ -593,6 +594,9 @@ class ApiTestFixture {
     WriteInitialDocuments();
     ApplicationApi::Options options;
     options.generatorExecutable = std::filesystem::absolute(executable);
+    if (openProjectAtStartup) {
+      options.initialProjectPath = projectPath_;
+    }
     options.promptForProjectPath = [path = projectPath_, pickerMode,
                                     deferred = deferredPicker_](auto complete) {
       if (pickerMode == PickerMode::CancelImmediately) {
@@ -912,6 +916,23 @@ void TestInvalidProjectPathIsRejected(const std::filesystem::path& executable) {
   Require(
       Json::parse_or_throw(body).at("code").get_string() == "VALIDATION_ERROR",
       "invalid path should report VALIDATION_ERROR");
+}
+
+void TestStartupProjectLoadsDocument(
+    const std::filesystem::path& executable) {
+  ApiTestFixture fixture{executable, PickerMode::SelectImmediately, true};
+  const auto [snapshotStatus, snapshotBody] = fixture.Snapshot();
+  Require(snapshotStatus == kHttpOk,
+          "startup project should be available before serving requests");
+  const auto snapshot = Json::parse_or_throw(snapshotBody);
+  Require(snapshot.at("project").at("uuid").get_string() == kTestProjectUuid,
+          "startup should load the requested project");
+  Require(snapshot.at("trajectories").get_array().size() == 1,
+          "startup should load sibling trajectory files");
+  const auto [statusCode, statusBody] = fixture.SessionStatus();
+  Require(statusCode == kHttpOk &&
+              !Json::parse_or_throw(statusBody).at("dirty").get_bool(),
+          "startup-loaded project should begin in a clean state");
 }
 
 void TestNewSessionCompletesAsynchronously(
@@ -1736,11 +1757,12 @@ struct TestCase {
   void (*run)(const std::filesystem::path&);
 };
 
-constexpr std::array<TestCase, 17> kTestCases{{
+constexpr std::array<TestCase, 18> kTestCases{{
     {"picker open loads project snapshot", TestPickerOpenLoadsProjectSnapshot},
     {"picker cancellation leaves session closed",
      TestPickerCancellationLeavesSessionClosed},
     {"invalid project path is rejected", TestInvalidProjectPathIsRejected},
+    {"startup project loads document", TestStartupProjectLoadsDocument},
     {"new session completes asynchronously",
      TestNewSessionCompletesAsynchronously},
     {"close session clears snapshot", TestCloseSessionClearsSnapshot},

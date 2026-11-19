@@ -23,6 +23,7 @@ void RequestShutdown(int) {
 
 struct Arguments {
   std::uint16_t port = 0;
+  std::filesystem::path projectPath;
   std::filesystem::path webRoot;
   std::string generator;
   std::vector<std::string> allowedOrigins;
@@ -49,7 +50,8 @@ bool ParseArguments(int argc, char** argv, Arguments& arguments,
       arguments.showHelp = true;
       continue;
     }
-    if (argument != "--port" && argument != "--generator" &&
+    if (argument != "--port" && argument != "--project" &&
+        argument != "--generator" &&
         argument != "--allowed-origin" && argument != "--web-root") {
       error = "unknown argument: " + std::string{argument};
       return false;
@@ -68,6 +70,8 @@ bool ParseArguments(int argc, char** argv, Arguments& arguments,
         error = "port must be an integer from 0 to 65535";
         return false;
       }
+    } else if (argument == "--project") {
+      arguments.projectPath = value;
     } else if (argument == "--generator") {
       arguments.generator = value;
     } else if (argument == "--web-root") {
@@ -80,7 +84,8 @@ bool ParseArguments(int argc, char** argv, Arguments& arguments,
 }
 
 void PrintUsage(std::ostream& output) {
-  output << "Usage: choreo-server [--port PORT] [--generator PATH] "
+  output << "Usage: choreo-server [--port PORT] [--project PATH] "
+            "[--generator PATH] "
             "[--web-root PATH] [--allowed-origin ORIGIN...]\n"
             "Starts the localhost Choreo application API. Port 0 selects "
             "an available port.\n";
@@ -116,6 +121,7 @@ int main(int argc, char** argv) {
 
     choreo::document::ApplicationApi::Options applicationOptions;
     applicationOptions.generatorExecutable = arguments.generator;
+    applicationOptions.initialProjectPath = arguments.projectPath;
     choreo::document::ApplicationApi applicationApi{
         server, std::move(applicationOptions)};
 
