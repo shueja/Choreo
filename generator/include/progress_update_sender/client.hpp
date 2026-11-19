@@ -16,18 +16,6 @@
 
 #include "wpi/net/WebSocket.hpp"
 
-/*
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-#[allow(clippy::large_enum_variant)]
-pub enum RemoteProgressUpdate {
-    // Swerve variant
-    IncompleteSwerveTrajectory(Vec<Sample>),
-    // Diff variant
-    IncompleteTankTrajectory(Vec<Sample>),
-    IntervalCounts(Vec<usize>),
-    CompleteTrajectory(Trajectory),
-    Error(ChoreoError),
-}*/
 namespace choreo::progress_update_sender {
 
 class Client {

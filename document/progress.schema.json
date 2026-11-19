@@ -90,7 +90,7 @@
       "additionalProperties": false
     },
     "ProgressUpdateMessage": {
-      "description": "All supported JSON progress update messages emitted by the C++ progress-update-sender.",
+      "description": "All supported JSON progress update messages emitted by the C++ generator.",
       "oneOf": [
         { "$ref": "#/$defs/IncompleteTrajectoryProgressMessage" },
         { "$ref": "#/$defs/DiagnosticProgressMessage" },
