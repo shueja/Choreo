@@ -3,7 +3,7 @@
   "info": {
     "title": "Choreo Local API",
     "version": "1.0.0",
-    "description": "Resource-oriented API for the locally running Choreo server. The server owns one active project. Session open/new/save and generation-start requests return 202 after enqueueing work; operation outcomes and generator progress arrive over the WebSocket event channel. Subscribe before issuing long-running requests. Events are not replayed, so clients must refetch the snapshot after a revision gap."
+    "description": "Resource-oriented API for the locally running Choreo server. The server owns one active project. Session open/new/close/save and generation-start requests return 202 after enqueueing work; operation outcomes, committed document revisions, and generator progress arrive over the WebSocket event channel. Connect before fetching the snapshot, buffer events during the fetch, and apply events newer than the snapshot revision. Events are not replayed, so clients must refetch the snapshot after reconnecting or detecting a revision gap."
   },
   "servers": [
     {
@@ -1296,7 +1296,7 @@
             "$ref": "#/components/schemas/UUID"
           },
           "operation": {
-            "enum": ["open", "new", "save"]
+            "enum": ["open", "new", "close", "save"]
           },
           "accepted": {
             "const": true
@@ -1649,6 +1649,9 @@
             "$ref": "#/components/schemas/DocumentChangedEvent"
           },
           {
+            "$ref": "#/components/schemas/SessionClosedEvent"
+          },
+          {
             "$ref": "#/components/schemas/SessionOperationEvent"
           },
           {
@@ -1671,37 +1674,32 @@
           "type": {
             "const": "document.changed"
           },
-          "revision": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "requestId": {
+          "projectId": {
             "$ref": "#/components/schemas/UUID"
           },
-          "resource": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "enum": [
-                  "project",
-                  "trajectory",
-                  "waypoint",
-                  "constraint",
-                  "event-marker"
-                ]
-              },
-              "id": {
-                "$ref": "#/components/schemas/UUID"
-              },
-              "action": {
-                "enum": ["created", "updated", "deleted"]
-              }
-            },
-            "required": ["type", "id", "action"],
-            "additionalProperties": false
+          "revision": {
+            "type": "integer",
+            "minimum": 0
           }
         },
-        "required": ["type", "revision", "requestId", "resource"],
+        "required": ["type", "projectId", "revision"],
+        "additionalProperties": false
+      },
+      "SessionClosedEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "session.closed"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["type", "projectId", "revision"],
         "additionalProperties": false
       },
       "SessionOperationEvent": {
@@ -1714,7 +1712,7 @@
             "$ref": "#/components/schemas/UUID"
           },
           "operation": {
-            "enum": ["open", "new", "save"]
+            "enum": ["open", "new", "close", "save"]
           },
           "status": {
             "enum": ["running", "succeeded", "failed", "cancelled"]
