@@ -18,13 +18,14 @@ wpi::util::json Waypoint::ToJson() const {
   json["fixTranslation"] = fixTranslation;
   json["fixHeading"] = fixHeading;
   json["overrideIntervals"] = overrideIntervals;
+  json["allowDrag"] = detail::WriteAllowDrag(allowDrag);
   return json;
 }
 
 Waypoint Waypoint::FromJson(const wpi::util::json& json) {
   detail::CheckProperties(
       json, {"uuid", "pose", "intervals", "split", "fixTranslation",
-             "fixHeading", "overrideIntervals"});
+             "fixHeading", "overrideIntervals", "allowDrag"});
   const auto& intervals = json.at("intervals");
   if (!intervals.is_int() || intervals.get_int() < 0 ||
       intervals.get_int() > std::numeric_limits<std::uint32_t>::max()) {
@@ -33,13 +34,17 @@ Waypoint Waypoint::FromJson(const wpi::util::json& json) {
   }
         const auto uuid = json.at("uuid").get_string();
         detail::CheckUuid(uuid);
-        return {uuid,
-          PoseExpression::FromJson(json.at("pose")),
-          static_cast<std::uint32_t>(intervals.get_int()),
-          json.at("split").get_bool(),
-          json.at("fixTranslation").get_bool(),
-          json.at("fixHeading").get_bool(),
-          json.at("overrideIntervals").get_bool()};
+  Waypoint result{uuid,
+                  PoseExpression::FromJson(json.at("pose")),
+                  static_cast<std::uint32_t>(intervals.get_int()),
+                  json.at("split").get_bool(),
+                  json.at("fixTranslation").get_bool(),
+                  json.at("fixHeading").get_bool(),
+                  json.at("overrideIntervals").get_bool()};
+  if (json.contains("allowDrag")) {
+    result.allowDrag = detail::ReadAllowDrag(json.at("allowDrag"));
+  }
+  return result;
 }
 
 void to_json(wpi::util::json& json, const Waypoint& waypoint) {

@@ -39,6 +39,7 @@ class Variable {
   VariableType type = VariableType::Quantity;
   std::optional<std::map<std::string, int>> dimension;
   VariableValue value;
+  std::map<std::string, bool> allowDrag;
 };
 
 void to_json(wpi::util::json& json, const Variable& variable);

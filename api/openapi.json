@@ -1601,6 +1601,9 @@
       "VariablePatch": {
         "type": "object",
         "properties": {
+          "allowDrag": {
+            "$ref": "../document/shared.schema.json#/$defs/AxisDrag"
+          },
           "name": {
             "type": "string",
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
@@ -1635,6 +1638,9 @@
       "WaypointPatch": {
         "type": "object",
         "properties": {
+          "allowDrag": {
+            "$ref": "../document/shared.schema.json#/$defs/AxisDrag"
+          },
           "pose": {
             "$ref": "../document/shared.schema.json#/$defs/PoseExpr"
           },

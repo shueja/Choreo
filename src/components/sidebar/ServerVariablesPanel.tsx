@@ -192,6 +192,10 @@ interface Props {
   order: string[];
   disabled: boolean;
   onExpressionChange: (id: string, expression: string) => void;
+  onAllowDragChange: (
+    id: string,
+    allowDrag: NonNullable<ServerVariable["allowDrag"]>
+  ) => void;
   onNameChange: (id: string, name: string) => void;
   onAdd: (variable: ServerVariable) => void;
   onDelete: (id: string) => void;
@@ -233,6 +237,7 @@ interface VariableDeclarationProps {
   variable: ServerVariable;
   disabled: boolean;
   onExpressionChange: Props["onExpressionChange"];
+  onAllowDragChange: Props["onAllowDragChange"];
   onNameChange: Props["onNameChange"];
   onDelete: Props["onDelete"];
   onMove: (id: string, offset: -1 | 1) => void;
@@ -245,6 +250,7 @@ function VariableDeclaration({
   variable,
   disabled,
   onExpressionChange,
+  onAllowDragChange,
   onNameChange,
   onDelete,
   onMove
@@ -269,6 +275,17 @@ function VariableDeclaration({
   const qualifiedName = variable.namespacePath
     ? `${variable.namespacePath}.${name}`
     : name;
+  const dragAxes =
+    variable.type === "Pose2d"
+      ? ["x", "y", "heading"] as const
+      : variable.type === "Translation2d"
+        ? ["x", "y"] as const
+        : [];
+  const allowDrag = variable.allowDrag ?? {
+    x: true,
+    y: true,
+    heading: true
+  };
 
   return (
     <div className={styles.declaration}>
@@ -305,6 +322,27 @@ function VariableDeclaration({
           onCommit={(expression) => onExpressionChange(id, expression.exp)}
         />
       </div>
+      {dragAxes.length > 0 && (
+        <div className={styles.dragControls}>
+          {dragAxes.map((axis) => (
+            <label key={axis}>
+              <span>{axis === "heading" ? "Heading" : axis.toUpperCase()}</span>
+              <input
+                type="checkbox"
+                aria-label={`Allow field drag for ${qualifiedName} ${axis}`}
+                checked={allowDrag[axis] ?? true}
+                disabled={disabled}
+                onChange={(event) =>
+                  onAllowDragChange(id, {
+                    ...allowDrag,
+                    [axis]: event.target.checked
+                  })
+                }
+              />
+            </label>
+          ))}
+        </div>
+      )}
       <div className={styles.actions}>
         <Tooltip title="Move variable up">
           <span>
@@ -352,6 +390,7 @@ export default function ServerVariablesPanel({
   order,
   disabled,
   onExpressionChange,
+  onAllowDragChange,
   onNameChange,
   onAdd,
   onDelete,
@@ -418,6 +457,7 @@ export default function ServerVariablesPanel({
             variable={variables[id]}
             disabled={disabled}
             onExpressionChange={onExpressionChange}
+            onAllowDragChange={onAllowDragChange}
             onNameChange={onNameChange}
             onDelete={onDelete}
             onMove={moveVariable}

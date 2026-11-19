@@ -15,6 +15,10 @@
           "$ref": "./shared.schema.json#/$defs/PoseExpr",
           "description": "Position and heading (m, rad)"
         },
+        "allowDrag": {
+          "$ref": "./shared.schema.json#/$defs/AxisDrag",
+          "description": "Per-axis field-handle permissions for the waypoint pose."
+        },
         "intervals": {
           "type": "integer",
           "minimum": 0,

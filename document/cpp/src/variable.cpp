@@ -174,6 +174,9 @@ void to_json(json& serialized, const Variable& variable) {
         }
       },
       variable.value);
+  if (!variable.allowDrag.empty()) {
+    serialized["allowDrag"] = detail::WriteAllowDrag(variable.allowDrag);
+  }
   ReadVariableValue(serialized.at("value"), variable.type);
   if (variable.dimension) {
     json dimension = json::object();
@@ -189,7 +192,8 @@ void to_json(json& serialized, const Variable& variable) {
 
 void from_json(const json& serialized, Variable& variable) {
   detail::CheckProperties(serialized, {"name", "namespacePath", "expression",
-                                       "type", "dimension", "value"});
+                                       "type", "dimension", "value",
+                                       "allowDrag"});
   Variable result;
   result.name = serialized.at("name").get_string();
   result.namespacePath = serialized.at("namespacePath").get_string();
@@ -203,6 +207,9 @@ void from_json(const json& serialized, Variable& variable) {
         "geometry variables cannot have scalar dimensions");
   }
   result.value = ReadVariableValue(serialized.at("value"), result.type);
+  if (serialized.contains("allowDrag")) {
+    result.allowDrag = detail::ReadAllowDrag(serialized.at("allowDrag"));
+  }
   variable = std::move(result);
 }
 

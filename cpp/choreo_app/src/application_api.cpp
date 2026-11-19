@@ -30,6 +30,7 @@
 #include "choreo/document/document.hpp"
 #include "choreo/document/document_store.hpp"
 #include "choreo/document/generation_process.hpp"
+#include "choreo/document/json_validation.hpp"
 
 namespace choreo::document {
 namespace {
@@ -1315,9 +1316,10 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             Json patch;
             std::optional<std::string> name;
             std::optional<std::string> expression;
+            std::optional<std::map<std::string, bool>> allowDrag;
             try {
               patch = Json::parse_or_throw(body);
-              if (!HasOnlyKeys(patch, {"name", "expression"})) {
+              if (!HasOnlyKeys(patch, {"name", "expression", "allowDrag"})) {
                 result->set_value(
                     ApiError(400, "VALIDATION_ERROR",
                              "Variable patch must contain name or expression"));
@@ -1329,6 +1331,9 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
               if (patch.contains("expression")) {
                 expression = patch.at("expression").get_string();
               }
+              if (patch.contains("allowDrag")) {
+                allowDrag = detail::ReadAllowDrag(patch.at("allowDrag"));
+              }
             } catch (const std::exception& error) {
               result->set_value(
                   ApiError(400, "VALIDATION_ERROR", error.what()));
@@ -1336,7 +1341,8 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             }
 
             const auto previousRevision = self->store->Revision();
-            self->store->UpdateVariable(variableId, name, expression);
+            self->store->UpdateVariable(variableId, name, expression,
+                                        allowDrag);
             if (self->store->Revision() != previousRevision) {
               self->PersistFilesIfNamedAsync();
               self->PublishSnapshot(true, idempotencyKey);
@@ -1462,7 +1468,8 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
               if (field == "waypoints" &&
                   !HasOnlyKeys(item,
                                {"pose", "intervals", "split", "fixTranslation",
-                                "fixHeading", "overrideIntervals"})) {
+                                "fixHeading", "overrideIntervals",
+                                "allowDrag"})) {
                 result->set_value(ApiError(400, "VALIDATION_ERROR",
                                            "Invalid waypoint patch fields"));
                 return;

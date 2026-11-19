@@ -179,13 +179,14 @@ void DocumentStore::RenameVariable(const std::string& id,
 
 void DocumentStore::UpdateVariable(
     const std::string& id, const std::optional<std::string>& name,
-    const std::optional<std::string>& expression) {
+    const std::optional<std::string>& expression,
+    const std::optional<std::map<std::string, bool>>& allowDrag) {
   auto candidate = *Snapshot();
   auto target = candidate.project.variables.find(id);
   if (target == candidate.project.variables.end()) {
     throw std::invalid_argument("unknown variable ID: " + id);
   }
-  if (!name && !expression) {
+  if (!name && !expression && !allowDrag) {
     throw std::invalid_argument("variable patch must contain editable fields");
   }
   if (name && *name != target->second.name) {
@@ -193,6 +194,9 @@ void DocumentStore::UpdateVariable(
   }
   if (expression) {
     candidate.project.variables.at(id).expression = *expression;
+  }
+  if (allowDrag) {
+    candidate.project.variables.at(id).allowDrag = *allowDrag;
   }
   Commit(std::move(candidate));
 }

@@ -83,6 +83,31 @@ export default function ServerWaypointEditor({
           enabled={!disabled}
           onCommit={onSave}
         />
+        <div className={styles.dragControls}>
+          {(["x", "y", "heading"] as const).map((axis) => (
+            <label key={axis}>
+              <span>{axis === "heading" ? "Heading" : axis.toUpperCase()}</span>
+              <input
+                type="checkbox"
+                aria-label={`Allow field drag for waypoint ${index + 1} ${axis}`}
+                checked={waypoint.allowDrag?.[axis] ?? true}
+                disabled={disabled}
+                onChange={(event) =>
+                  onOptionsChange({
+                    allowDrag: {
+                      ...(waypoint.allowDrag ?? {
+                        x: true,
+                        y: true,
+                        heading: true
+                      }),
+                      [axis]: event.target.checked
+                    }
+                  })
+                }
+              />
+            </label>
+          ))}
+        </div>
       </div>
       <div className={styles.controls}>
         <div className={InputStyles.InputList}>

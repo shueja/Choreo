@@ -38,6 +38,10 @@
     "VariableBase": {
       "type": "object",
       "properties": {
+        "allowDrag": {
+          "$ref": "./shared.schema.json#/$defs/AxisDrag",
+          "description": "Per-axis field-handle permissions for geometry variables."
+        },
         "name": {
           "type": "string",
           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
