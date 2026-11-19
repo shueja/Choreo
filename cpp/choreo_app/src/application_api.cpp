@@ -11,6 +11,7 @@
 #include <deque>
 #include <fstream>
 #include <future>
+#include <initializer_list>
 #include <iterator>
 #include <map>
 #include <mutex>
@@ -49,6 +50,35 @@ ApiResponse OperationAccepted(std::string_view operationId,
                               std::string_view operation) {
   return JsonResponse(202, Json::object("operationId", operationId, "operation",
                                         operation, "accepted", true));
+}
+
+void ApplyMergePatch(Json& target, const Json& patch) {
+  if (!patch.is_object()) {
+    target = patch;
+    return;
+  }
+  if (!target.is_object()) {
+    target = Json::object();
+  }
+  for (const auto& [key, value] : patch.get_object()) {
+    if (value.is_null()) {
+      target.erase(key);
+    } else {
+      ApplyMergePatch(target[key], value);
+    }
+  }
+}
+
+bool HasOnlyKeys(const Json& value,
+                 std::initializer_list<std::string_view> allowedKeys) {
+  if (!value.is_object() || value.empty()) {
+    return false;
+  }
+  return std::all_of(value.get_object().begin(), value.get_object().end(),
+                     [&](const auto& item) {
+                       return std::find(allowedKeys.begin(), allowedKeys.end(),
+                                        item.first) != allowedKeys.end();
+                     });
 }
 
 std::string ReadText(const std::filesystem::path& path) {
@@ -254,6 +284,13 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
                                  return self->ProjectResponse(request);
                                });
                          });
+    server.RegisterRoute("PATCH", "/api/v1/projects/{projectId}",
+                         [weak](const choreo::api::HttpRequest& request) {
+                           return WithHttpOwner(
+                               weak, [&request](std::shared_ptr<Impl> self) {
+                                 return self->PatchResource(request, true);
+                               });
+                         });
     server.RegisterRoute("GET", "/api/v1/projects/{projectId}/trajectories",
                          [weak](const choreo::api::HttpRequest& request) {
                            return WithHttpOwner(
@@ -266,6 +303,13 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         [weak](const choreo::api::HttpRequest& request) {
           return WithHttpOwner(weak, [&request](std::shared_ptr<Impl> self) {
             return self->TrajectoryResponse(request);
+          });
+        });
+    server.RegisterRoute(
+        "PATCH", "/api/v1/projects/{projectId}/trajectories/{trajectoryId}",
+        [weak](const choreo::api::HttpRequest& request) {
+          return WithHttpOwner(weak, [&request](std::shared_ptr<Impl> self) {
+            return self->PatchResource(request, false);
           });
         });
     struct SubresourceRoute {
@@ -673,6 +717,158 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         500, Json::object("code", "SAVE_FAILED", "message",
                           "One or more files could not be saved", "details",
                           std::move(details)));
+  }
+
+  ApiResponse PatchResource(const choreo::api::HttpRequest& request,
+                            bool projectResource) {
+    const auto expectedRevision = RevisionFromTag(request.Header("if-match"));
+    const auto idempotencyKey = std::string{request.Header("idempotency-key")};
+    const auto contentType = Lower(std::string{request.Header("content-type")});
+    constexpr std::string_view mergePatchContentType =
+        "application/merge-patch+json";
+    if (!expectedRevision || idempotencyKey.empty() ||
+        !(contentType == mergePatchContentType ||
+          contentType.starts_with(std::string{mergePatchContentType} + ";"))) {
+      return ApiError(
+          400, "VALIDATION_ERROR",
+          "If-Match, Idempotency-Key, and merge-patch JSON are required");
+    }
+
+    const auto projectId = request.pathParameters.at("projectId");
+    const auto trajectoryId = projectResource
+                                  ? std::string{}
+                                  : request.pathParameters.at("trajectoryId");
+    const auto operation = projectResource ? std::string{"patch-project"}
+                                           : std::string{"patch-trajectory"};
+    const auto fingerprint = operation + "/" + request.path + "/" +
+                             std::to_string(*expectedRevision) + "/" +
+                             request.body;
+    std::string body = request.body;
+    auto self = shared_from_this();
+    auto result = std::make_shared<std::promise<ApiResponse>>();
+    auto response = result->get_future();
+    if (!Post([self, expectedRevision = *expectedRevision, idempotencyKey,
+               fingerprint, projectId, trajectoryId, projectResource,
+               body = std::move(body), result] {
+          try {
+            const auto cached = self->idempotentMutations.find(idempotencyKey);
+            if (cached != self->idempotentMutations.end()) {
+              if (cached->second.requestTarget != fingerprint) {
+                result->set_value(
+                    ApiError(409, "IDEMPOTENCY_KEY_REUSE",
+                             "Idempotency key was reused for another request"));
+              } else {
+                result->set_value(cached->second.response);
+              }
+              return;
+            }
+
+            if (!self->store) {
+              result->set_value(
+                  ApiError(409, "SESSION_NOT_OPEN", "No project is open"));
+              return;
+            }
+            if (self->persistenceBlocked) {
+              result->set_value(ApiError(
+                  409, "SAVE_FAILED",
+                  "Save the active session before changing the document"));
+              return;
+            }
+            const auto snapshot = self->store->Snapshot();
+            if (snapshot->project.uuid != projectId) {
+              result->set_value(
+                  ApiError(404, "RESOURCE_NOT_FOUND", "Project was not found"));
+              return;
+            }
+            if (self->store->Revision() != expectedRevision) {
+              result->set_value(JsonResponse(
+                  409,
+                  Json::object("code", "REVISION_CONFLICT", "message",
+                               "Document revision is stale", "currentRevision",
+                               self->store->Revision())));
+              return;
+            }
+
+            Json patch;
+            try {
+              patch = Json::parse_or_throw(body);
+            } catch (const std::exception& error) {
+              result->set_value(
+                  ApiError(400, "VALIDATION_ERROR", error.what()));
+              return;
+            }
+
+            Document candidate = *snapshot;
+            if (projectResource) {
+              if (!HasOnlyKeys(patch, {"name", "type", "variables", "config",
+                                       "codegen"})) {
+                result->set_value(ApiError(
+                    400, "VALIDATION_ERROR",
+                    "Project patch must contain editable project fields"));
+                return;
+              }
+              Json updated = snapshot->project;
+              ApplyMergePatch(updated, patch);
+              candidate.project = updated.get<Project>();
+            } else {
+              const auto* original = snapshot->trajectories.find(trajectoryId);
+              if (!original) {
+                result->set_value(ApiError(404, "RESOURCE_NOT_FOUND",
+                                           "Trajectory was not found"));
+                return;
+              }
+              if (!HasOnlyKeys(patch, {"name", "params", "events"})) {
+                result->set_value(ApiError(400, "VALIDATION_ERROR",
+                                           "Trajectory patch must contain "
+                                           "editable trajectory fields"));
+                return;
+              }
+              Json updated = *original;
+              ApplyMergePatch(updated, patch);
+              auto trajectory = updated.get<Trajectory>();
+              if (trajectory.uuid != trajectoryId) {
+                result->set_value(
+                    ApiError(400, "VALIDATION_ERROR",
+                             "Trajectory UUID cannot be changed"));
+                return;
+              }
+              candidate.trajectories = candidate.trajectories.set(
+                  trajectoryId, std::move(trajectory));
+            }
+
+            const auto previousRevision = self->store->Revision();
+            self->store->Commit(std::move(candidate), expectedRevision);
+            if (self->store->Revision() != previousRevision) {
+              if (auto failure = self->PersistFiles(self->documentFiles)) {
+                result->set_value(*failure);
+                return;
+              }
+              self->PublishSnapshot();
+            }
+
+            ApiResponse mutation{
+                200,
+                "application/json",
+                Json::object("requestId", idempotencyKey, "revision",
+                             self->store->Revision())
+                    .to_string(),
+                {}};
+            mutation.headers.emplace(
+                "ETag",
+                "\"revision-" + std::to_string(self->store->Revision()) + "\"");
+            self->idempotentMutations.emplace(
+                idempotencyKey, CachedMutation{fingerprint, mutation});
+            result->set_value(std::move(mutation));
+          } catch (const std::exception& error) {
+            result->set_value(ApiError(422, "VALIDATION_ERROR", error.what()));
+          } catch (...) {
+            result->set_value(
+                ApiError(500, "INTERNAL_ERROR", "Document update failed"));
+          }
+        })) {
+      return ApiError(503, "INTERNAL_ERROR", "API is stopping");
+    }
+    return response.get();
   }
 
   ApiResponse HistoryAction(const choreo::api::HttpRequest& request,

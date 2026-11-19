@@ -69,6 +69,12 @@ constexpr std::string_view kFailedUndoIdempotencyKey =
     "00000000-0000-4000-8000-000000009005";
 constexpr std::string_view kStaleUndoIdempotencyKey =
     "00000000-0000-4000-8000-000000009006";
+constexpr std::string_view kProjectPatchIdempotencyKey =
+    "00000000-0000-4000-8000-000000009007";
+constexpr std::string_view kTrajectoryPatchIdempotencyKey =
+    "00000000-0000-4000-8000-000000009008";
+constexpr std::string_view kFailedPatchIdempotencyKey =
+    "00000000-0000-4000-8000-000000009009";
 constexpr int kHttpOk = 200;
 constexpr int kHttpAccepted = 202;
 constexpr int kHttpBadRequest = 400;
@@ -366,11 +372,10 @@ std::string ReadRequestBody(Socket socket) {
   return response.substr(separator + 4);
 }
 
-std::pair<int, std::string> HttpRequest(std::uint16_t port,
-                                        std::string_view method,
-                                        std::string_view path,
-                                        std::string_view body,
-                                        std::string_view extraHeaders = {}) {
+std::pair<int, std::string> HttpRequest(
+    std::uint16_t port, std::string_view method, std::string_view path,
+    std::string_view body, std::string_view extraHeaders = {},
+    std::string_view contentType = "application/json") {
   SocketHandle socket{Connect(port)};
   if (!socket) {
     return {0, {}};
@@ -379,8 +384,8 @@ std::pair<int, std::string> HttpRequest(std::uint16_t port,
                         " HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(port) +
                         "\r\n";
   if (!body.empty()) {
-    request += "Content-Type: application/json\r\nContent-Length: " +
-               std::to_string(body.size()) + "\r\n";
+    request += "Content-Type: " + std::string{contentType} +
+               "\r\nContent-Length: " + std::to_string(body.size()) + "\r\n";
   }
   request += extraHeaders;
   request += "Connection: close\r\n\r\n";
@@ -658,6 +663,30 @@ class ApiTestFixture {
 
   std::pair<int, std::string> Save() const {
     return HttpRequest(Port(), "POST", kSavePath, "{}");
+  }
+
+  std::pair<int, std::string> PatchProject(
+      std::string_view projectId, const Json& patch, std::uint64_t revision,
+      std::string_view idempotencyKey) const {
+    const auto path = "/api/v1/projects/" + std::string{projectId};
+    const auto headers =
+        "If-Match: \"revision-" + std::to_string(revision) + "\"\r\n" +
+        "Idempotency-Key: " + std::string{idempotencyKey} + "\r\n";
+    return HttpRequest(Port(), "PATCH", path, patch.to_string(), headers,
+                       "application/merge-patch+json");
+  }
+
+  std::pair<int, std::string> PatchTrajectory(
+      std::string_view projectId, std::string_view trajectoryId,
+      const Json& patch, std::uint64_t revision,
+      std::string_view idempotencyKey) const {
+    const auto path = "/api/v1/projects/" + std::string{projectId} +
+                      "/trajectories/" + std::string{trajectoryId};
+    const auto headers =
+        "If-Match: \"revision-" + std::to_string(revision) + "\"\r\n" +
+        "Idempotency-Key: " + std::string{idempotencyKey} + "\r\n";
+    return HttpRequest(Port(), "PATCH", path, patch.to_string(), headers,
+                       "application/merge-patch+json");
   }
 
   std::pair<int, std::string> HistoryAction(
@@ -1130,6 +1159,107 @@ void TestSaveRestoresPersistedProjectFiles(
           "save should restore the trajectory document");
 }
 
+void TestProjectAndTrajectoryPatches(const std::filesystem::path& executable) {
+  ApiTestFixture fixture{executable};
+  auto events = fixture.ConnectEvents();
+  Require(static_cast<bool>(events), "event WebSocket should connect");
+  const auto [openStatus, openBody] = fixture.OpenPath(fixture.ProjectPath());
+  const auto openOperationId =
+      AcceptedOperationId(openStatus, openBody, "open");
+  WaitForSessionOperation(events.Get(), openOperationId, "open", "succeeded");
+
+  const auto [initialSnapshotStatus, initialSnapshotBody] = fixture.Snapshot();
+  Require(initialSnapshotStatus == kHttpOk,
+          "snapshot should be available before patching");
+  const auto initialRevision = static_cast<std::uint64_t>(
+      Json::parse_or_throw(initialSnapshotBody).at("revision").get_number());
+  const auto projectPatch = Json::object("name", "Updated project");
+  const auto [projectPatchStatus, projectPatchBody] =
+      fixture.PatchProject(kTestProjectUuid, projectPatch, initialRevision,
+                           kProjectPatchIdempotencyKey);
+  Require(projectPatchStatus == kHttpOk,
+          "project patch should return HTTP 200");
+  const auto projectPatchResult = Json::parse_or_throw(projectPatchBody);
+  const auto projectRevision = static_cast<std::uint64_t>(
+      projectPatchResult.at("revision").get_number());
+  Require(projectRevision == initialRevision + 1,
+          "project patch should advance the document revision");
+  const auto [projectRetryStatus, projectRetryBody] =
+      fixture.PatchProject(kTestProjectUuid, projectPatch, initialRevision,
+                           kProjectPatchIdempotencyKey);
+  Require(projectRetryStatus == projectPatchStatus &&
+              projectRetryBody == projectPatchBody,
+          "project patch retry should replay its original response");
+  const auto [stalePatchStatus, stalePatchBody] = fixture.PatchProject(
+      kTestProjectUuid, Json::object("name", "Stale project"), initialRevision,
+      kStaleUndoIdempotencyKey);
+  Require(stalePatchStatus == kHttpConflict,
+          "project patch with a stale revision should return HTTP 409");
+  Require(Json::parse_or_throw(stalePatchBody).at("code").get_string() ==
+              "REVISION_CONFLICT",
+          "stale project patch should report REVISION_CONFLICT");
+  const auto [invalidPatchStatus, invalidPatchBody] =
+      fixture.PatchProject(kTestProjectUuid, Json::object("uuid", "changed"),
+                           projectRevision, kFailedPatchIdempotencyKey);
+  Require(invalidPatchStatus == kHttpBadRequest,
+          "project patch should reject immutable fields");
+  Require(Json::parse_or_throw(invalidPatchBody).at("code").get_string() ==
+              "VALIDATION_ERROR",
+          "invalid project patch should report VALIDATION_ERROR");
+  const auto [projectStatus, projectBody] =
+      fixture.GetProject(kTestProjectUuid);
+  Require(projectStatus == kHttpOk &&
+              Json::parse_or_throw(projectBody).at("name").get_string() ==
+                  "Updated project",
+          "project patch should publish and persist the updated name");
+
+  const auto [trajectoryPatchStatus, trajectoryPatchBody] =
+      fixture.PatchTrajectory(kTestProjectUuid, kTestTrajectoryUuid,
+                              Json::object("name", "Updated trajectory"),
+                              projectRevision, kTrajectoryPatchIdempotencyKey);
+  Require(trajectoryPatchStatus == kHttpOk,
+          "trajectory patch should return HTTP 200");
+  const auto trajectoryRevision = static_cast<std::uint64_t>(
+      Json::parse_or_throw(trajectoryPatchBody).at("revision").get_number());
+  const auto [trajectoryStatus, trajectoryBody] =
+      fixture.GetTrajectory(kTestProjectUuid, kTestTrajectoryUuid);
+  Require(trajectoryStatus == kHttpOk &&
+              Json::parse_or_throw(trajectoryBody).at("name").get_string() ==
+                  "Updated trajectory",
+          "trajectory patch should publish and persist the updated name");
+
+  std::filesystem::remove(fixture.TrajectoryPath());
+  std::filesystem::create_directory(fixture.TrajectoryPath());
+  const auto [failedPatchStatus, failedPatchBody] =
+      fixture.PatchTrajectory(kTestProjectUuid, kTestTrajectoryUuid,
+                              Json::object("name", "Pending trajectory"),
+                              trajectoryRevision, kFailedPatchIdempotencyKey);
+  Require(failedPatchStatus == 500,
+          "trajectory patch should fail when persistence fails");
+  Require(Json::parse_or_throw(failedPatchBody).at("code").get_string() ==
+              "SAVE_FAILED",
+          "failed trajectory patch should report SAVE_FAILED");
+  const auto [unpublishedStatus, unpublishedBody] =
+      fixture.GetTrajectory(kTestProjectUuid, kTestTrajectoryUuid);
+  Require(unpublishedStatus == kHttpOk &&
+              Json::parse_or_throw(unpublishedBody).at("name").get_string() ==
+                  "Updated trajectory",
+          "failed trajectory patch should not publish its candidate");
+
+  std::filesystem::remove(fixture.TrajectoryPath());
+  const auto [recoverySaveStatus, recoverySaveBody] = fixture.Save();
+  const auto recoverySaveOperationId =
+      AcceptedOperationId(recoverySaveStatus, recoverySaveBody, "save");
+  WaitForSessionOperation(events.Get(), recoverySaveOperationId, "save",
+                          "succeeded");
+  const auto [recoveredStatus, recoveredBody] =
+      fixture.GetTrajectory(kTestProjectUuid, kTestTrajectoryUuid);
+  Require(recoveredStatus == kHttpOk &&
+              Json::parse_or_throw(recoveredBody).at("name").get_string() ==
+                  "Pending trajectory",
+          "successful save should publish the persisted pending patch");
+}
+
 std::uint64_t GenerateOutput(ApiTestFixture& fixture,
                              const SocketHandle& events) {
   const auto [openStatus, openBody] = fixture.OpenPicker();
@@ -1320,7 +1450,7 @@ struct TestCase {
   void (*run)(const std::filesystem::path&);
 };
 
-constexpr std::array<TestCase, 14> kTestCases{{
+constexpr std::array<TestCase, 15> kTestCases{{
     {"picker open loads project snapshot", TestPickerOpenLoadsProjectSnapshot},
     {"picker cancellation leaves session closed",
      TestPickerCancellationLeavesSessionClosed},
@@ -1341,6 +1471,8 @@ constexpr std::array<TestCase, 14> kTestCases{{
     {"trajectory subresource reads", TestTrajectorySubresourceReads},
     {"save restores persisted project files",
      TestSaveRestoresPersistedProjectFiles},
+    {"project and trajectory patches persist before publication",
+     TestProjectAndTrajectoryPatches},
     {"generation publishes status and saves output",
      TestGenerationPublishesStatusAndSavesOutput},
     {"history and persistence lifecycle", TestHistoryAndPersistenceLifecycle},
