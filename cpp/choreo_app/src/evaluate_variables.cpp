@@ -608,12 +608,10 @@ GeometryDragAnalysis GetGeometryDragControls(
           segmentPlus = plus;
           segmentMinus = minus;
         } else {
-          segmentPlus =
-              evaluateChangedPrefix(token.value + step,
-                                     calls.front().methodStart);
-          segmentMinus =
-              evaluateChangedPrefix(token.value - step,
-                                     calls.front().methodStart);
+          segmentPlus = evaluateChangedPrefix(token.value + step,
+                                              calls.front().methodStart);
+          segmentMinus = evaluateChangedPrefix(token.value - step,
+                                               calls.front().methodStart);
         }
       } else {
         const auto& call = calls.at(chainIndex - 1);
@@ -641,10 +639,9 @@ GeometryDragAnalysis GetGeometryDragControls(
            std::abs(segmentDheading) < 1e-10)) {
         continue;
       }
-      controls.push_back({token.start, token.end, token.value, dx, dy,
-                          dheading, segmentDx, segmentDy, segmentDheading,
-                          chainIndex, anchor.startX,
-                          anchor.startY, anchor.startHeading});
+      controls.push_back({token.start, token.end, token.value, dx, dy, dheading,
+                          segmentDx, segmentDy, segmentDheading, chainIndex,
+                          anchor.startX, anchor.startY, anchor.startHeading});
     } catch (const std::exception&) {
     }
   }

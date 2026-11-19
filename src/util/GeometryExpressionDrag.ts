@@ -1,4 +1,4 @@
-import {
+import type {
   GeometryChainLink,
   GeometryDragControl
 } from "../document/ServerSessionStore";

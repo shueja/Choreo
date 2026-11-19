@@ -66,9 +66,9 @@ class EvaluationError : public std::invalid_argument {
 
 Project EvaluateVariables(const Project& project);
 Document EvaluateDocument(const Document& document);
-GeometryDragAnalysis GetGeometryDragControls(
-    const Project& project, std::string_view expression,
-    DragGeometryType type);
+GeometryDragAnalysis GetGeometryDragControls(const Project& project,
+                                             std::string_view expression,
+                                             DragGeometryType type);
 Document RenameVariable(const Document& document, const std::string& id,
                         const std::string& newName);
 
