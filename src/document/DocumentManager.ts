@@ -25,7 +25,7 @@ import {
   type Expr,
   type RobotConfig,
   type Waypoint
-} from "./schema/DocumentTypes";
+} from "@choreo/document";
 import {
   CommandStore,
   ICommandStore,

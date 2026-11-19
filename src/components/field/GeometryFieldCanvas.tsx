@@ -1,9 +1,7 @@
 import * as d3 from "d3";
 import { useEffect, useRef, useState } from "react";
-import type {
-  GeometryDragAnalysis,
-  ServerVariable
-} from "../../document/ServerSessionStore";
+import type { GeometryDragAnalysis } from "@choreo/api";
+import type { ServerVariable } from "@choreo/document";
 import { FIELD_LENGTH, FIELD_WIDTH } from "./svg/fields/FieldDimensions";
 import Field2026Url from "./svg/fields/FieldImage2026.svg?url";
 import { attachFieldZoom } from "./svg/FieldZoom";

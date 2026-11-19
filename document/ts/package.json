@@ -1,0 +1,12 @@
+{
+  "name": "@choreo/document",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./constraints": "./src/constraints.ts",
+    "./ProjectSchemaVersion": "./src/ProjectSchemaVersion.ts",
+    "./TrajSchemaVersion": "./src/TrajSchemaVersion.ts"
+  }
+}

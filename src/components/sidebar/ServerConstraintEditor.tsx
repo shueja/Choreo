@@ -1,7 +1,7 @@
-import {
-  ConstraintDocument,
-  Waypoint
-} from "../../document/ServerSessionStore";
+import type {
+  ServerConstraintDocument as ConstraintDocument,
+  ServerWaypoint as Waypoint
+} from "@choreo/document";
 import ServerExpressionInput, {
   ServerExpression
 } from "../input/ServerExpressionInput";

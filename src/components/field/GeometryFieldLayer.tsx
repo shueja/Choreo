@@ -3,9 +3,9 @@ import type {
   GeometryDragAnalysis,
   GeometryDragControl,
   GeometryDragEffect,
-  GeometryFeaturePoint,
-  ServerVariable
-} from "../../document/ServerSessionStore";
+  GeometryFeaturePoint
+} from "@choreo/api";
+import type { ServerVariable } from "@choreo/document";
 import { updateGeometryExpressionForDrag } from "../../util/GeometryExpressionDrag";
 
 interface Props {

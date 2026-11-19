@@ -6,7 +6,7 @@ import {
   ModelPropertiesDeclarationToProperties,
   types
 } from "mobx-state-tree";
-import { Expr, isExpr } from "./schema/DocumentTypes";
+import { Expr, isExpr } from "@choreo/document";
 import {
   ConstraintData,
   ConstraintDefinition,

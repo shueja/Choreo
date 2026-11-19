@@ -48,17 +48,19 @@ import ServerNavbar from "./components/navbar/ServerNavbar";
 import ServerSidebar, {
   ServerConstraintType
 } from "./components/sidebar/ServerSidebar";
-import {
-  ConstraintDocument,
-  EventMarkerDocument,
+import type {
   EventMarkerPatch,
-  GeometryDragAnalysis,
+  GeometryDragAnalysis
+} from "@choreo/api";
+import type {
+  ServerConstraintDocument as ConstraintDocument,
+  ServerEventMarkerDocument as EventMarkerDocument,
   ProjectDocument,
   ServerVariable,
-  TrajectoryDocument,
-  Waypoint,
-  serverSession
-} from "./document/ServerSessionStore";
+  ServerWaypoint as Waypoint,
+  TrajectoryDocument
+} from "@choreo/document";
+import { serverSession } from "./document/ServerSessionStore";
 import styles from "./ServerWorkspace.module.css";
 
 const TRAJECTORY_SCHEMA_VERSION = 4;

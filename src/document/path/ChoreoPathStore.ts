@@ -5,7 +5,7 @@ import {
   Constraint,
   Expr,
   Waypoint
-} from "../schema/DocumentTypes";
+} from "@choreo/document";
 import { ConstraintKey, DataMap } from "../ConstraintDefinitions";
 import {
   ConstraintStore,

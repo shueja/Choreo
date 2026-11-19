@@ -32,6 +32,8 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@choreo/api": "workspace:*",
+    "@choreo/document": "workspace:*",
     "@emotion/styled": "^11.14.1",
     "@fontsource-variable/roboto-mono": "^5.2.8",
     "@fontsource/roboto": "^5.2.9",

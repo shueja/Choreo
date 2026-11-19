@@ -1,7 +1,7 @@
 import type {
   GeometryChainLink,
   GeometryDragControl
-} from "../document/ServerSessionStore";
+} from "@choreo/api";
 
 export interface GeometryDragValues {
   x: number;

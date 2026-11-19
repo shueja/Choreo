@@ -9,12 +9,14 @@ import FieldGridLayer from "./svg/FieldGridLayer";
 import FieldPathLine from "./svg/FieldPathLine";
 import FieldSampleLayer from "./svg/FieldSampleLayer";
 import { ServerConstraintType, ServerViewLayers } from "./ServerViewLayers";
-import {
+import type {
   GeometryDragAnalysis,
-  GeometryDragControl,
+  GeometryDragControl
+} from "@choreo/api";
+import type {
   ServerVariable,
-  Waypoint
-} from "../../document/ServerSessionStore";
+  ServerWaypoint as Waypoint
+} from "@choreo/document";
 import {
   GeometryDragPose,
   composeGeometryChain,

@@ -15,7 +15,7 @@ import ServerBooleanInput from "../input/ServerBooleanInput";
 import ServerExpressionInput from "../input/ServerExpressionInput";
 import ServerNumberInput from "../input/ServerNumberInput";
 import InputStyles from "../input/InputList.module.css";
-import { Waypoint } from "../../document/ServerSessionStore";
+import type { ServerWaypoint as Waypoint } from "@choreo/document";
 import styles from "./ServerWaypointEditor.module.css";
 import PanelStyles from "../config/WaypointConfigPanel.module.css";
 

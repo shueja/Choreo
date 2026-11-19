@@ -18,7 +18,7 @@ import {
   navbarIndexToConstraintKey
 } from "./UIData";
 import { tracing } from "./tauriTracing";
-import { CustomFieldData } from "./schema/DocumentTypes";
+import { CustomFieldData } from "@choreo/document";
 import { defaultFieldData } from "../components/field/svg/fields/JSONFieldImage";
 
 export enum SavingState {

@@ -3,7 +3,7 @@ import {
   EventMarker,
   EventMarkerData,
   WaypointUUID
-} from "./schema/DocumentTypes";
+} from "@choreo/document";
 import { CommandStore } from "./CommandStore";
 import { WaypointScope } from "./ConstraintStore";
 import { Env, EnvConstructors } from "./DocumentManager";

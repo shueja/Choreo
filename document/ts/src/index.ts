@@ -1,9 +1,30 @@
-import { ConstraintData } from "../ConstraintDefinitions";
-import { Dimensions } from "../ExpressionStore";
-export { TRAJ_SCHEMA_VERSION } from "./TrajSchemaVersion";
+import type { ConstraintData } from "./constraints";
+import { PROJECT_SCHEMA_VERSION } from "./ProjectSchemaVersion";
 import { TRAJ_SCHEMA_VERSION } from "./TrajSchemaVersion";
 export { PROJECT_SCHEMA_VERSION } from "./ProjectSchemaVersion";
-import { PROJECT_SCHEMA_VERSION } from "./ProjectSchemaVersion";
+export { TRAJ_SCHEMA_VERSION } from "./TrajSchemaVersion";
+export type {
+  ConstraintData,
+  ConstraintDataTypeMap,
+  ConstraintKey,
+  DataMap,
+  DataPropsList,
+  IConstraintData
+} from "./constraints";
+
+export type DimensionName =
+  | "Number"
+  | "Length"
+  | "LinVel"
+  | "LinAcc"
+  | "Angle"
+  | "AngVel"
+  | "AngAcc"
+  | "Time"
+  | "Mass"
+  | "Torque"
+  | "MoI";
+
 export type Expr = { exp: string; val: number };
 
 export function isExpr(arg: any): arg is Expr {
@@ -17,7 +38,7 @@ export function isExpr(arg: any): arg is Expr {
 }
 export type ExprOrNumber = Expr | number;
 export interface Variable {
-  dimension: keyof typeof Dimensions;
+  dimension: DimensionName;
   var: Expr;
 }
 export interface PoseVariable {
@@ -219,4 +240,102 @@ export interface CustomFieldData {
   fieldImageBase64: string;
   fieldJson: FieldJSON;
   fieldJSONRelativePath: string | undefined;
+}
+
+export type ServerVariableType =
+  | "Quantity"
+  | "Pose2d"
+  | "Translation2d"
+  | "Polygon2d"
+  | "Rotation2d"
+  | "Transform2d"
+  | "Twist2d"
+  | "Rectangle2d"
+  | "Ellipse2d";
+
+export type ServerGeometryType = Exclude<ServerVariableType, "Quantity">;
+
+export interface ServerVariable {
+  name: string;
+  namespacePath: string;
+  expression: string;
+  type: ServerVariableType;
+  dimension?: Record<string, number>;
+  value: unknown;
+}
+
+export interface ProjectDocument {
+  uuid: string;
+  name: string;
+  version: number;
+  type: "Swerve" | "Differential" | "Mecanum";
+  variables: {
+    variables: Record<string, ServerVariable>;
+    order: string[];
+  };
+  [key: string]: unknown;
+}
+
+export interface ServerConstraintDocument {
+  uuid: string;
+  from: { uuid: string } | "first" | "last";
+  to?: { uuid: string } | "first" | "last";
+  data: { type: string; [key: string]: unknown };
+  enabled: boolean;
+}
+
+export interface ServerEventMarkerDocument {
+  uuid: string;
+  name: string;
+  from: {
+    target: { uuid: string } | "first" | "last";
+    targetTime: number | null;
+    offset: Expr;
+  };
+}
+
+export interface ServerTrajectorySample {
+  time: number;
+  pose: {
+    translation: { x: number; y: number };
+    rotation: { radians: number };
+  };
+  velocity: { vx: number; vy: number; omega: number };
+  acceleration: { ax: number; ay: number; alpha: number };
+  leftVelocity?: number;
+  rightVelocity?: number;
+}
+
+export interface ServerWaypoint {
+  uuid: string;
+  pose: {
+    exp: string;
+    val: {
+      translation: { x: number; y: number };
+      rotation: { radians: number };
+    };
+  };
+  intervals: number;
+  split: boolean;
+  fixTranslation: boolean;
+  fixHeading: boolean;
+  overrideIntervals: boolean;
+}
+
+export interface TrajectoryDocument {
+  uuid: string;
+  name: string;
+  params: {
+    waypoints: ServerWaypoint[];
+    constraints: ServerConstraintDocument[];
+    targetDt: unknown;
+  };
+  output: {
+    trajectory?: {
+      samples?: ServerTrajectorySample[];
+    };
+    [key: string]: unknown;
+  } | null;
+  events: ServerEventMarkerDocument[];
+  [key: string]: unknown;
 }

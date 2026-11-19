@@ -12,10 +12,10 @@ import {
   Tooltip
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import {
+import type {
   ServerVariable,
   ServerVariableType
-} from "../../document/ServerSessionStore";
+} from "@choreo/document";
 import ServerExpressionInput from "../input/ServerExpressionInput";
 import InputStyles from "../input/InputList.module.css";
 import styles from "./ServerVariablesPanel.module.css";

@@ -3,3 +3,5 @@ allowBuilds:
 
 packages:
   - "."
+  - "document/ts"
+  - "api/ts"

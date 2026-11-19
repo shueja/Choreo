@@ -1,4 +1,4 @@
-import { WaypointIDX } from "../schema/DocumentTypes";
+import { WaypointIDX } from "@choreo/document";
 import { IWaypointScope } from "../ConstraintStore";
 import { IHolonomicWaypointStore } from "../HolonomicWaypointStore";
 
