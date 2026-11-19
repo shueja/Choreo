@@ -51,8 +51,8 @@ available. It does not provide the required durable multi-file commit.
 
 The current code places CLI and file I/O plus result assembly in
 `src/main.cpp`, argument parsing in `src/cli_parser.cpp`, segment preparation in
-`src/split_to_segments.cpp`, and conversions and solving in `include/`. The
-progress sender is in `../progress-update-sender`. The app writes temporary
+`src/split_to_segments.cpp`, progress transport in
+`src/progress_update_sender/`, and conversions and solving in `include/`. The app writes temporary
 input snapshots and reads a temporary `--output` after a successful child exit;
 it rejects stale or mismatched results and commits the complete trajectory as
 one store update. The optional progress URL is passed through to the child;

@@ -33,18 +33,13 @@ if(NOT TARGET choreo::document_core)
     )
 endif()
 
-if(NOT TARGET choreo_progress_update_sender)
-    add_subdirectory(
-        "${CMAKE_CURRENT_LIST_DIR}/../progress-update-sender"
-        "${CMAKE_CURRENT_BINARY_DIR}/choreo_progress_update_sender"
-    )
-endif()
 # Collect sources for the executable
 file(
     GLOB_RECURSE generator_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/cli_parser.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/split_to_segments.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/progress_update_sender/*.cpp"
 )
 
 add_executable(generator ${generator_SOURCES})
@@ -65,7 +60,8 @@ target_link_libraries(
     PRIVATE
         TrajoptLib
         choreo::document_core
-        choreo_progress_update_sender
+        wpinet
+        wpiutil
 )
 
 install(TARGETS generator RUNTIME DESTINATION bin)
