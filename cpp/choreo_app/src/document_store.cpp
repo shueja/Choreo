@@ -177,6 +177,26 @@ void DocumentStore::RenameVariable(const std::string& id,
   Commit(evaluation::RenameVariable(*Snapshot(), id, newName));
 }
 
+void DocumentStore::UpdateVariable(
+    const std::string& id, const std::optional<std::string>& name,
+    const std::optional<std::string>& expression) {
+  auto candidate = *Snapshot();
+  auto target = candidate.project.variables.find(id);
+  if (target == candidate.project.variables.end()) {
+    throw std::invalid_argument("unknown variable ID: " + id);
+  }
+  if (!name && !expression) {
+    throw std::invalid_argument("variable patch must contain editable fields");
+  }
+  if (name && *name != target->second.name) {
+    candidate = evaluation::RenameVariable(candidate, id, *name);
+  }
+  if (expression) {
+    candidate.project.variables.at(id).expression = *expression;
+  }
+  Commit(std::move(candidate));
+}
+
 bool DocumentStore::Undo() {
   if (!history_.Undo()) {
     return false;

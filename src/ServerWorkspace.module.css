@@ -1,0 +1,216 @@
+.workspace {
+  --surface: var(--background-dark-gray);
+  --surface-raised: var(--background-light-gray);
+  --line: var(--divider-gray);
+  --text: #fff;
+  --muted: #a7a9ac;
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100dvh;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--background-dark-blue);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: var(--top-nav-height);
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--background-dark-gray);
+}
+
+.brand {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.muted,
+.emptyHint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.connection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connection {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.connection svg {
+  font-size: 18px;
+}
+
+.editor {
+  display: grid;
+  flex: 1;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.waypointStripHeading h3,
+.noTrajectory h2 {
+  margin: 3px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.eyebrow {
+  color: #a7a9ac;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.emptyHint {
+  padding: 12px;
+  line-height: 1.5;
+}
+
+.editorMain {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.canvasArea {
+  display: flex;
+  flex: 1;
+  min-height: 220px;
+  min-width: 0;
+  padding: 0;
+  background-color: var(--background-dark-blue);
+}
+
+.fieldViewport {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.featureEditorPanel {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: 0;
+  width: min(460px, calc(100% - 24px));
+  padding: 8px;
+  border-radius: 0 0 8px 0;
+  background: var(--background-light-gray);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.constraintEditorPanel {
+  right: 0;
+  width: auto;
+  box-sizing: border-box;
+  border-radius: 0 0 8px 8px;
+}
+
+.featureEditorPanel h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.waypointStrip {
+  max-height: 240px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  background: var(--background-dark-gray);
+}
+
+.waypointStripHeading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 6px;
+}
+
+.waypointStripHeading span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.waypointList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 12px 12px;
+}
+
+.generationStatus {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--select-yellow);
+  font-size: 12px;
+}
+
+.noTrajectory {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.openProject {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: 24px;
+  background: var(--background-dark-blue);
+}
+
+.openProjectContent {
+  display: flex;
+  width: min(580px, 100%);
+  flex-direction: column;
+  gap: 12px;
+}
+
+.openProjectContent h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.openProjectContent p {
+  margin: 0;
+}
+
+.openForm {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.openForm button {
+  min-width: 132px;
+  min-height: 56px;
+}
+
+.progressLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}

@@ -1,0 +1,31 @@
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.indexBadge {
+  display: flex;
+  width: 24px;
+  height: 36px;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--darker-purple);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.controls .MuiToggleButton-root {
+  width: 36px;
+  height: 34px;
+  padding: 5px;
+  color: var(--accent-purple);
+}
+
+.controls .MuiToggleButton-root.Mui-selected {
+  color: var(--select-yellow);
+}

@@ -59,6 +59,9 @@ class DocumentStore {
   void CommitGeneratedTrajectory(Trajectory trajectory,
                                  std::uint64_t expectedRevision);
   void RenameVariable(const std::string& id, const std::string& newName);
+  void UpdateVariable(const std::string& id,
+                      const std::optional<std::string>& name,
+                      const std::optional<std::string>& expression);
   bool Undo();
   bool Redo();
   SerializedDocument Serialize() const;

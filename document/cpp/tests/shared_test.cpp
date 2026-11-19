@@ -114,12 +114,38 @@ int main(int argc, char** argv) {
           choreo::document::VariableType::Ellipse2d, std::nullopt,
           wpi::math::Ellipse2d{wpi::math::Pose2d{}, wpi::units::meter_t{2},
                                wpi::units::meter_t{1}}});
+  project.variableOrder = {"00000000-0000-4000-8000-00000000000a",
+                           "00000000-0000-4000-8000-000000000009",
+                           "00000000-0000-4000-8000-000000000008",
+                           "00000000-0000-4000-8000-000000000007",
+                           "00000000-0000-4000-8000-000000000006",
+                           "00000000-0000-4000-8000-000000000005",
+                           "00000000-0000-4000-8000-000000000004",
+                           "00000000-0000-4000-8000-000000000003",
+                           "00000000-0000-4000-8000-000000000002"};
   const wpi::util::json projectJson{project};
   const auto restoredProject = projectJson.get<choreo::document::Project>();
   if (wpi::util::json{restoredProject} != projectJson ||
-      std::get<double>(restoredProject.variables
-                 .at("00000000-0000-4000-8000-000000000002")
-                 .value) != 2.0) {
+      restoredProject.variableOrder != project.variableOrder ||
+      std::get<double>(
+          restoredProject.variables.at("00000000-0000-4000-8000-000000000002")
+              .value) != 2.0) {
+    return EXIT_FAILURE;
+  }
+  auto legacyProjectJson = projectJson;
+  legacyProjectJson["variables"].erase("order");
+  const auto restoredLegacyProject =
+      legacyProjectJson.get<choreo::document::Project>();
+  if (restoredLegacyProject.variableOrder !=
+      std::vector<std::string>{"00000000-0000-4000-8000-000000000002",
+                               "00000000-0000-4000-8000-000000000003",
+                               "00000000-0000-4000-8000-000000000004",
+                               "00000000-0000-4000-8000-000000000005",
+                               "00000000-0000-4000-8000-000000000006",
+                               "00000000-0000-4000-8000-000000000007",
+                               "00000000-0000-4000-8000-000000000008",
+                               "00000000-0000-4000-8000-000000000009",
+                               "00000000-0000-4000-8000-00000000000a"}) {
     return EXIT_FAILURE;
   }
   auto invalidProjectIdentity = projectJson;

@@ -1,0 +1,10 @@
+.navbar {
+  display: flex;
+  min-width: 0;
+  min-height: var(--top-nav-height);
+  align-items: center;
+  gap: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--divider-gray);
+  background: var(--background-dark-gray);
+}

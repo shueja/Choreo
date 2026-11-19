@@ -2,6 +2,7 @@ import { Component } from "react";
 import { doc } from "../../../document/DocumentManager";
 
 import { observer } from "mobx-react";
+import FieldPathLine from "./FieldPathLine";
 
 type Props = object;
 
@@ -11,21 +12,11 @@ class FieldPathLines extends Component<Props, State> {
   state = {};
 
   render() {
-    let pathString = "";
-    doc.pathlist.activePath.params.waypoints.forEach((point, _index) => {
-      pathString += `${point.x.value}, ${point.y.value} `;
-    });
-    return (
-      <>
-        <polyline
-          points={pathString}
-          stroke="grey"
-          strokeWidth={0.05}
-          fill="transparent"
-          style={{ pointerEvents: "none" }}
-        ></polyline>
-      </>
-    );
+    const points = doc.pathlist.activePath.params.waypoints.map((point) => ({
+      x: point.x.value,
+      y: point.y.value
+    }));
+    return <FieldPathLine points={points} />;
   }
 }
 export default observer(FieldPathLines);

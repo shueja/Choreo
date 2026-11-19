@@ -21,6 +21,7 @@ class ApplicationApi {
     std::filesystem::path generatorExecutable;
     std::filesystem::path initialProjectPath;
     ProjectPathPrompt promptForProjectPath;
+    ProjectPathPrompt promptForSavePath;
   };
 
   ApplicationApi(choreo::api::ApiServer& server, Options options);

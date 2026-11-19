@@ -276,6 +276,64 @@
         }
       }
     },
+    "/api/v1/projects/{projectId}/variables/{variableId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "name": "variableId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "$ref": "../document/shared.schema.json#/$defs/UUID"
+          }
+        }
+      ],
+      "patch": {
+        "operationId": "patchVariable",
+        "summary": "Update one variable name or expression",
+        "description": "The variable UUID remains stable. Renaming updates qualified references throughout the project and trajectories; expression changes are re-evaluated by the server.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/merge-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/VariablePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/MutationAck"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevisionConflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/api/v1/projects/{projectId}/trajectories": {
       "parameters": [
         {
@@ -1290,13 +1348,13 @@
           "projectPath": {
             "type": "string",
             "minLength": 1,
-            "description": "Absolute local .chor destination path for the new session."
+            "description": "Optional absolute local .chor destination path. Omit to create an unsaved project that will request a native save dialog on first save."
           },
           "project": {
             "$ref": "#/components/schemas/ProjectDocument"
           }
         },
-        "required": ["projectPath", "project"],
+        "required": ["project"],
         "additionalProperties": false
       },
       "SaveSessionRequest": {
@@ -1305,7 +1363,7 @@
           "projectPath": {
             "type": "string",
             "minLength": 1,
-            "description": "Optional destination .chor path (save as)."
+            "description": "Optional destination .chor path (save as). If omitted for an unsaved project, the host may show a native save dialog."
           }
         },
         "additionalProperties": false
@@ -1360,7 +1418,13 @@
             "type": "boolean"
           }
         },
-        "required": ["open", "projectId", "revision", "dirty", "persistenceBlocked"],
+        "required": [
+          "open",
+          "projectId",
+          "revision",
+          "dirty",
+          "persistenceBlocked"
+        ],
         "additionalProperties": false
       },
       "OpenSessionRequest": {
@@ -1489,13 +1553,61 @@
             "$ref": "../document/shared.schema.json#/$defs/DriveType"
           },
           "variables": {
-            "$ref": "../document/project.schema.json#/$defs/Variables"
+            "$ref": "#/components/schemas/ProjectVariablesPatch"
           },
           "config": {
             "$ref": "../document/project.schema.json#/$defs/RobotConfig"
           },
           "codegen": {
             "$ref": "../document/project.schema.json#/$defs/CodeGenConfig"
+          }
+        },
+        "minProperties": 1,
+        "additionalProperties": false
+      },
+      "ProjectVariablesPatch": {
+        "type": "object",
+        "properties": {
+          "variables": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "../document/shared.schema.json#/$defs/UUID"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "$ref": "../document/project.schema.json#/$defs/ExpressionVariableEntry"
+                },
+                {
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "order": {
+            "type": "array",
+            "items": {
+              "$ref": "../document/shared.schema.json#/$defs/UUID"
+            },
+            "uniqueItems": true
+          }
+        },
+        "minProperties": 1,
+        "additionalProperties": false
+      },
+      "VariablePatch": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "expression": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "minProperties": 1,

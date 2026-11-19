@@ -65,7 +65,10 @@
           "properties": {
             "type": { "const": "Quantity" },
             "dimension": { "$ref": "#/$defs/ScalarDimension" },
-            "value": { "type": "number", "description": "Latest evaluated value in SI base units." }
+            "value": {
+              "type": "number",
+              "description": "Latest evaluated value in SI base units."
+            }
           },
           "required": ["type", "dimension", "value"]
         }
@@ -214,6 +217,12 @@
           "type": "object",
           "propertyNames": { "$ref": "./shared.schema.json#/$defs/UUID" },
           "additionalProperties": { "$ref": "#/$defs/ExpressionVariableEntry" }
+        },
+        "order": {
+          "type": "array",
+          "items": { "$ref": "./shared.schema.json#/$defs/UUID" },
+          "uniqueItems": true,
+          "description": "Stable declaration order for variable IDs. Omitted in older documents, where UUID order is used."
         }
       },
       "required": ["variables"],

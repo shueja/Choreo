@@ -66,7 +66,7 @@ if(TARGET wpinet)
     target_compile_features(choreo_server PRIVATE cxx_std_23)
     target_link_libraries(choreo_server PRIVATE choreo::document_api)
     if(WIN32)
-        target_link_libraries(choreo_server PRIVATE shell32)
+        target_link_libraries(choreo_server PRIVATE shell32 comdlg32)
     endif()
     install(TARGETS choreo_server
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT choreo-server

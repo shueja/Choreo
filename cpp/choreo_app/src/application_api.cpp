@@ -323,11 +323,25 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
                                  return self->PatchResource(request, true);
                                });
                          });
+    server.RegisterRoute(
+        "PATCH", "/api/v1/projects/{projectId}/variables/{variableId}",
+        [weak](const choreo::api::HttpRequest& request) {
+          return WithHttpOwner(weak, [&request](std::shared_ptr<Impl> self) {
+            return self->PatchVariable(request);
+          });
+        });
     server.RegisterRoute("GET", "/api/v1/projects/{projectId}/trajectories",
                          [weak](const choreo::api::HttpRequest& request) {
                            return WithHttpOwner(
                                weak, [&request](std::shared_ptr<Impl> self) {
                                  return self->TrajectoriesResponse(request);
+                               });
+                         });
+    server.RegisterRoute("POST", "/api/v1/projects/{projectId}/trajectories",
+                         [weak](const choreo::api::HttpRequest& request) {
+                           return WithHttpOwner(
+                               weak, [&request](std::shared_ptr<Impl> self) {
+                                 return self->CreateTrajectory(request);
                                });
                          });
     server.RegisterRoute(
@@ -640,6 +654,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
     replacement->ReloadFiles(files);
     store = std::move(replacement);
     documentFiles = std::move(files);
+    hasProjectPath.store(true, std::memory_order_release);
     PublishSnapshot(notify);
     return JsonResponse(200, Json::object("status", "opened"));
   }
@@ -655,8 +670,11 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       if (!requestBody.is_object()) {
         throw std::invalid_argument("request body must be an object");
       }
-      const auto path =
-          NormalizeProjectPath(requestBody.at("projectPath").get_string());
+        std::optional<std::filesystem::path> path;
+        if (requestBody.contains("projectPath")) {
+        path = NormalizeProjectPath(
+          requestBody.at("projectPath").get_string());
+        }
       auto project = requestBody.at("project").get<Project>();
       if (auto failure = self->PersistActiveSession()) {
         return *failure;
@@ -666,9 +684,10 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       document.project = std::move(project);
       auto replacement = std::make_unique<DocumentStore>(std::move(document));
       DocumentFiles files;
-      files.project = path;
+      files.project = path.value_or(std::filesystem::path{});
       self->store = std::move(replacement);
       self->documentFiles = std::move(files);
+      self->hasProjectPath.store(path.has_value(), std::memory_order_release);
       self->PublishSnapshot();
       return JsonResponse(201, Json::object("created", true));
     });
@@ -686,6 +705,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       self->StopGenerations();
       self->store.reset();
       self->documentFiles = {};
+      self->hasProjectPath.store(false, std::memory_order_release);
       self->PublishSnapshot();
       return JsonResponse(200, Json::object("closed", true));
     });
@@ -693,14 +713,10 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
   }
 
   ApiResponse SaveSession(const choreo::api::HttpRequest& request) {
-    const auto operationId = NewUuid();
-    const auto body = request.body;
-    EmitSessionOperation(operationId, "save", "running", "Saving session");
-    auto self = shared_from_this();
-    QueueSessionOperation(operationId, "save", [self, body] {
-      std::optional<std::filesystem::path> saveAs;
-      if (!body.empty()) {
-        auto requestBody = Json::parse_or_throw(body);
+    std::optional<std::filesystem::path> saveAs;
+    try {
+      if (!request.body.empty()) {
+        auto requestBody = Json::parse_or_throw(request.body);
         if (!requestBody.is_object()) {
           throw std::invalid_argument("request body must be an object");
         }
@@ -710,29 +726,80 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
               NormalizeProjectPath(requestBody.at("projectPath").get_string());
         }
       }
-      if (!self->store) {
-        return ApiError(409, "SESSION_NOT_OPEN", "No project is open");
-      }
-      auto files = self->documentFiles;
-      if (saveAs) {
-        files.project = *saveAs;
-        for (auto& [id, path] : files.trajectories) {
-          path = saveAs->parent_path() / path.filename();
-        }
-      }
-      if (files.project.empty()) {
-        return ApiError(422, "VALIDATION_ERROR",
-                        "A project path is required for the first save");
-      }
-      if (auto failure = self->PersistFiles(files)) {
-        return *failure;
-      }
-      self->documentFiles = std::move(files);
-      self->PublishSnapshot();
-      return JsonResponse(200, Json::object("saved", true, "revision",
-                                            self->store->Revision()));
+    } catch (const std::exception& error) {
+      return ApiError(400, "VALIDATION_ERROR", error.what());
+    }
+
+    if (!saveAs &&
+        !hasProjectPath.load(std::memory_order_acquire) &&
+        !options.promptForSavePath) {
+      return ApiError(501, "PICKER_UNAVAILABLE",
+                      "No project save picker is configured");
+    }
+
+    const auto operationId = NewUuid();
+    EmitSessionOperation(operationId, "save", "running", "Saving session");
+    auto self = shared_from_this();
+    if (!saveAs && !hasProjectPath.load(std::memory_order_acquire)) {
+      auto weak = weak_from_this();
+      options.promptForSavePath(
+          [weak, operationId](
+              std::optional<std::filesystem::path> path) mutable {
+            if (!path) {
+              WithOwner(weak, [operationId](std::shared_ptr<Impl> owner) {
+                owner->EmitSessionOperation(operationId, "save", "cancelled",
+                                            "Save location selection cancelled");
+              });
+              return;
+            }
+            WithOwner(weak, [operationId, path = std::move(*path)](
+                                std::shared_ptr<Impl> owner) mutable {
+              owner->QueueSessionOperation(
+                  operationId, "save", [owner, path = std::move(path)] {
+                    return owner->SaveSessionFiles(path);
+                  });
+            });
+          });
+      return OperationAccepted(operationId, "save");
+    }
+
+    QueueSessionOperation(operationId, "save", [self, saveAs] {
+      return self->SaveSessionFiles(saveAs);
     });
     return OperationAccepted(operationId, "save");
+  }
+
+  ApiResponse SaveSessionFiles(
+      const std::optional<std::filesystem::path>& saveAs) {
+    if (!store) {
+      return ApiError(409, "SESSION_NOT_OPEN", "No project is open");
+    }
+    auto files = documentFiles;
+    if (saveAs) {
+      files.project = *saveAs;
+      for (auto& [id, path] : files.trajectories) {
+        path = saveAs->parent_path() / path.filename();
+      }
+    }
+    for (const auto& [id, trajectory] : store->Snapshot()->trajectories) {
+      static_cast<void>(trajectory);
+      if (!files.trajectories.contains(id)) {
+        files.trajectories.emplace(
+            id, files.project.parent_path() / (id + ".traj"));
+      }
+    }
+    if (files.project.empty()) {
+      return ApiError(422, "VALIDATION_ERROR",
+                      "A project path is required for the first save");
+    }
+    if (auto failure = PersistFiles(files)) {
+      return *failure;
+    }
+    documentFiles = std::move(files);
+    hasProjectPath.store(true, std::memory_order_release);
+    PublishSnapshot();
+    return JsonResponse(200, Json::object("saved", true, "revision",
+                                          store->Revision()));
   }
 
   std::optional<ApiResponse> PersistActiveSession() {
@@ -740,6 +807,9 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       return std::nullopt;
     }
     if (documentFiles.project.empty()) {
+      if (store->Revision() == 0) {
+        return std::nullopt;
+      }
       return ApiError(
           422, "VALIDATION_ERROR",
           "A project path is required before replacing the session");
@@ -775,6 +845,136 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         500, Json::object("code", "SAVE_FAILED", "message",
                           "One or more files could not be saved", "details",
                           std::move(details)));
+  }
+
+  std::optional<ApiResponse> PersistFilesIfNamed() {
+    if (!hasProjectPath.load(std::memory_order_acquire)) {
+      return std::nullopt;
+    }
+    return PersistFiles(documentFiles);
+  }
+
+  ApiResponse CreateTrajectory(const choreo::api::HttpRequest& request) {
+    const auto expectedRevision = RevisionFromTag(request.Header("if-match"));
+    const auto idempotencyKey = std::string{request.Header("idempotency-key")};
+    const auto contentType = Lower(std::string{request.Header("content-type")});
+    if (!expectedRevision || idempotencyKey.empty() ||
+        !(contentType == "application/json" ||
+          contentType.starts_with("application/json;"))) {
+      return ApiError(
+          400, "VALIDATION_ERROR",
+          "If-Match, Idempotency-Key, and application/json are required");
+    }
+
+    const auto projectId = request.pathParameters.at("projectId");
+    const auto fingerprint = "create-trajectory/" + request.path + "/" +
+                             std::to_string(*expectedRevision) + "/" +
+                             request.body;
+    const auto body = request.body;
+    auto self = shared_from_this();
+    auto result = std::make_shared<std::promise<ApiResponse>>();
+    auto response = result->get_future();
+    if (!Post([self, expectedRevision = *expectedRevision, idempotencyKey,
+               fingerprint, projectId, body, result] {
+          try {
+            const auto cached = self->idempotentMutations.find(idempotencyKey);
+            if (cached != self->idempotentMutations.end()) {
+              if (cached->second.requestTarget != fingerprint) {
+                result->set_value(
+                    ApiError(409, "IDEMPOTENCY_KEY_REUSE",
+                             "Idempotency key was reused for another request"));
+              } else {
+                result->set_value(cached->second.response);
+              }
+              return;
+            }
+            if (!self->store) {
+              result->set_value(
+                  ApiError(409, "SESSION_NOT_OPEN", "No project is open"));
+              return;
+            }
+            if (self->persistenceBlocked) {
+              result->set_value(ApiError(
+                  409, "SAVE_FAILED",
+                  "Save the active session before changing the document"));
+              return;
+            }
+            const auto snapshot = self->store->Snapshot();
+            if (snapshot->project.uuid != projectId) {
+              result->set_value(
+                  ApiError(404, "RESOURCE_NOT_FOUND", "Project was not found"));
+              return;
+            }
+            if (self->store->Revision() != expectedRevision) {
+              result->set_value(JsonResponse(
+                  409,
+                  Json::object("code", "REVISION_CONFLICT", "message",
+                               "Document revision is stale", "currentRevision",
+                               self->store->Revision())));
+              return;
+            }
+
+            Trajectory trajectory;
+            try {
+              trajectory = Json::parse_or_throw(body).get<Trajectory>();
+            } catch (const std::exception& error) {
+              result->set_value(ApiError(400, "VALIDATION_ERROR", error.what()));
+              return;
+            }
+            const auto trajectoryId = trajectory.uuid;
+            if (trajectoryId.empty() ||
+                snapshot->trajectories.find(trajectoryId)) {
+              result->set_value(ApiError(
+                  409, "RESOURCE_EXISTS",
+                  "A trajectory with that UUID already exists"));
+              return;
+            }
+
+            auto candidate = *snapshot;
+            candidate.trajectories = candidate.trajectories.set(
+                trajectoryId, std::move(trajectory));
+            const auto previousRevision = self->store->Revision();
+            self->store->Commit(std::move(candidate), expectedRevision);
+            if (self->store->Revision() != previousRevision) {
+              if (self->hasProjectPath.load(std::memory_order_acquire)) {
+                self->documentFiles.trajectories.emplace(
+                    trajectoryId,
+                    self->documentFiles.project.parent_path() /
+                        (trajectoryId + ".traj"));
+              }
+              if (auto failure = self->PersistFilesIfNamed()) {
+                result->set_value(*failure);
+                return;
+              }
+              self->PublishSnapshot(true, idempotencyKey);
+            }
+
+            ApiResponse mutation{
+                201,
+                "application/json",
+                Json::object("requestId", idempotencyKey, "revision",
+                             self->store->Revision(), "resource",
+                             Json::object("type", "trajectory", "id",
+                                          trajectoryId))
+                    .to_string(),
+                {}};
+            mutation.headers.emplace(
+                "ETag",
+                "\"revision-" + std::to_string(self->store->Revision()) +
+                    "\"");
+            self->idempotentMutations.emplace(
+                idempotencyKey, CachedMutation{fingerprint, mutation});
+            result->set_value(std::move(mutation));
+          } catch (const std::exception& error) {
+            result->set_value(ApiError(422, "VALIDATION_ERROR", error.what()));
+          } catch (...) {
+            result->set_value(
+                ApiError(500, "INTERNAL_ERROR", "Trajectory creation failed"));
+          }
+        })) {
+      return ApiError(503, "INTERNAL_ERROR", "API is stopping");
+    }
+    return response.get();
   }
 
   ApiResponse PatchResource(const choreo::api::HttpRequest& request,
@@ -897,7 +1097,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             const auto previousRevision = self->store->Revision();
             self->store->Commit(std::move(candidate), expectedRevision);
             if (self->store->Revision() != previousRevision) {
-              if (auto failure = self->PersistFiles(self->documentFiles)) {
+              if (auto failure = self->PersistFilesIfNamed()) {
                 result->set_value(*failure);
                 return;
               }
@@ -922,6 +1122,131 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
           } catch (...) {
             result->set_value(
                 ApiError(500, "INTERNAL_ERROR", "Document update failed"));
+          }
+        })) {
+      return ApiError(503, "INTERNAL_ERROR", "API is stopping");
+    }
+    return response.get();
+  }
+
+  ApiResponse PatchVariable(const choreo::api::HttpRequest& request) {
+    const auto expectedRevision = RevisionFromTag(request.Header("if-match"));
+    const auto idempotencyKey = std::string{request.Header("idempotency-key")};
+    const auto contentType = Lower(std::string{request.Header("content-type")});
+    constexpr std::string_view mergePatchContentType =
+        "application/merge-patch+json";
+    if (!expectedRevision || idempotencyKey.empty() ||
+        !(contentType == mergePatchContentType ||
+          contentType.starts_with(std::string{mergePatchContentType} + ";"))) {
+      return ApiError(
+          400, "VALIDATION_ERROR",
+          "If-Match, Idempotency-Key, and merge-patch JSON are required");
+    }
+
+    const auto projectId = request.pathParameters.at("projectId");
+    const auto variableId = request.pathParameters.at("variableId");
+    const auto fingerprint = "patch-variable/" + request.path + "/" +
+                             std::to_string(*expectedRevision) + "/" +
+                             request.body;
+    const auto body = request.body;
+    auto self = shared_from_this();
+    auto result = std::make_shared<std::promise<ApiResponse>>();
+    auto response = result->get_future();
+    if (!Post([self, expectedRevision = *expectedRevision, idempotencyKey,
+               fingerprint, projectId, variableId, body, result] {
+          try {
+            const auto cached = self->idempotentMutations.find(idempotencyKey);
+            if (cached != self->idempotentMutations.end()) {
+              if (cached->second.requestTarget != fingerprint) {
+                result->set_value(
+                    ApiError(409, "IDEMPOTENCY_KEY_REUSE",
+                             "Idempotency key was reused for another request"));
+              } else {
+                result->set_value(cached->second.response);
+              }
+              return;
+            }
+            if (!self->store) {
+              result->set_value(
+                  ApiError(409, "SESSION_NOT_OPEN", "No project is open"));
+              return;
+            }
+            if (self->persistenceBlocked) {
+              result->set_value(ApiError(
+                  409, "SAVE_FAILED",
+                  "Save the active session before changing the document"));
+              return;
+            }
+            const auto snapshot = self->store->Snapshot();
+            if (snapshot->project.uuid != projectId) {
+              result->set_value(
+                  ApiError(404, "RESOURCE_NOT_FOUND", "Project was not found"));
+              return;
+            }
+            if (self->store->Revision() != expectedRevision) {
+              result->set_value(JsonResponse(
+                  409,
+                  Json::object("code", "REVISION_CONFLICT", "message",
+                               "Document revision is stale", "currentRevision",
+                               self->store->Revision())));
+              return;
+            }
+            if (!snapshot->project.variables.contains(variableId)) {
+              result->set_value(ApiError(404, "RESOURCE_NOT_FOUND",
+                                         "Variable was not found"));
+              return;
+            }
+
+            Json patch;
+            std::optional<std::string> name;
+            std::optional<std::string> expression;
+            try {
+              patch = Json::parse_or_throw(body);
+              if (!HasOnlyKeys(patch, {"name", "expression"})) {
+                result->set_value(
+                    ApiError(400, "VALIDATION_ERROR",
+                             "Variable patch must contain name or expression"));
+                return;
+              }
+              if (patch.contains("name")) {
+                name = patch.at("name").get_string();
+              }
+              if (patch.contains("expression")) {
+                expression = patch.at("expression").get_string();
+              }
+            } catch (const std::exception& error) {
+              result->set_value(
+                  ApiError(400, "VALIDATION_ERROR", error.what()));
+              return;
+            }
+
+            const auto previousRevision = self->store->Revision();
+            self->store->UpdateVariable(variableId, name, expression);
+            if (self->store->Revision() != previousRevision) {
+              if (auto failure = self->PersistFilesIfNamed()) {
+                result->set_value(*failure);
+                return;
+              }
+              self->PublishSnapshot(true, idempotencyKey);
+            }
+            ApiResponse mutation{
+                200,
+                "application/json",
+                Json::object("requestId", idempotencyKey, "revision",
+                             self->store->Revision())
+                    .to_string(),
+                {}};
+            mutation.headers.emplace(
+                "ETag",
+                "\"revision-" + std::to_string(self->store->Revision()) + "\"");
+            self->idempotentMutations.emplace(
+                idempotencyKey, CachedMutation{fingerprint, mutation});
+            result->set_value(std::move(mutation));
+          } catch (const std::exception& error) {
+            result->set_value(ApiError(422, "VALIDATION_ERROR", error.what()));
+          } catch (...) {
+            result->set_value(
+                ApiError(500, "INTERNAL_ERROR", "Variable update failed"));
           }
         })) {
       return ApiError(503, "INTERNAL_ERROR", "API is stopping");
@@ -1109,7 +1434,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             const auto previousRevision = self->store->Revision();
             self->store->Commit(std::move(candidate), expectedRevision);
             if (self->store->Revision() != previousRevision) {
-              if (auto failure = self->PersistFiles(self->documentFiles)) {
+              if (auto failure = self->PersistFilesIfNamed()) {
                 result->set_value(*failure);
                 return;
               }
@@ -1202,7 +1527,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
               return;
             }
 
-            if (auto failure = self->PersistFiles(self->documentFiles)) {
+            if (auto failure = self->PersistFilesIfNamed()) {
               result->set_value(*failure);
               return;
             }
@@ -1657,7 +1982,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         } else {
           try {
             generation.process->CommitResult(*store);
-            if (auto failure = PersistFiles(documentFiles)) {
+            if (auto failure = PersistFilesIfNamed()) {
               const auto error = ErrorBody(*failure).at("message").get_string();
               EmitStatus(generation.operationId, generation.trajectoryId,
                          "failed", "Generated result could not be saved",
@@ -1743,6 +2068,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
   std::unique_ptr<DocumentStore> store;
   std::atomic<std::shared_ptr<const PublishedSnapshot>> publishedSnapshot;
   DocumentFiles documentFiles;
+  std::atomic_bool hasProjectPath{false};
   std::map<std::string, Generation, std::less<>> generations;
   std::map<choreo::api::WebSocketId, std::string> progressConnections;
   std::map<std::string, CachedGeneration, std::less<>> idempotentGenerations;

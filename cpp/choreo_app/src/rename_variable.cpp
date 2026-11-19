@@ -83,17 +83,21 @@ Document RenameVariable(const Document& document, const std::string& id,
       target->second.namespacePath.empty()
           ? target->second.name
           : target->second.namespacePath + "." + target->second.name;
+  const auto newQualifiedName =
+      target->second.namespacePath.empty()
+          ? newName
+          : target->second.namespacePath + "." + newName;
   for (auto& [variableId, variable] : result.project.variables) {
     variable.expression = wpilib::expression::RenameQualifiedVariableReferences(
-        variable.expression, oldName, newName);
+        variable.expression, oldName, newQualifiedName);
   }
   target->second.name = newName;
-  RewriteConfig(result.project.config, oldName, newName);
+  RewriteConfig(result.project.config, oldName, newQualifiedName);
   for (const auto& [trajectoryId, original] : document.trajectories) {
     auto trajectory = original;
-    RewriteParameters(trajectory.params, oldName, newName);
+    RewriteParameters(trajectory.params, oldName, newQualifiedName);
     for (auto& event : trajectory.events) {
-      Rewrite(event.from.offset, oldName, newName);
+      Rewrite(event.from.offset, oldName, newQualifiedName);
     }
     result.trajectories =
         result.trajectories.set(trajectoryId, std::move(trajectory));

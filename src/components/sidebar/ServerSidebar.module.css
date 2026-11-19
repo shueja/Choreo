@@ -1,0 +1,276 @@
+.sidebar {
+  display: flex;
+  width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width);
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--divider-gray);
+  background: var(--background-dark-gray);
+}
+
+.header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--top-nav-height);
+  min-height: var(--top-nav-height);
+  padding: 0 8px 0 0;
+  border-bottom: 1px solid var(--divider-gray);
+}
+
+.brandRow,
+.headerActions,
+.sectionHeading,
+.saveStatus {
+  display: flex;
+  align-items: center;
+}
+
+.brandRow {
+  min-width: 0;
+  gap: 4px;
+  padding-right: 8px;
+}
+
+.brandRow strong {
+  font-size: 15px;
+}
+
+.connection svg {
+  display: block;
+  color: var(--accent-purple);
+  font-size: 18px;
+}
+
+.headerActions {
+  justify-content: flex-end;
+  gap: 0;
+}
+
+.headerActions button,
+.sectionHeading button {
+  width: 32px;
+  height: 32px;
+  padding: 4px;
+  color: #fff;
+}
+
+.sectionHeading {
+  display: grid;
+  grid-template-columns: auto repeat(4, 33.6px);
+  min-height: 30px;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--divider-gray);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.trajectoryList {
+  flex: 0 1 auto;
+  min-height: 50px;
+  max-height: 300px;
+  overflow: auto;
+  padding: 4px 6px;
+}
+
+.trajectoryItem {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  min-height: 44px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 10px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.trajectoryRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.trajectoryRow > button:not(.trajectoryItem) {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  padding: 3px;
+  color: #b7b7b7;
+}
+
+.trajectoryRow > button:not(.trajectoryItem):hover {
+  color: var(--select-yellow);
+}
+
+.trajectoryItem:hover {
+  background: var(--background-light-gray);
+}
+
+.selected {
+  border-left-color: var(--select-yellow);
+  background: var(--background-light-gray);
+}
+
+.trajectoryItem small,
+.emptyHint {
+  color: #aaa;
+  font-size: 11px;
+}
+
+.emptyHint {
+  padding: 8px 10px;
+  font-style: italic;
+}
+
+.featuresHeading {
+  min-height: 30px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--divider-gray);
+  border-bottom: 1px solid var(--divider-gray);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.featureList {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.featureSection {
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--divider-gray);
+}
+
+.featureTitle {
+  min-height: 28px;
+  padding: 7px 12px 4px;
+  color: #b7b7b7;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.featureHeading {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 4px;
+}
+
+.featureHeading .featureTitle {
+  flex: 1;
+}
+
+.featureItem {
+  display: grid;
+  width: 100%;
+  min-height: 36px;
+  grid-template-columns: 24px minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0;
+  padding: 0 8px;
+  border-left: 4px solid transparent;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.featureItem {
+  cursor: pointer;
+}
+
+.featureItem:hover:not(.featureSelected) {
+  border-left-color: var(--darker-purple);
+}
+
+.featureSelected {
+  border-left-color: var(--select-yellow) !important;
+}
+
+.featureLabel {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  color: #fff;
+  font-size: 15px;
+  text-align: left;
+}
+
+.featureLabel > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.featureLabel small {
+  color: #aaa;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.featureIcon {
+  width: 24px;
+  height: 24px;
+}
+
+.featureActions {
+  display: flex;
+  align-items: center;
+}
+
+.featureItem button {
+  width: 28px;
+  height: 28px;
+  padding: 3px;
+  color: #b7b7b7;
+}
+
+.featureItem button:hover {
+  color: var(--select-yellow);
+}
+
+.featureEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 12px 10px 16px;
+}
+
+.editorHint {
+  margin: 4px 12px 8px 16px;
+  color: #aaa;
+  font-size: 11px;
+}
+
+.dirtyDot,
+.cleanDot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--select-yellow);
+}
+
+.dirtyDot,
+.cleanDot {
+  display: inline-block;
+  margin: 0 6px;
+}
+
+.cleanDot {
+  background: #6ca97a;
+}

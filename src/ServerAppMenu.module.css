@@ -1,0 +1,38 @@
+.drawer {
+  width: var(--sidebar-width);
+  height: 100%;
+  background: var(--background-dark-gray);
+  color: #fff;
+}
+
+.header {
+  display: flex;
+  height: var(--top-nav-height);
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--divider-gray);
+  padding-right: 12px;
+}
+
+.header strong {
+  font-size: 15px;
+}
+
+.projectName {
+  overflow: hidden;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--divider-gray);
+  color: #aaa;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  color: #aaa;
+  font-size: 12px;
+}

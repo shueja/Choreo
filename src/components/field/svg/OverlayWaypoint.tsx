@@ -4,6 +4,7 @@ import React, { Component } from "react";
 import { doc, uiState } from "../../../document/DocumentManager";
 import { IHolonomicWaypointStore } from "../../../document/HolonomicWaypointStore";
 import { IRobotConfigStore } from "../../../document/RobotConfigStore";
+import FieldBumperOutline from "./FieldBumperOutline";
 
 type Props = { waypoint: IHolonomicWaypointStore; index: number };
 
@@ -44,41 +45,22 @@ class OverlayWaypoint extends Component<Props, State> {
       robotConfig,
       strokeColor,
       strokeWidthPx,
-      dashed,
-      index
+      dashed
     }: {
       robotConfig: IRobotConfigStore;
       strokeColor: string;
       strokeWidthPx: number;
       dashed: boolean;
-      index: number;
     }) => (
-      <g>
-        <defs>
-          <path
-            id={this.appendIndexID("bumpers", index)}
-            d={
-              dashed
-                ? robotConfig.dashedBumperSVGElement()
-                : robotConfig.bumperSVGElement()
-            }
-          ></path>
-          <clipPath id={this.appendIndexID("clip", index)}>
-            <use href={`#${this.appendIndexID("bumpers", index)}`} />
-          </clipPath>
-        </defs>
-
-        <use
-          href={`#${this.appendIndexID("bumpers", index)}`}
-          clipPath={`url(#${this.appendIndexID("clip", index)})`}
-          stroke={strokeColor}
-          strokeWidth={strokeWidthPx * uiState.fieldScalingFactor}
-          strokeLinecap="square"
-          fill={"transparent"}
-          vectorEffect={"non-scaling-stroke"}
-          style={{ pointerEvents: "none" }}
-        />
-      </g>
+      <FieldBumperOutline
+        path={
+          dashed
+            ? robotConfig.dashedBumperSVGElement()
+            : robotConfig.bumperSVGElement()
+        }
+        strokeColor={strokeColor}
+        strokeWidth={strokeWidthPx * uiState.fieldScalingFactor}
+      />
     )
   );
   // gets the angle in degrees between two points
@@ -218,7 +200,6 @@ class OverlayWaypoint extends Component<Props, State> {
               strokeColor={boxColorStr}
               strokeWidthPx={6}
               dashed={this.props.waypoint.type !== 0}
-              index={this.props.index}
             ></this.BumperBox>
           )}
 

@@ -23,6 +23,8 @@
     "fmt": "pnpm run fmtCpp && pnpm run fmtJava && pnpm run fmtJs && pnpm run fmtRs && pnpm run lintJs",
     "clean": "cargo clean && rm -rf dist && rm -rf node_modules",
     "dev": "tauri dev",
+    "dev:web": "vite --host 127.0.0.1",
+    "build:web": "vite build",
     "build": "tauri build -- --workspace",
     "build-cli": "cargo build --release -p choreo-cli",
     "tauri": "tauri"

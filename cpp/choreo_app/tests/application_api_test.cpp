@@ -51,6 +51,7 @@ using Json = wpi::util::json;
 constexpr std::string_view kProjectFileName = "Project.chor";
 constexpr std::string_view kTrajectoryFileName = "Path.traj";
 constexpr std::string_view kNewProjectFileName = "Created.chor";
+constexpr std::string_view kSavedUntitledProjectFileName = "Untitled.chor";
 constexpr std::string_view kSessionOpenPath = "/api/v1/session/open";
 constexpr std::string_view kSessionNewPath = "/api/v1/session/new";
 constexpr std::string_view kSessionClosePath = "/api/v1/session/close";
@@ -72,6 +73,10 @@ constexpr std::string_view kStaleUndoIdempotencyKey =
     "00000000-0000-4000-8000-000000009006";
 constexpr std::string_view kProjectPatchIdempotencyKey =
     "00000000-0000-4000-8000-000000009007";
+constexpr std::string_view kVariablePatchIdempotencyKey =
+  "00000000-0000-4000-8000-000000009020";
+constexpr std::string_view kVariableOrderPatchIdempotencyKey =
+  "00000000-0000-4000-8000-000000009021";
 constexpr std::string_view kTrajectoryPatchIdempotencyKey =
     "00000000-0000-4000-8000-000000009008";
 constexpr std::string_view kFailedPatchIdempotencyKey =
@@ -90,6 +95,8 @@ constexpr std::string_view kDeleteConstraintIdempotencyKey =
     "00000000-0000-4000-8000-000000009015";
 constexpr std::string_view kCreateEventIdempotencyKey =
     "00000000-0000-4000-8000-000000009016";
+constexpr std::string_view kCreateTrajectoryIdempotencyKey =
+  "00000000-0000-4000-8000-000000009019";
 constexpr std::string_view kPatchEventIdempotencyKey =
     "00000000-0000-4000-8000-000000009017";
 constexpr std::string_view kDeleteEventIdempotencyKey =
@@ -589,6 +596,7 @@ class ApiTestFixture {
                           bool openProjectAtStartup = false)
       : projectPath_{directory_.Path() / kProjectFileName},
         trajectoryPath_{directory_.Path() / kTrajectoryFileName},
+        saveProjectPath_{directory_.Path() / kSavedUntitledProjectFileName},
         deferredPicker_{std::make_shared<DeferredPicker>()} {
     Require(winsock_.ready, "Winsock initialization failed");
     WriteInitialDocuments();
@@ -608,6 +616,9 @@ class ApiTestFixture {
         deferred->completion = std::move(complete);
       }
     };
+    options.promptForSavePath = [path = saveProjectPath_](auto complete) {
+      complete(path);
+    };
     application_ =
         std::make_unique<ApplicationApi>(server_, std::move(options));
     server_.Start();
@@ -625,6 +636,9 @@ class ApiTestFixture {
   const std::filesystem::path& ProjectPath() const { return projectPath_; }
   const std::filesystem::path& TrajectoryPath() const {
     return trajectoryPath_;
+  }
+  const std::filesystem::path& SaveProjectPath() const {
+    return saveProjectPath_;
   }
 
   std::pair<int, std::string> OpenPicker() const {
@@ -647,6 +661,30 @@ class ApiTestFixture {
     const auto headers =
         "Idempotency-Key: " + std::string{kNewSessionIdempotencyKey} + "\r\n";
     return HttpRequest(Port(), "POST", kSessionNewPath, body, headers);
+  }
+
+  std::pair<int, std::string> NewSessionWithoutPath(
+      const Json& project) const {
+    const auto body = Json::object("project", project).to_string();
+    const auto headers =
+        "Idempotency-Key: " + std::string{kNewSessionIdempotencyKey} + "\r\n";
+    return HttpRequest(Port(), "POST", kSessionNewPath, body, headers);
+  }
+
+  std::pair<int, std::string> SaveSession() const {
+    return HttpRequest(Port(), "POST", kSavePath, {});
+  }
+
+  std::pair<int, std::string> CreateTrajectory(
+      std::string_view projectId, const Json& trajectory,
+      std::uint64_t revision, std::string_view idempotencyKey) const {
+    const auto path = "/api/v1/projects/" + std::string{projectId} +
+                      "/trajectories";
+    const auto headers =
+        "If-Match: \"revision-" + std::to_string(revision) + "\"\r\n" +
+        "Idempotency-Key: " + std::string{idempotencyKey} + "\r\n";
+    return HttpRequest(Port(), "POST", path, trajectory.to_string(), headers,
+                       "application/json");
   }
 
   std::pair<int, std::string> Snapshot() const {
@@ -702,6 +740,19 @@ class ApiTestFixture {
       std::string_view projectId, const Json& patch, std::uint64_t revision,
       std::string_view idempotencyKey) const {
     const auto path = "/api/v1/projects/" + std::string{projectId};
+    const auto headers =
+        "If-Match: \"revision-" + std::to_string(revision) + "\"\r\n" +
+        "Idempotency-Key: " + std::string{idempotencyKey} + "\r\n";
+    return HttpRequest(Port(), "PATCH", path, patch.to_string(), headers,
+                       "application/merge-patch+json");
+  }
+
+  std::pair<int, std::string> PatchVariable(
+      std::string_view projectId, std::string_view variableId,
+      const Json& patch, std::uint64_t revision,
+      std::string_view idempotencyKey) const {
+    const auto path = "/api/v1/projects/" + std::string{projectId} +
+                      "/variables/" + std::string{variableId};
     const auto headers =
         "If-Match: \"revision-" + std::to_string(revision) + "\"\r\n" +
         "Idempotency-Key: " + std::string{idempotencyKey} + "\r\n";
@@ -799,6 +850,7 @@ class ApiTestFixture {
   TemporaryDirectory directory_;
   std::filesystem::path projectPath_;
   std::filesystem::path trajectoryPath_;
+  std::filesystem::path saveProjectPath_;
   ApiServer server_;
   std::unique_ptr<ApplicationApi> application_;
   std::shared_ptr<DeferredPicker> deferredPicker_;
@@ -961,6 +1013,44 @@ void TestNewSessionCompletesAsynchronously(
   Require(snapshot.at("trajectories").get_array().empty(),
           "new session should begin without trajectories");
 }
+
+  void TestUnsavedNewSessionUsesSavePicker(
+    const std::filesystem::path& executable) {
+    ApiTestFixture fixture{executable};
+    auto events = fixture.ConnectEvents();
+    Require(static_cast<bool>(events), "event WebSocket should connect");
+    const auto project =
+      Json::parse_or_throw(ReadFileContents(fixture.ProjectPath()));
+    const auto [newStatus, newBody] = fixture.NewSessionWithoutPath(project);
+    const auto newOperationId = AcceptedOperationId(newStatus, newBody, "new");
+    WaitForSessionOperation(events.Get(), newOperationId, "new", "succeeded");
+
+      const auto trajectory =
+        Json::parse_or_throw(ReadFileContents(fixture.TrajectoryPath()));
+      const auto [createStatus, createBody] = fixture.CreateTrajectory(
+        project.at("uuid").get_string(), trajectory, 0,
+        kCreateTrajectoryIdempotencyKey);
+      Require(createStatus == 201,
+          "new trajectory should be accepted before first project save: " +
+            createBody);
+
+    const auto [saveStatus, saveBody] = fixture.SaveSession();
+    const auto saveOperationId =
+      AcceptedOperationId(saveStatus, saveBody, "save");
+    WaitForSessionOperation(events.Get(), saveOperationId, "save", "succeeded");
+
+    Require(std::filesystem::is_regular_file(fixture.SaveProjectPath()),
+        "first save should persist the project at the selected path");
+      const auto savedTrajectoryPath = fixture.SaveProjectPath().parent_path() /
+                (trajectory.at("uuid").get_string() +
+                 ".traj");
+      Require(std::filesystem::is_regular_file(savedTrajectoryPath),
+        "first save should persist trajectories created in memory");
+    const auto [statusCode, statusBody] = fixture.SessionStatus();
+    Require(statusCode == kHttpOk &&
+          !Json::parse_or_throw(statusBody).at("dirty").get_bool(),
+        "saving an untitled project should clear its dirty state");
+  }
 
 void TestCloseSessionClearsSnapshot(const std::filesystem::path& executable) {
   ApiTestFixture fixture{executable};
@@ -1381,10 +1471,68 @@ void TestProjectAndTrajectoryPatches(const std::filesystem::path& executable) {
                   "Updated project",
           "project patch should publish and persist the updated name");
 
+  const auto [variablePatchStatus, variablePatchBody] = fixture.PatchVariable(
+      kTestProjectUuid, kTestLengthVariableUuid,
+      Json::object("name", "distance", "expression", "3 m"), projectRevision,
+      kVariablePatchIdempotencyKey);
+  Require(variablePatchStatus == kHttpOk,
+          "variable patch should return HTTP 200");
+  const auto variableRevision = static_cast<std::uint64_t>(
+      Json::parse_or_throw(variablePatchBody).at("revision").get_number());
+  WaitForDocumentChanged(events.Get(), variableRevision,
+                         kVariablePatchIdempotencyKey);
+  const auto [updatedProjectStatus, updatedProjectBody] =
+      fixture.GetProject(kTestProjectUuid);
+  const auto updatedProject = Json::parse_or_throw(updatedProjectBody);
+  const auto& updatedVariable = updatedProject.at("variables")
+                                    .at("variables")
+                                    .at(kTestLengthVariableUuid);
+  Require(updatedProjectStatus == kHttpOk &&
+              updatedVariable.at("name").get_string() == "distance" &&
+              updatedVariable.at("expression").get_string() == "3 m" &&
+              updatedVariable.at("value").get_number() == 3.0,
+          "variable patch should update and evaluate only the target variable");
+  const auto [waypointStatus, waypointBody] =
+      fixture.GetTrajectorySubresourceItem(kTestProjectUuid,
+                                           kTestTrajectoryUuid, "waypoints",
+                                           kTestWaypointUuid);
+  Require(waypointStatus == kHttpOk &&
+              Json::parse_or_throw(waypointBody)
+                      .at("pose")
+                      .at("exp")
+                      .get_string()
+                      .find("distance") != std::string::npos,
+          "renaming a variable should rewrite trajectory references");
+
+  const auto requestedOrder = Json::parse_or_throw(
+      "[\"" + std::string{kTestTwiceVariableUuid} + "\",\"" +
+      std::string{kTestLengthVariableUuid} + "\"]");
+  const auto orderingPatch =
+      Json::object("variables", Json::object("order", requestedOrder));
+  const auto [orderingStatus, orderingBody] =
+      fixture.PatchProject(kTestProjectUuid, orderingPatch, variableRevision,
+                           kVariableOrderPatchIdempotencyKey);
+  Require(orderingStatus == kHttpOk,
+          "project patch should accept variable declaration order");
+  const auto orderingRevision = static_cast<std::uint64_t>(
+      Json::parse_or_throw(orderingBody).at("revision").get_number());
+  const auto [orderedProjectStatus, orderedProjectBody] =
+      fixture.GetProject(kTestProjectUuid);
+  Require(orderedProjectStatus == kHttpOk &&
+              Json::parse_or_throw(orderedProjectBody)
+                      .at("variables")
+                      .at("order")
+                      .get<std::vector<std::string>>() ==
+                  std::vector<std::string>{kTestTwiceVariableUuid,
+                                           kTestLengthVariableUuid},
+          "variable declaration order should persist in the project snapshot");
+  WaitForDocumentChanged(events.Get(), orderingRevision,
+                         kVariableOrderPatchIdempotencyKey);
+
   const auto [trajectoryPatchStatus, trajectoryPatchBody] =
       fixture.PatchTrajectory(kTestProjectUuid, kTestTrajectoryUuid,
                               Json::object("name", "Updated trajectory"),
-                              projectRevision, kTrajectoryPatchIdempotencyKey);
+                              orderingRevision, kTrajectoryPatchIdempotencyKey);
   Require(trajectoryPatchStatus == kHttpOk,
           "trajectory patch should return HTTP 200");
   const auto trajectoryRevision = static_cast<std::uint64_t>(
@@ -1762,7 +1910,7 @@ struct TestCase {
   void (*run)(const std::filesystem::path&);
 };
 
-constexpr std::array<TestCase, 18> kTestCases{{
+constexpr std::array<TestCase, 19> kTestCases{{
     {"picker open loads project snapshot", TestPickerOpenLoadsProjectSnapshot},
     {"picker cancellation leaves session closed",
      TestPickerCancellationLeavesSessionClosed},
@@ -1770,6 +1918,8 @@ constexpr std::array<TestCase, 18> kTestCases{{
     {"startup project loads document", TestStartupProjectLoadsDocument},
     {"new session completes asynchronously",
      TestNewSessionCompletesAsynchronously},
+    {"unsaved new session uses save picker",
+     TestUnsavedNewSessionUsesSavePicker},
     {"close session clears snapshot", TestCloseSessionClearsSnapshot},
     {"session status tracks persistence recovery",
      TestSessionStatusTracksPersistenceRecovery},

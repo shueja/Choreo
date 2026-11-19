@@ -1,0 +1,50 @@
+.controls {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  pointer-events: none;
+}
+
+.viewOptions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: flex-start;
+  padding: 2px;
+  border-radius: 0 0 0 8px;
+  background: var(--background-light-gray);
+  pointer-events: auto;
+}
+
+.viewIcon {
+  display: inline-flex;
+  width: 28px;
+  align-items: center;
+  color: var(--accent-purple);
+}
+
+.viewIcon svg {
+  font-size: 19px;
+}
+
+.generate {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  width: 62px;
+  height: 62px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-purple);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+
+.generate button {
+  width: 100%;
+  height: 100%;
+  color: #fff;
+}

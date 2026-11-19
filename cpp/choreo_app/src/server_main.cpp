@@ -13,8 +13,9 @@
 #include <vector>
 
 #ifdef _WIN32
-#include <shellapi.h>
 #include <windows.h>
+#include <shellapi.h>
+#include <commdlg.h>
 #else
 #include <cerrno>
 #include <fcntl.h>
@@ -74,6 +75,44 @@ bool OpenBrowser(std::string_view url) {
   const auto result = ShellExecuteW(nullptr, L"open", wideUrl.c_str(), nullptr,
                                     nullptr, SW_SHOWNORMAL);
   return reinterpret_cast<std::intptr_t>(result) > 32;
+}
+#endif
+
+#ifdef _WIN32
+std::optional<std::filesystem::path> ShowProjectPathDialog(bool save) {
+  std::array<wchar_t, 32768> selectedPath{};
+  OPENFILENAMEW dialog{};
+  dialog.lStructSize = sizeof(dialog);
+  dialog.lpstrFilter = L"Choreo project (*.chor)\0*.chor\0All files (*.*)\0*.*\0";
+  dialog.lpstrFile = selectedPath.data();
+  dialog.nMaxFile = static_cast<DWORD>(selectedPath.size());
+  dialog.lpstrDefExt = L"chor";
+  dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST |
+                 (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+  const auto selected = save ? GetSaveFileNameW(&dialog)
+                             : GetOpenFileNameW(&dialog);
+  if (!selected) {
+    return std::nullopt;
+  }
+  return std::filesystem::path{selectedPath.data()};
+}
+
+void ConfigureProjectPathPrompts(
+    choreo::document::ApplicationApi::Options& options) {
+  auto configure = [](auto& prompt, bool save) {
+    prompt = [save](auto completion) {
+      std::thread([save, completion = std::move(completion)]() mutable {
+        std::optional<std::filesystem::path> path;
+        try {
+          path = ShowProjectPathDialog(save);
+        } catch (...) {
+        }
+        completion(std::move(path));
+      }).detach();
+    };
+  };
+  configure(options.promptForProjectPath, false);
+  configure(options.promptForSavePath, true);
 }
 #endif
 
@@ -187,6 +226,9 @@ int main(int argc, char** argv) {
     choreo::document::ApplicationApi::Options applicationOptions;
     applicationOptions.generatorExecutable = arguments.generator;
     applicationOptions.initialProjectPath = arguments.projectPath;
+  #ifdef _WIN32
+    ConfigureProjectPathPrompts(applicationOptions);
+  #endif
     choreo::document::ApplicationApi applicationApi{
         server, std::move(applicationOptions)};
 

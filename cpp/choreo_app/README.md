@@ -56,12 +56,13 @@ assets, load a project before the server reports readiness with
 `--generator PATH`. The server opens its localhost URL in the default browser
 after printing the readiness record; pass `--no-browser` for headless use.
 Repeat `--allowed-origin ORIGIN` to permit cross-origin UI clients. The default
-Vite output directory is `dist`. The current host does not provide a native
-project picker. Open projects using `--project PATH` or the API's path-based
-session operation. Closing or replacing a session first saves any modified
-project and trajectory files; if saving fails, the current session remains
-open. Stop the process with Ctrl+C or SIGTERM. The existing UI still uses
-Tauri commands, so static hosting is not yet a usable browser app.
+Vite output directory is `dist`. The browser UI creates a new in-memory Swerve
+project when no project is open. On Windows, Open Project and the first Save
+use native file dialogs owned by `choreo_server`; the new project is not
+written until a save location is selected. Other hosts must provide
+`ProjectPathPrompt` and `promptForSavePath` callbacks or use `--project PATH`
+to open an existing project at startup. Stop the process with Ctrl+C or
+SIGTERM.
 
 The `/api/v1/events` WebSocket publishes transient `document.changed` events
 with the active `projectId` and committed `revision`, and a `session.closed`

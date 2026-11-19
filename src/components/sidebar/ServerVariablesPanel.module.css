@@ -1,0 +1,137 @@
+.panel {
+  display: flex;
+  flex: 0 0 190px;
+  flex-direction: column;
+  min-height: 150px;
+  max-height: 230px;
+  border-top: 1px solid var(--divider-gray);
+  background: var(--background-dark-gray);
+  color: #fff;
+}
+
+.header {
+  display: flex;
+  flex: 0 0 34px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--divider-gray);
+  color: #c4c6c8;
+  font-size: 11px;
+}
+
+.declarationHint {
+  color: #8c8f92;
+  font-family: "Roboto Mono Variable";
+  font-size: 11px;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow: auto;
+  padding: 5px 12px;
+}
+
+.declaration {
+  display: grid;
+  flex: 0 0 30px;
+  grid-template-columns: max-content max-content max-content 12px minmax(
+      0,
+      1fr
+    ) 104px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: "Roboto Mono Variable";
+  font-size: 12px;
+}
+
+.typeName {
+  color: #c4c6c8;
+  white-space: nowrap;
+}
+
+.namespace,
+.equals {
+  color: #9da0a3;
+  white-space: nowrap;
+}
+
+.nameInput {
+  width: 14ch;
+  min-width: 7ch;
+  max-width: 24ch;
+  text-align: left;
+}
+
+.nameInput:focus {
+  border-bottom: 2px solid var(--accent-purple);
+}
+
+.initializer {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+}
+
+.initializer :global(input) {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.actions :global(.MuiIconButton-root) {
+  width: 30px;
+  height: 28px;
+  padding: 4px;
+  color: #c4c6c8;
+}
+
+.actions :global(.MuiIconButton-root:hover) {
+  color: var(--select-yellow);
+}
+
+.empty {
+  align-self: flex-start;
+  padding: 8px 4px;
+  color: #a7a9ac;
+  font-size: 12px;
+}
+
+.addForm {
+  display: grid;
+  flex: 0 0 40px;
+  grid-template-columns: 158px 14ch 12px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-top: 1px solid var(--divider-gray);
+}
+
+.typeSelect {
+  min-width: 0;
+  color: #fff !important;
+  font-size: 12px !important;
+}
+
+.typeSelect :global(.MuiSelect-select) {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.typeSelect :global(svg) {
+  color: #c4c6c8;
+}

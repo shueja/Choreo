@@ -33,6 +33,7 @@ import FieldConstraintAddLayer from "./constraintDisplay/FieldConstraintAddLayer
 import FieldConstraintDisplayLayer from "./constraintDisplay/FieldConstraintDisplayLayer";
 import * as FieldDimensions from "./fields/FieldDimensions";
 import Field2026 from "./fields/FieldImage2026.svg";
+import { attachFieldZoom } from "./FieldZoom";
 
 type Props = object;
 
@@ -54,69 +55,35 @@ class FieldOverlayRoot extends Component<Props, State> {
   canvasWidthMeters!: number;
   svgRef: React.RefObject<SVGSVGElement | null>;
   frameRef: React.RefObject<SVGGElement | null>;
+  private detachFieldZoom: (() => void) | undefined;
+  private resizeListener = () => this.handleResize();
   constructor(props: Props) {
     super(props);
     this.svgRef = React.createRef<SVGSVGElement>();
     this.frameRef = React.createRef<SVGGElement>();
-
-    this.zoomBehavior = d3
-      .zoom<SVGGElement, undefined>()
-      .scaleExtent([0.3, 12])
-      .on("zoom", (e) => this.zoomed(e));
-  }
-
-  private zoomBehavior: d3.ZoomBehavior<SVGGElement, undefined>;
-
-  private transition = () => {
-    return d3.transition().duration(750).ease(d3.easeCubicOut);
-  };
-
-  private fieldSelection = () => {
-    return d3.select<SVGGElement, undefined>(this.svgRef.current!);
-  };
-
-  // x, y, k are the center coordinates (x, y) and scale factor (k = {0.3, 12})
-  private center(x: number, y: number, k: number) {
-    this.fieldSelection().call(this.zoomBehavior.scaleTo, k);
-
-    this.fieldSelection()
-      .transition(this.transition())
-      .call(this.zoomBehavior.translateTo, x, -y);
   }
 
   componentDidMount(): void {
-    // add event listeners for external events
-    window.addEventListener("resize", () => this.handleResize());
-
-    window.addEventListener("center", (e) => {
-      this.center(
-        (e as CustomEvent).detail.x,
-        (e as CustomEvent).detail.y,
-        (e as CustomEvent).detail.k
-      );
-    });
-
-    window.addEventListener("zoomIn", () => {
-      this.fieldSelection()
-        .transition(this.transition())
-        .call(this.zoomBehavior.scaleBy, 2);
-    });
-
-    window.addEventListener("zoomOut", () => {
-      this.fieldSelection()
-        .transition(this.transition())
-        .call(this.zoomBehavior.scaleBy, 0.5);
-    });
-
-    // handle initial resizing and setup
-
+    this.detachFieldZoom = attachFieldZoom(this.svgRef.current!, (transform) =>
+      this.zoomed(transform)
+    );
+    window.addEventListener("resize", this.resizeListener);
     this.handleResize();
+    d3.select<SVGSVGElement, undefined>(this.svgRef.current!).on(
+      "contextmenu",
+      (e) => {
+        uiState.setContextMenuMouseSelection(e);
+      }
+    );
+  }
 
-    this.fieldSelection().call(this.zoomBehavior).on("dblclick.zoom", null);
-
-    this.fieldSelection().on("contextmenu", (e) => {
-      uiState.setContextMenuMouseSelection(e);
-    });
+  componentWillUnmount(): void {
+    this.detachFieldZoom?.();
+    window.removeEventListener("resize", this.resizeListener);
+    d3.select<SVGSVGElement, undefined>(this.svgRef.current!).on(
+      "contextmenu",
+      null
+    );
   }
 
   private handleCloseContextMenu() {
@@ -155,12 +122,12 @@ class FieldOverlayRoot extends Component<Props, State> {
     }
   }
 
-  private zoomed(e: any) {
+  private zoomed(transform: d3.ZoomTransform) {
     this.handleResize();
     this.setState({
-      xPan: e.transform.x,
-      yPan: e.transform.y,
-      zoom: e.transform.k
+      xPan: transform.x,
+      yPan: transform.y,
+      zoom: transform.k
     });
   }
   private screenSpaceToFieldSpace(

@@ -2,10 +2,9 @@ import "@fontsource-variable/roboto-mono/wght-italic";
 import "@fontsource-variable/roboto-mono";
 import "@fontsource/roboto";
 import "./App.css";
-import { observer } from "mobx-react";
 import { ThemeOptions, ThemeProvider, createTheme } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
-import Body from "./Body";
+import ServerWorkspace from "./ServerWorkspace";
 import { Theme } from "@mui/material";
 
 function App() {
@@ -85,9 +84,9 @@ function App() {
   return (
     <CssBaseline>
       <ThemeProvider theme={createTheme(themeOptions)}>
-        <Body></Body>
+        <ServerWorkspace />
       </ThemeProvider>
     </CssBaseline>
   );
 }
-export default observer(App);
+export default App;

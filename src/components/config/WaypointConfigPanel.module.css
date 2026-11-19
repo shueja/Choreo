@@ -11,6 +11,11 @@
   justify-content: flex-start;
   border-radius: 0 0 10px 0;
 }
+.markerHint {
+  width: 100%;
+  font-size: 0.8em;
+  opacity: 0.8;
+}
 .ViewOptionsPanel {
   overflow-x: visible;
   position: absolute;
