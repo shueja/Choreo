@@ -422,16 +422,165 @@ GeometryDragAnalysis GetGeometryDragControls(
     index = end;
   }
 
+  GeometryDragAnalysis analysis;
   auto evaluated = BuildVariables(project);
   auto evaluate = [&](std::string_view source) -> GeometryValue {
-    if (type == DragGeometryType::Pose2d) {
-      const auto pose = evaluated.context.EvaluatePose2d(source);
-      return {pose.X().value(), pose.Y().value(),
-              pose.Rotation().Radians().value()};
+    switch (type) {
+      case DragGeometryType::Pose2d: {
+        const auto value = evaluated.context.EvaluatePose2d(source);
+        return {value.X().value(), value.Y().value(),
+                value.Rotation().Radians().value()};
+      }
+      case DragGeometryType::Translation2d: {
+        const auto value = evaluated.context.EvaluateTranslation2d(source);
+        return {value.X().value(), value.Y().value(), 0};
+      }
+      case DragGeometryType::Polygon2d: {
+        const auto value = evaluated.context.EvaluatePolygon2d(source);
+        double x = 0;
+        double y = 0;
+        for (std::size_t index = 0; index < value.Size(); ++index) {
+          x += value.At(index).X().value();
+          y += value.At(index).Y().value();
+        }
+        if (value.Size() == 0) {
+          return {0, 0, 0};
+        }
+        const double count = static_cast<double>(value.Size());
+        return {x / count, y / count, 0};
+      }
+      case DragGeometryType::Rotation2d: {
+        const auto value = evaluated.context.EvaluateRotation2d(source);
+        return {0, 0, value.Radians().value()};
+      }
+      case DragGeometryType::Transform2d: {
+        const auto value = evaluated.context.EvaluateTransform2d(source);
+        return {value.X().value(), value.Y().value(),
+                value.Rotation().Radians().value()};
+      }
+      case DragGeometryType::Twist2d: {
+        const auto value = evaluated.context.EvaluateTwist2d(source);
+        return {value.dx.value(), value.dy.value(), value.dtheta.value()};
+      }
+      case DragGeometryType::Rectangle2d: {
+        const auto value = evaluated.context.EvaluateRectangle2d(source);
+        return {value.Center().X().value(), value.Center().Y().value(),
+                value.Rotation().Radians().value()};
+      }
+      case DragGeometryType::Ellipse2d: {
+        const auto value = evaluated.context.EvaluateEllipse2d(source);
+        return {value.Center().X().value(), value.Center().Y().value(),
+                value.Rotation().Radians().value()};
+      }
     }
-    const auto translation = evaluated.context.EvaluateTranslation2d(source);
-    return {translation.X().value(), translation.Y().value(), 0};
+    throw std::invalid_argument("unsupported geometry type");
   };
+  auto evaluatePaths = [&](std::string_view source) {
+    using Point = GeometryFeaturePoint;
+    constexpr double kHandleLength = 0.8;
+    std::vector<std::vector<Point>> paths;
+    auto addHeading = [&](double x, double y, double heading) {
+      paths.push_back(
+          {{x, y},
+           {x + kHandleLength * std::cos(heading),
+            y + kHandleLength * std::sin(heading)}});
+    };
+    switch (type) {
+      case DragGeometryType::Pose2d: {
+        const auto value = evaluated.context.EvaluatePose2d(source);
+        const double x = value.X().value();
+        const double y = value.Y().value();
+        paths.push_back({{x, y}});
+        addHeading(x, y, value.Rotation().Radians().value());
+        break;
+      }
+      case DragGeometryType::Translation2d: {
+        const auto value = evaluated.context.EvaluateTranslation2d(source);
+        paths.push_back({{value.X().value(), value.Y().value()}});
+        break;
+      }
+      case DragGeometryType::Polygon2d: {
+        const auto value = evaluated.context.EvaluatePolygon2d(source);
+        std::vector<Point> vertices;
+        vertices.reserve(value.Size() + 1);
+        for (std::size_t index = 0; index < value.Size(); ++index) {
+          vertices.push_back(
+              {value.At(index).X().value(), value.At(index).Y().value()});
+        }
+        if (!vertices.empty()) {
+          vertices.push_back(vertices.front());
+        }
+        paths.push_back(std::move(vertices));
+        break;
+      }
+      case DragGeometryType::Rotation2d: {
+        const auto value = evaluated.context.EvaluateRotation2d(source);
+        addHeading(0, 0, value.Radians().value());
+        break;
+      }
+      case DragGeometryType::Transform2d: {
+        const auto value = evaluated.context.EvaluateTransform2d(source);
+        paths.push_back({{0, 0}, {value.X().value(), value.Y().value()}});
+        addHeading(value.X().value(), value.Y().value(),
+                   value.Rotation().Radians().value());
+        break;
+      }
+      case DragGeometryType::Twist2d: {
+        const auto value = evaluated.context.EvaluateTwist2d(source);
+        paths.push_back({{0, 0}, {value.dx.value(), value.dy.value()}});
+        addHeading(0, 0, value.dtheta.value());
+        break;
+      }
+      case DragGeometryType::Rectangle2d: {
+        const auto value = evaluated.context.EvaluateRectangle2d(source);
+        const double centerX = value.Center().X().value();
+        const double centerY = value.Center().Y().value();
+        const double halfWidth = value.XWidth().value() / 2;
+        const double halfHeight = value.YWidth().value() / 2;
+        const double heading = value.Rotation().Radians().value();
+        const double cosine = std::cos(heading);
+        const double sine = std::sin(heading);
+        std::vector<Point> corners;
+        for (const auto [x, y] :
+             {std::pair{-halfWidth, -halfHeight},
+              std::pair{halfWidth, -halfHeight},
+              std::pair{halfWidth, halfHeight},
+              std::pair{-halfWidth, halfHeight},
+              std::pair{-halfWidth, -halfHeight}}) {
+          corners.push_back({centerX + cosine * x - sine * y,
+                             centerY + sine * x + cosine * y});
+        }
+        paths.push_back(std::move(corners));
+        break;
+      }
+      case DragGeometryType::Ellipse2d: {
+        const auto value = evaluated.context.EvaluateEllipse2d(source);
+        constexpr std::size_t kEllipseSegments = 48;
+        const double centerX = value.Center().X().value();
+        const double centerY = value.Center().Y().value();
+        const double xRadius = value.XSemiAxis().value();
+        const double yRadius = value.YSemiAxis().value();
+        const double heading = value.Rotation().Radians().value();
+        const double cosine = std::cos(heading);
+        const double sine = std::sin(heading);
+        std::vector<Point> points;
+        points.reserve(kEllipseSegments + 1);
+        for (std::size_t index = 0; index <= kEllipseSegments; ++index) {
+          const double angle = 2 * std::acos(-1.0) *
+                               static_cast<double>(index) /
+                               static_cast<double>(kEllipseSegments);
+          const double x = xRadius * std::cos(angle);
+          const double y = yRadius * std::sin(angle);
+          points.push_back({centerX + cosine * x - sine * y,
+                            centerY + sine * x + cosine * y});
+        }
+        paths.push_back(std::move(points));
+        break;
+      }
+    }
+    return paths;
+  };
+  analysis.paths = evaluatePaths(expression);
 
   auto findClosingParenthesis = [&](std::size_t open) {
     std::size_t depth = 0;
@@ -519,7 +668,6 @@ GeometryDragAnalysis GetGeometryDragControls(
     }
   }
 
-  GeometryDragAnalysis analysis;
   if (calls.empty()) {
     const auto value = evaluate(expression);
     analysis.chain.push_back(
@@ -592,12 +740,6 @@ GeometryDragAnalysis GetGeometryDragControls(
       const double dx = (plus.x - minus.x) * scale;
       const double dy = (plus.y - minus.y) * scale;
       const double dheading = headingDelta * scale;
-      if (!std::isfinite(dx) || !std::isfinite(dy) ||
-          !std::isfinite(dheading) ||
-          (std::abs(dx) < 1e-10 && std::abs(dy) < 1e-10 &&
-           std::abs(dheading) < 1e-10)) {
-        continue;
-      }
       const auto chainIndex = chainIndexForToken(token);
       const auto& anchor = analysis.chain.at(chainIndex);
       GeometryValue segmentStart{};
@@ -633,15 +775,44 @@ GeometryDragAnalysis GetGeometryDragControls(
           std::remainder(segmentPlus.heading - segmentMinus.heading,
                          2 * std::acos(-1.0)) *
           scale;
-      if (!std::isfinite(segmentDx) || !std::isfinite(segmentDy) ||
-          !std::isfinite(segmentDheading) ||
-          (std::abs(segmentDx) < 1e-10 && std::abs(segmentDy) < 1e-10 &&
-           std::abs(segmentDheading) < 1e-10)) {
+      std::vector<GeometryDragEffect> effects;
+      const auto plusPaths = evaluatePaths(replace(token.value + step));
+      const auto minusPaths = evaluatePaths(replace(token.value - step));
+      if (plusPaths.size() != analysis.paths.size() ||
+          minusPaths.size() != analysis.paths.size()) {
+        continue;
+      }
+      for (std::size_t pathIndex = 0; pathIndex < analysis.paths.size();
+           ++pathIndex) {
+        const auto& basePath = analysis.paths[pathIndex];
+        const auto& plusPath = plusPaths[pathIndex];
+        const auto& minusPath = minusPaths[pathIndex];
+        if (plusPath.size() != basePath.size() ||
+            minusPath.size() != basePath.size()) {
+          effects.clear();
+          break;
+        }
+        for (std::size_t pointIndex = 0; pointIndex < basePath.size();
+             ++pointIndex) {
+          const double effectX =
+              (plusPath[pointIndex].x - minusPath[pointIndex].x) * scale;
+          const double effectY =
+              (plusPath[pointIndex].y - minusPath[pointIndex].y) * scale;
+          if (std::isfinite(effectX) && std::isfinite(effectY) &&
+              (std::abs(effectX) >= 1e-10 ||
+               std::abs(effectY) >= 1e-10)) {
+            effects.push_back(
+                {pathIndex, pointIndex, effectX, effectY});
+          }
+        }
+      }
+      if (effects.empty()) {
         continue;
       }
       controls.push_back({token.start, token.end, token.value, dx, dy, dheading,
                           segmentDx, segmentDy, segmentDheading, chainIndex,
-                          anchor.startX, anchor.startY, anchor.startHeading});
+                          anchor.startX, anchor.startY, anchor.startHeading,
+                          std::move(effects)});
     } catch (const std::exception&) {
     }
   }

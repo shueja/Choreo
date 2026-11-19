@@ -1396,6 +1396,18 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
         type = evaluation::DragGeometryType::Pose2d;
       } else if (typeName == "Translation2d") {
         type = evaluation::DragGeometryType::Translation2d;
+      } else if (typeName == "Polygon2d") {
+        type = evaluation::DragGeometryType::Polygon2d;
+      } else if (typeName == "Rotation2d") {
+        type = evaluation::DragGeometryType::Rotation2d;
+      } else if (typeName == "Transform2d") {
+        type = evaluation::DragGeometryType::Transform2d;
+      } else if (typeName == "Twist2d") {
+        type = evaluation::DragGeometryType::Twist2d;
+      } else if (typeName == "Rectangle2d") {
+        type = evaluation::DragGeometryType::Rectangle2d;
+      } else if (typeName == "Ellipse2d") {
+        type = evaluation::DragGeometryType::Ellipse2d;
       } else {
         return ApiError(400, "VALIDATION_ERROR",
                         "Unsupported geometry type for field handles");
@@ -1408,6 +1420,13 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
       std::vector<Json> serializedControls;
       serializedControls.reserve(analysis.controls.size());
       for (const auto& control : analysis.controls) {
+        std::vector<Json> effects;
+        effects.reserve(control.effects.size());
+        for (const auto& effect : control.effects) {
+          effects.push_back(Json::object(
+              "pathIndex", effect.pathIndex, "pointIndex", effect.pointIndex,
+              "dx", effect.dx, "dy", effect.dy));
+        }
         serializedControls.push_back(Json::object(
             "start", control.start, "end", control.end, "value",
             control.value, "dx", control.dx, "dy", control.dy, "dheading",
@@ -1415,7 +1434,7 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             control.segmentDy, "segmentDheading", control.segmentDheading,
             "chainIndex", control.chainIndex, "anchorX",
             control.anchorX, "anchorY", control.anchorY, "anchorHeading",
-            control.anchorHeading));
+            control.anchorHeading, "effects", std::move(effects)));
       }
       std::vector<Json> serializedChain;
       serializedChain.reserve(analysis.chain.size());
@@ -1425,9 +1444,20 @@ struct ApplicationApi::Impl : public std::enable_shared_from_this<Impl> {
             link.startHeading, "endX", link.endX, "endY", link.endY,
             "endHeading", link.endHeading));
       }
+      std::vector<Json> serializedPaths;
+      serializedPaths.reserve(analysis.paths.size());
+      for (const auto& path : analysis.paths) {
+        std::vector<Json> points;
+        points.reserve(path.size());
+        for (const auto& point : path) {
+          points.push_back(Json::object("x", point.x, "y", point.y));
+        }
+        serializedPaths.push_back(std::move(points));
+      }
       return JsonResponse(
           200, Json::object("controls", std::move(serializedControls),
-                            "chain", std::move(serializedChain)));
+                            "chain", std::move(serializedChain), "paths",
+                            std::move(serializedPaths)));
     } catch (const std::exception& error) {
       return ApiError(422, "VALIDATION_ERROR", error.what());
     }

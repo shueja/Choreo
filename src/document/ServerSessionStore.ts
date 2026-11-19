@@ -59,6 +59,19 @@ export interface GeometryDragControl {
   anchorX: number;
   anchorY: number;
   anchorHeading: number;
+  effects: GeometryDragEffect[];
+}
+
+export interface GeometryDragEffect {
+  pathIndex: number;
+  pointIndex: number;
+  dx: number;
+  dy: number;
+}
+
+export interface GeometryFeaturePoint {
+  x: number;
+  y: number;
 }
 
 export interface GeometryChainLink {
@@ -73,7 +86,10 @@ export interface GeometryChainLink {
 export interface GeometryDragAnalysis {
   controls: GeometryDragControl[];
   chain: GeometryChainLink[];
+  paths: GeometryFeaturePoint[][];
 }
+
+export type ServerGeometryType = Exclude<ServerVariableType, "Quantity">;
 
 export type ServerVariableType =
   | "Quantity"
@@ -323,7 +339,7 @@ export class ServerSessionStore {
   async getGeometryDragControls(
     projectId: string,
     expression: string,
-    type: "Pose2d" | "Translation2d"
+    type: ServerGeometryType
   ): Promise<GeometryDragAnalysis> {
     const result = await requestJson<GeometryDragAnalysis>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/geometry-controls`,
